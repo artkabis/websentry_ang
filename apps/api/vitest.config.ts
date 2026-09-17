@@ -32,7 +32,7 @@ export default defineConfig({
     restoreMocks: true,
     coverage: {
       provider: 'v8',
-      reporter: ['text-summary', 'lcov', 'json-summary'],
+      reporter: ['text-summary', 'lcov', 'json-summary', 'json'],
       reportsDirectory: './coverage',
       include: ['src/**/*.ts'],
       exclude: [
@@ -41,6 +41,8 @@ export default defineConfig({
         'src/**/index.ts',
         'src/main.ts',
         'src/bootstrap.ts', // couvert de bout en bout par la suite E2E
+        'src/common/types.ts', // déclarations de types : aucun code à l'exécution
+        'src/testing/**', // utilitaires de test, pas du code applicatif
       ],
       // Seuils BLOQUANTS : sous le seuil, la commande sort en code non nul et
       // la CI s'arrête (cf. .github/workflows/ci.yml).
