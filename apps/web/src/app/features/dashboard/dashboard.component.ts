@@ -53,7 +53,9 @@ import { AuthService } from '../../core/auth/auth.service';
                 <li>
                   <code>{{ permission.permission }}</code>
                   @if (permission.gammes) {
-                    <span class="text-slate-400"> — gammes : {{ permission.gammes.join(', ') }}</span>
+                    <span class="text-slate-400">
+                      — gammes : {{ permission.gammes.join(', ') }}</span
+                    >
                   }
                 </li>
               }

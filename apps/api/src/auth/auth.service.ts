@@ -86,11 +86,7 @@ export class AuthService {
 
   // ── Connexion ─────────────────────────────────────────────────────────────
 
-  async login(
-    rawUsername: string,
-    password: string,
-    ctx: RequestContext,
-  ): Promise<IssuedTokens> {
+  async login(rawUsername: string, password: string, ctx: RequestContext): Promise<IssuedTokens> {
     const username = rawUsername.toLowerCase().trim();
     const ip = ctx.ip ?? 'unknown';
 
@@ -196,11 +192,7 @@ export class AuthService {
    * Sur identifiant inconnu il n'y a rien à incrémenter : la temporisation et le
    * limiteur par couple (IP, identifiant) assurent seuls la protection.
    */
-  private async onFailedLogin(
-    user: UserRow | null,
-    username: string,
-    ip: string,
-  ): Promise<void> {
+  private async onFailedLogin(user: UserRow | null, username: string, ip: string): Promise<void> {
     if (user) {
       const failed = (user.failed_logins ?? 0) + 1;
       const shouldLock = failed >= this.config.loginMaxAttempts;

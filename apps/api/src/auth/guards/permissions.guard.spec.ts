@@ -3,7 +3,7 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import { type Reflector } from '@nestjs/core';
 import { PERMISSIONS, RANKS } from '@websentry/shared';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuditService } from '../../audit/audit.service.js';
@@ -11,10 +11,7 @@ import type { RbacService } from '../../rbac/rbac.service.js';
 import { mockExecutionContext, requestOf } from '../../testing/execution-context.mock.js';
 import { PermissionsGuard } from './permissions.guard.js';
 
-function build(opts: {
-  code?: string;
-  resolve?: ReturnType<typeof vi.fn>;
-}) {
+function build(opts: { code?: string; resolve?: ReturnType<typeof vi.fn> }) {
   const reflector = {
     getAllAndOverride: vi.fn().mockReturnValue(opts.code),
   } as unknown as Reflector;
@@ -42,9 +39,9 @@ describe('PermissionsGuard', () => {
 
   it('refuse quand aucune identité n’est résolue', async () => {
     const { guard } = build({ code: PERMISSIONS.USERS_READ });
-    await expect(
-      guard.canActivate(mockExecutionContext({ authUser: undefined })),
-    ).rejects.toThrow(UnauthorizedException);
+    await expect(guard.canActivate(mockExecutionContext({ authUser: undefined }))).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('accorde l’accès et dépose le scope dans la requête', async () => {

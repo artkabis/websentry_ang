@@ -41,7 +41,7 @@ describe('décorateurs d’autorisation', () => {
     [RequireAdmin, RANKS.ADMIN, 'admin'],
     [RequireSuperAdmin, RANKS.SUPER_ADMIN, 'super_admin'],
     [RequireEditor, RANKS.EDITOR, 'editor'],
-  ])('le raccourci %# pose le seuil %s (%s)', (decorator, expected) => {
+  ])('le raccourci %# pose le seuil %s (%s)', (decorator, expected, _label) => {
     expect(metadataOf(decorator(), MIN_RANK_KEY)).toBe(expected);
   });
 

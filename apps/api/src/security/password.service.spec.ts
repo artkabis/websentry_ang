@@ -48,9 +48,13 @@ describe('PasswordService', () => {
       ['sel:', 'empreinte vide'],
       [':empreinte', 'sel vide'],
       ['sel:pas-de-l-hexadecimal', 'empreinte non hexadécimale'],
-    ])('refuse sans lever face à un hash stocké malformé (%s)', async stored => {
-      await expect(service.verify('peu importe', stored)).resolves.toBe(false);
-    }, 30_000);
+    ])(
+      'refuse sans lever face à un hash stocké malformé (%s)',
+      async stored => {
+        await expect(service.verify('peu importe', stored)).resolves.toBe(false);
+      },
+      30_000,
+    );
 
     it('refuse sans lever si une valeur NON TEXTUELLE atteint la vérification', async () => {
       // Les types l'interdisent, mais une charge utile JSON mal validée pourrait

@@ -36,7 +36,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { status, error, message, extra } = this.describe(exception);
 
     // Journalisation complète côté serveur — c'est le SEUL endroit où la trace vit.
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status >= Number(HttpStatus.INTERNAL_SERVER_ERROR)) {
       this.logger.error(
         `[${requestId}] ${req.method} ${req.url} → ${status}`,
         exception instanceof Error ? exception.stack : String(exception),
@@ -108,9 +108,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private labelFor(status: number): string {
-    return HttpStatus[status] !== undefined
-      ? String(HttpStatus[status]).replace(/_/g, ' ')
-      : 'Error';
+    // Recherche inverse dans l'énumération : rend le NOM du membre (une chaîne),
+    // ou `undefined` pour un code inconnu.
+    const name: string | undefined = (HttpStatus as unknown as Record<number, string | undefined>)[
+      status
+    ];
+    return name ? name.replace(/_/g, ' ') : 'Error';
   }
 
   /** Exposé pour les tests : confirme que le filtre ne varie pas selon l'environnement. */

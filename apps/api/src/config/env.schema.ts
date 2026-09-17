@@ -61,16 +61,17 @@ export const EnvSchema = z
     // ── Sortie HTTP (analyseurs) ────────────────────────────────────────────
     FETCH_USER_AGENT: z
       .string()
-      .default(
-        'Mozilla/5.0 (compatible; WebSentry/2.0; +https://websentry.artkabis.fr/bot)',
-      ),
+      .default('Mozilla/5.0 (compatible; WebSentry/2.0; +https://websentry.artkabis.fr/bot)'),
     FETCH_TIMEOUT_MS: intFromEnv(15000, 1000),
 
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {
     // En production, un secret de démonstration ne doit jamais passer.
-    if (env.NODE_ENV === 'production' && /^(change|test|dev|secret|password)/i.test(env.JWT_SECRET)) {
+    if (
+      env.NODE_ENV === 'production' &&
+      /^(change|test|dev|secret|password)/i.test(env.JWT_SECRET)
+    ) {
       ctx.addIssue({
         code: 'custom',
         path: ['JWT_SECRET'],

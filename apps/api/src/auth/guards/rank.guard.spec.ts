@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import { type Reflector } from '@nestjs/core';
 import { RANKS } from '@websentry/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { mockExecutionContext } from '../../testing/execution-context.mock.js';

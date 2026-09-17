@@ -39,9 +39,9 @@ describe('validateEnv', () => {
 
   describe('durées de jeton', () => {
     it('refuse un refresh plus court ou égal à l’access — la rotation serait inopérante', () => {
-      expect(() =>
-        validateEnv(env({ ACCESS_TOKEN_TTL: '900', REFRESH_TOKEN_TTL: '900' })),
-      ).toThrow(/strictement supérieur/);
+      expect(() => validateEnv(env({ ACCESS_TOKEN_TTL: '900', REFRESH_TOKEN_TTL: '900' }))).toThrow(
+        /strictement supérieur/,
+      );
     });
 
     it('accepte un refresh strictement plus long', () => {

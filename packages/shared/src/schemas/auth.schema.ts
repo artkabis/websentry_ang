@@ -28,9 +28,7 @@ export const RankSchema = z
     message: `Rang invalide — attendu l'un de ${VALID_RANKS.join(', ')}`,
   });
 
-export const PermissionCodeSchema = z.enum(
-  Object.values(PERMISSIONS) as [string, ...string[]],
-);
+export const PermissionCodeSchema = z.enum(Object.values(PERMISSIONS) as [string, ...string[]]);
 
 /** Permission telle qu'exposée au frontend : code + scope gamme (null = toutes). */
 export const GrantedPermissionSchema = z

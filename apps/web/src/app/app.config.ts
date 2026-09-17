@@ -37,9 +37,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideZonelessChangeDetection(),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(
-      withInterceptors([credentialsInterceptor, csrfInterceptor, authInterceptor]),
-    ),
+    provideHttpClient(withInterceptors([credentialsInterceptor, csrfInterceptor, authInterceptor])),
     provideTanStackQuery(
       new QueryClient({
         defaultOptions: {

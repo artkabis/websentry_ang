@@ -13,7 +13,7 @@ export class AppConfigService {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   private get<K extends keyof Env>(key: K): Env[K] {
-    return this.config.get(key, { infer: true }) as Env[K];
+    return this.config.get(key, { infer: true });
   }
 
   get nodeEnv(): Env['NODE_ENV'] {

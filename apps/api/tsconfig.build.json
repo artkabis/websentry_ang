@@ -1,4 +1,10 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts", "**/*.e2e-spec.ts"]
+  "compilerOptions": {
+    // L'émission ne concerne que les sources : ni les tests, ni les fichiers de
+    // configuration ne doivent atterrir dans dist/.
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "coverage", "test", "**/*.spec.ts"]
 }

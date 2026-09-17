@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { AppConfigService } from '../../config/app-config.service.js';
 import { AllExceptionsFilter } from './all-exceptions.filter.js';

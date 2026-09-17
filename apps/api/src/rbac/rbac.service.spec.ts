@@ -1,6 +1,9 @@
 import { PERMISSIONS, RANKS } from '@websentry/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { PermissionRepository, PermissionRow } from '../database/repositories/permission.repository.js';
+import type {
+  PermissionRepository,
+  PermissionRow,
+} from '../database/repositories/permission.repository.js';
 import { RbacService } from './rbac.service.js';
 
 function row(permission: string, gammes: unknown): PermissionRow {
@@ -90,7 +93,9 @@ describe('RbacService', () => {
 
     it('refuse quand ni la base ni le rang n’accordent le code', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(service.resolve('u1', RANKS.TESTER, PERMISSIONS.USERS_DELETE)).resolves.toBeNull();
+      await expect(
+        service.resolve('u1', RANKS.TESTER, PERMISSIONS.USERS_DELETE),
+      ).resolves.toBeNull();
     });
 
     it('propage une panne de base — le refus n’est pas silencieux', async () => {

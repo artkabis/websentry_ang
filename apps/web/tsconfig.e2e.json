@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Les scénarios Playwright s'exécutent dans Node et pilotent un navigateur :
+    // ils n'utilisent ni les types Vitest, ni le DOM de l'application.
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["e2e/**/*.ts", "playwright.config.ts"]
+}

@@ -29,7 +29,9 @@ export default defineConfig({
     hookTimeout: 30_000,
     clearMocks: true,
     restoreMocks: true,
-    pool: 'threads',
-    poolOptions: { threads: { singleThread: true } },
+    // Exécution SÉRIELLE : les suites partagent des compteurs en mémoire
+    // (limiteur de connexion, cache SSRF). En parallèle, les assertions de
+    // limitation de débit deviendraient non déterministes.
+    fileParallelism: false,
   },
 });

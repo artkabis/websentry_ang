@@ -172,7 +172,9 @@ describe('AuthService', () => {
 
     it('retourne false et vide la session quand la rotation échoue', async () => {
       const promise = service.refreshSession();
-      http.expectOne(`${BASE}/auth/refresh`).flush(null, { status: 401, statusText: 'Unauthorized' });
+      http
+        .expectOne(`${BASE}/auth/refresh`)
+        .flush(null, { status: 401, statusText: 'Unauthorized' });
       await expect(promise).resolves.toBe(false);
       expect(service.user()).toBeNull();
     });

@@ -1,0 +1,4 @@
+# Barrière locale : bloque le commit si le lint ou le typecheck échoue.
+# La CI reste la garantie finale — un `--no-verify` contourne ce hook, pas elle.
+pnpm lint-staged
+pnpm type-check

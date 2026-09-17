@@ -1,6 +1,6 @@
-import { INestApplication, Logger } from '@nestjs/common';
+import { type INestApplication, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import fastifyCookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import { AppModule } from './app.module.js';
@@ -57,9 +57,6 @@ export async function createApp(): Promise<NestFastifyApplication> {
   return app;
 }
 
-/** Type de plugin accepté par `register`, dérivé de la signature de Nest. */
-type FastifyPluginArg = Parameters<NestFastifyApplication['register']>[0];
-
 /**
  * En-têtes OWASP et parsing des cookies.
  *
@@ -74,19 +71,13 @@ async function registerSecurityPlugins(
 ): Promise<void> {
   const instance = app as NestFastifyApplication;
 
-  // @fastify/cookie et @fastify/helmet augmentent l'interface `FastifyInstance`
-  // avec leurs propres décorations ; leur signature de plugin décrit donc une
-  // instance DÉJÀ décorée, que l'instance nue ne porte pas encore au moment de
-  // l'enregistrement. Le type attendu est dérivé de `register` lui-même, plutôt
-  // qu'écrit à la main : il reste exact si la signature de Nest évolue. La
-  // conversion ne touche que les types — le comportement à l'exécution est intact.
-  await instance.register(fastifyCookie as unknown as FastifyPluginArg, {
+  await instance.register(fastifyCookie, {
     // Les cookies ne sont pas signés : `ws_access` porte un JWT déjà signé, et
     // `ws_csrf` tire sa valeur du double-submit, pas d'une signature serveur.
     parseOptions: { sameSite: 'strict', path: '/' },
   });
 
-  await instance.register(helmet as unknown as FastifyPluginArg, {
+  await instance.register(helmet, {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
@@ -115,13 +106,16 @@ async function registerSecurityPlugins(
 
   // Permissions-Policy n'est pas couvert par helmet — posé à la main, en refusant
   // par défaut les API matérielles dont l'application n'a aucun usage.
-  instance.getHttpAdapter().getInstance().addHook('onSend', (_req, reply, payload, done) => {
-    void reply.header(
-      'Permissions-Policy',
-      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
-    );
-    done(null, payload);
-  });
+  instance
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onSend', (_req, reply, payload, done) => {
+      void reply.header(
+        'Permissions-Policy',
+        'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+      );
+      done(null, payload);
+    });
 
   Logger.log('Plugins de sécurité enregistrés (helmet, cookie, Permissions-Policy)', 'Bootstrap');
 }

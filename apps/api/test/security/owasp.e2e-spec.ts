@@ -2,7 +2,12 @@ import { RANKS } from '@websentry/shared';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { COOKIES } from '../../src/common/constants.js';
-import { cookieAttributes, cookieValue, createTestApp, type TestApp } from '../helpers/app.factory.js';
+import {
+  cookieAttributes,
+  cookieValue,
+  createTestApp,
+  type TestApp,
+} from '../helpers/app.factory.js';
 
 /**
  * Suite de sécurité — les 15 failles les plus répandues (OWASP Top 10 étendu).
@@ -56,7 +61,11 @@ describe('Suite sécurité OWASP (E2E)', () => {
       .send({ username: user.username, password: user.password })
       .expect(200);
     const cookies = res.headers['set-cookie'] as unknown as string[];
-    return { cookies, csrf: cookieValue(cookies, COOKIES.CSRF)!, access: cookieValue(cookies, COOKIES.ACCESS)! };
+    return {
+      cookies,
+      csrf: cookieValue(cookies, COOKIES.CSRF)!,
+      access: cookieValue(cookies, COOKIES.ACCESS)!,
+    };
   }
 
   // ── 1 ────────────────────────────────────────────────────────────────────
@@ -154,10 +163,7 @@ describe('Suite sécurité OWASP (E2E)', () => {
 
     it('EXEMPTE les clients Bearer — aucun cookie ambiant, aucun vecteur CSRF', async () => {
       const { access } = await login(TESTER);
-      await http
-        .post(t.url('/auth/logout'))
-        .set('Authorization', `Bearer ${access}`)
-        .expect(204);
+      await http.post(t.url('/auth/logout')).set('Authorization', `Bearer ${access}`).expect(204);
     });
 
     it('journalise chaque échec CSRF', async () => {
@@ -196,7 +202,10 @@ describe('Suite sécurité OWASP (E2E)', () => {
     it('refuse un JWT dont la charge utile a été modifiée', async () => {
       const { access } = await login(TESTER);
       const [h, p, s] = access.split('.');
-      const tampered = JSON.parse(Buffer.from(p!, 'base64url').toString()) as Record<string, unknown>;
+      const tampered = JSON.parse(Buffer.from(p!, 'base64url').toString()) as Record<
+        string,
+        unknown
+      >;
       tampered.rank = RANKS.SUPER_ADMIN;
       const forged = `${h}.${Buffer.from(JSON.stringify(tampered)).toString('base64url')}.${s}`;
 
@@ -230,9 +239,10 @@ describe('Suite sécurité OWASP (E2E)', () => {
 
     it('borne l’access token à 15 minutes', async () => {
       const { access } = await login(TESTER);
-      const payload = JSON.parse(
-        Buffer.from(access.split('.')[1]!, 'base64url').toString(),
-      ) as { exp: number; iat: number };
+      const payload = JSON.parse(Buffer.from(access.split('.')[1]!, 'base64url').toString()) as {
+        exp: number;
+        iat: number;
+      };
       expect(payload.exp - payload.iat).toBeLessThanOrEqual(900);
     });
   });
@@ -249,7 +259,10 @@ describe('Suite sécurité OWASP (E2E)', () => {
       // `ws_role` n'est qu'une étiquette d'affichage : la source de vérité est le
       // rang porté par le JWT signé.
       const { cookies } = await login(TESTER);
-      const forged = [...cookies.filter(c => !c.startsWith(COOKIES.ROLE)), `${COOKIES.ROLE}=super_admin`];
+      const forged = [
+        ...cookies.filter(c => !c.startsWith(COOKIES.ROLE)),
+        `${COOKIES.ROLE}=super_admin`,
+      ];
 
       const res = await http.get(t.url('/auth/me')).set('Cookie', forged).expect(200);
       expect(res.body.role).toBe('tester');
@@ -305,7 +318,9 @@ describe('Suite sécurité OWASP (E2E)', () => {
         .get(t.url('/health'))
         .set('Origin', 'https://site-malveillant.example')
         .expect(200);
-      expect(res.headers['access-control-allow-origin']).not.toBe('https://site-malveillant.example');
+      expect(res.headers['access-control-allow-origin']).not.toBe(
+        'https://site-malveillant.example',
+      );
       expect(res.headers['access-control-allow-origin']).not.toBe('*');
     });
 
@@ -551,12 +566,7 @@ describe('Suite sécurité OWASP (E2E)', () => {
 
     it('applique une forme d’erreur uniforme, avec identifiant de corrélation', async () => {
       const res = await http.get(t.url('/auth/me')).expect(401);
-      expect(Object.keys(res.body).sort()).toEqual([
-        'error',
-        'message',
-        'requestId',
-        'statusCode',
-      ]);
+      expect(Object.keys(res.body).sort()).toEqual(['error', 'message', 'requestId', 'statusCode']);
       expect(res.body.requestId).toBeTruthy();
     });
 

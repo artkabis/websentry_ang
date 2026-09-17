@@ -79,11 +79,7 @@ describe('AuthController', () => {
   describe('login', () => {
     it('renvoie UNIQUEMENT le rôle et le nom — aucun jeton dans le corps', async () => {
       // Les jetons vivent en cookies httpOnly : un XSS ne doit pas pouvoir les lire.
-      const body = await t.controller.login(
-        { username: 'alice', password: 'mdp' },
-        req(),
-        t.reply,
-      );
+      const body = await t.controller.login({ username: 'alice', password: 'mdp' }, req(), t.reply);
       expect(body).toEqual({ role: 'admin', username: 'alice' });
       expect(JSON.stringify(body)).not.toContain('access-jwt');
       expect(JSON.stringify(body)).not.toContain('refresh-brut');

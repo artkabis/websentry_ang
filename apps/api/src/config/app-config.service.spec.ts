@@ -1,4 +1,4 @@
-import { ConfigService } from '@nestjs/config';
+import { type ConfigService } from '@nestjs/config';
 import { describe, expect, it } from 'vitest';
 import { AppConfigService } from './app-config.service.js';
 import type { Env } from './env.schema.js';

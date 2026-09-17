@@ -9,8 +9,18 @@ import {
   type TestApp,
 } from './helpers/app.factory.js';
 
-const ADMIN = { id: 'u-admin', username: 'admin', password: 'MotDePasseAdmin!2026', rank: RANKS.ADMIN };
-const TESTER = { id: 'u-test', username: 'testeur', password: 'MotDePasseTest!2026', rank: RANKS.TESTER };
+const ADMIN = {
+  id: 'u-admin',
+  username: 'admin',
+  password: 'MotDePasseAdmin!2026',
+  rank: RANKS.ADMIN,
+};
+const TESTER = {
+  id: 'u-test',
+  username: 'testeur',
+  password: 'MotDePasseTest!2026',
+  rank: RANKS.TESTER,
+};
 
 describe('Authentification (E2E)', () => {
   let t: TestApp;
@@ -157,10 +167,7 @@ describe('Authentification (E2E)', () => {
         .expect(200);
       const token = cookieValue(login.headers['set-cookie'] as unknown as string[], COOKIES.ACCESS);
 
-      await http
-        .get(t.url('/auth/me'))
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
+      await http.get(t.url('/auth/me')).set('Authorization', `Bearer ${token}`).expect(200);
     });
   });
 
@@ -173,12 +180,12 @@ describe('Authentification (E2E)', () => {
       const cookies = login.headers['set-cookie'] as unknown as string[];
       const oldRefresh = cookieValue(cookies, COOKIES.REFRESH);
 
-      const res = await http
-        .post(t.url('/auth/refresh'))
-        .set('Cookie', cookies)
-        .expect(200);
+      const res = await http.post(t.url('/auth/refresh')).set('Cookie', cookies).expect(200);
 
-      const newRefresh = cookieValue(res.headers['set-cookie'] as unknown as string[], COOKIES.REFRESH);
+      const newRefresh = cookieValue(
+        res.headers['set-cookie'] as unknown as string[],
+        COOKIES.REFRESH,
+      );
       expect(newRefresh).toBeTruthy();
       expect(newRefresh).not.toBe(oldRefresh);
     });

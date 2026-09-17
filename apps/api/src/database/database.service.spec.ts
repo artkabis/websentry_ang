@@ -84,7 +84,7 @@ describe('DatabaseService', () => {
       await service.onModuleInit();
       await expect(service.query('SELECT 1')).rejects.toThrow(/non disponible/);
       await expect(service.execute('SELECT 1')).rejects.toThrow(/non disponible/);
-      await expect(service.transaction(async () => 1)).rejects.toThrow(/non disponible/);
+      await expect(service.transaction(() => Promise.resolve(1))).rejects.toThrow(/non disponible/);
     });
   });
 
@@ -136,7 +136,7 @@ describe('DatabaseService', () => {
     });
 
     it('valide la transaction au succès', async () => {
-      await expect(service.transaction(async () => 'ok')).resolves.toBe('ok');
+      await expect(service.transaction(() => Promise.resolve('ok'))).resolves.toBe('ok');
       expect(stub.connection.beginTransaction).toHaveBeenCalled();
       expect(stub.connection.commit).toHaveBeenCalled();
       expect(stub.connection.rollback).not.toHaveBeenCalled();
@@ -144,28 +144,22 @@ describe('DatabaseService', () => {
 
     it('annule la transaction et propage l’erreur', async () => {
       await expect(
-        service.transaction(async () => {
-          throw new Error('échec métier');
-        }),
+        service.transaction(() => Promise.reject(new Error('échec métier'))),
       ).rejects.toThrow('échec métier');
       expect(stub.connection.rollback).toHaveBeenCalled();
       expect(stub.connection.commit).not.toHaveBeenCalled();
     });
 
     it('rend TOUJOURS la connexion au pool, succès ou échec', async () => {
-      await service.transaction(async () => 1);
-      await service.transaction(async () => {
-        throw new Error('x');
-      }).catch(() => undefined);
+      await service.transaction(() => Promise.resolve(1));
+      await service.transaction(() => Promise.reject(new Error('x'))).catch(() => undefined);
       expect(stub.connection.release).toHaveBeenCalledTimes(3); // 1 au boot + 2 transactions
     });
 
     it('rend la connexion même si le rollback échoue lui aussi', async () => {
       stub.connection.rollback.mockRejectedValue(new Error('connexion perdue'));
       await expect(
-        service.transaction(async () => {
-          throw new Error('échec métier');
-        }),
+        service.transaction(() => Promise.reject(new Error('échec métier'))),
       ).rejects.toThrow('échec métier');
       expect(stub.connection.release).toHaveBeenCalled();
     });

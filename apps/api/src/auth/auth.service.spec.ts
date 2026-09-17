@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { RANKS } from '@websentry/shared';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AuditService } from '../audit/audit.service.js';
 import type { AppConfigService } from '../config/app-config.service.js';
 import type { SessionRepository, SessionRow } from '../database/repositories/session.repository.js';
@@ -18,7 +18,16 @@ import type { TokenService } from './token.service.js';
 
 const CTX = { ip: '203.0.113.10', userAgent: 'Mozilla/5.0' };
 
-function userRow(over: Partial<UserRow> = {}): UserRow {
+/**
+ * Surcharges de ligne de test.
+ *
+ * `RowDataPacket` déclare un membre `constructor` littéral, incompatible avec le
+ * `constructor` implicite d'un objet littéral : `Partial<UserRow>` refuserait
+ * donc `{ rank: 50 }`. On l'écarte explicitement.
+ */
+type RowOverrides<T> = Partial<Omit<T, 'constructor'>>;
+
+function userRow(over: RowOverrides<UserRow> = {}): UserRow {
   return {
     id: 'u1',
     username: 'alice',
@@ -34,7 +43,7 @@ function userRow(over: Partial<UserRow> = {}): UserRow {
   } as UserRow;
 }
 
-function sessionRow(over: Partial<SessionRow> = {}): SessionRow {
+function sessionRow(over: RowOverrides<SessionRow> = {}): SessionRow {
   return {
     session_id: 's1',
     user_id: 'u1',
@@ -350,7 +359,13 @@ describe('AuthService', () => {
 
       const issued = await t.service.refresh('refresh-brut', CTX);
 
-      expect(t.sessions.rotate).toHaveBeenCalledWith('s1', 'u1', 604_800_000, CTX.ip, CTX.userAgent);
+      expect(t.sessions.rotate).toHaveBeenCalledWith(
+        's1',
+        'u1',
+        604_800_000,
+        CTX.ip,
+        CTX.userAgent,
+      );
       expect(issued.refreshToken).toBe('refresh-neuf');
     });
 

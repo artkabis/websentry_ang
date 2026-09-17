@@ -1,6 +1,6 @@
 import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { type Reflector } from '@nestjs/core';
+import { describe, expect, it, vi } from 'vitest';
 import type { UserRepository, UserRow } from '../../database/repositories/user.repository.js';
 import { mockExecutionContext, requestOf } from '../../testing/execution-context.mock.js';
 import type { TokenService } from '../token.service.js';
@@ -8,7 +8,16 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 
 const USER = { sub: 'u1', username: 'alice', rank: 50, version: 3 };
 
-function userRow(over: Partial<UserRow> = {}): UserRow {
+/**
+ * Surcharges de ligne de test.
+ *
+ * `RowDataPacket` déclare un membre `constructor` littéral, incompatible avec le
+ * `constructor` implicite d'un objet littéral : `Partial<UserRow>` refuserait
+ * donc `{ rank: 50 }`. On l'écarte explicitement.
+ */
+type RowOverrides<T> = Partial<Omit<T, 'constructor'>>;
+
+function userRow(over: RowOverrides<UserRow> = {}): UserRow {
   return {
     id: 'u1',
     username: 'alice',
@@ -33,7 +42,9 @@ function build(opts: {
   const reflector = {
     getAllAndOverride: vi.fn().mockReturnValue(opts.isPublic ?? false),
   } as unknown as Reflector;
-  const tokens = { verify: opts.verify ?? vi.fn().mockResolvedValue(null) } as unknown as TokenService;
+  const tokens = {
+    verify: opts.verify ?? vi.fn().mockResolvedValue(null),
+  } as unknown as TokenService;
   const users = {
     available: opts.available ?? true,
     findById: opts.findById ?? vi.fn().mockResolvedValue(userRow()),
@@ -108,11 +119,11 @@ describe('JwtAuthGuard', () => {
       [{}, {}, 'aucun porteur'],
       [{}, { authorization: 'jeton-sans-prefixe' }, 'en-tête sans le préfixe Bearer'],
       [{}, { authorization: 'Basic dXNlcjpwYXNz' }, 'schéma Basic'],
-    ])('refuse : %s / %s (%s)', async (cookies, headers) => {
+    ])('refuse : %s / %s (%s)', async (cookies, headers, _label) => {
       const { guard } = build({});
       const ctx = mockExecutionContext({
-        cookies: cookies as Record<string, string>,
-        headers: headers as Record<string, string>,
+        cookies: cookies,
+        headers: headers,
       });
       await expect(guard.canActivate(ctx)).rejects.toThrow(UnauthorizedException);
     });

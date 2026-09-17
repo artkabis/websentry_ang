@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import * as dns from 'node:dns/promises';
 import * as undici from 'undici';
-import { AppConfigService } from '../config/app-config.service.js';
+import type * as Undici from 'undici';
+import { type AppConfigService } from '../config/app-config.service.js';
 import { SsrfBlockedError, SsrfService } from './ssrf.service.js';
 
 /**
@@ -14,7 +15,7 @@ import { SsrfBlockedError, SsrfService } from './ssrf.service.js';
  */
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }));
 vi.mock('undici', async () => {
-  const actual = await vi.importActual<typeof import('undici')>('undici');
+  const actual = await vi.importActual<typeof Undici>('undici');
   return { ...actual, fetch: vi.fn(), Agent: vi.fn() };
 });
 
@@ -59,7 +60,7 @@ describe('SsrfService.safeFetch', () => {
     // constructeur, ce qu'une fonction fléchée n'est pas.
     Agent.mockImplementation(function (options: unknown) {
       return new FakeAgent(options);
-    } as never);
+    });
     service = new SsrfService(configStub());
     resolvesTo('93.184.216.34');
     fetch.mockResolvedValue(response(200));
@@ -122,8 +123,9 @@ describe('SsrfService.safeFetch', () => {
       fetch.mockResolvedValue(res);
       const result = await service.safeFetch('https://exemple.fr/');
       result.dispose();
-      expect((res as unknown as { body: { cancel: ReturnType<typeof vi.fn> } }).body.cancel)
-        .toHaveBeenCalled();
+      expect(
+        (res as unknown as { body: { cancel: ReturnType<typeof vi.fn> } }).body.cancel,
+      ).toHaveBeenCalled();
     });
   });
 
@@ -137,9 +139,7 @@ describe('SsrfService.safeFetch', () => {
 
       expect(result.finalUrl).toBe('https://exemple.fr/final');
       expect(result.redirected).toBe(true);
-      expect(result.redirectChain).toEqual([
-        { url: 'https://exemple.fr/depart', status: 302 },
-      ]);
+      expect(result.redirectChain).toEqual([{ url: 'https://exemple.fr/depart', status: 302 }]);
     });
 
     it('BLOQUE une redirection vers une IP privée — le cœur de la défense', async () => {
@@ -195,9 +195,9 @@ describe('SsrfService.safeFetch', () => {
 
     it('respecte un plafond de redirections réduit', async () => {
       fetch.mockResolvedValue(response(302, { location: 'https://exemple.fr/suivant' }));
-      await expect(
-        service.safeFetch('https://exemple.fr/', { maxRedirects: 2 }),
-      ).rejects.toThrow(/Trop de redirections/);
+      await expect(service.safeFetch('https://exemple.fr/', { maxRedirects: 2 })).rejects.toThrow(
+        /Trop de redirections/,
+      );
       expect(fetch).toHaveBeenCalledTimes(3); // tentative initiale + 2 sauts
     });
 

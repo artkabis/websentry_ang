@@ -1,7 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import { type Reflector } from '@nestjs/core';
 import { describe, expect, it, vi } from 'vitest';
-import { AuditService } from '../audit/audit.service.js';
+import { type AuditService } from '../audit/audit.service.js';
 import { mockExecutionContext } from '../testing/execution-context.mock.js';
 import { CsrfGuard } from './csrf.guard.js';
 
@@ -15,14 +15,11 @@ function buildGuard(skip = false) {
 
 describe('CsrfGuard', () => {
   describe('cas exemptés', () => {
-    it.each(['GET', 'HEAD', 'OPTIONS'])(
-      'laisse passer %s — méthode sans effet de bord',
-      method => {
-        const { guard } = buildGuard();
-        const ctx = mockExecutionContext({ method, authVia: 'cookie', cookies: {} });
-        expect(guard.canActivate(ctx)).toBe(true);
-      },
-    );
+    it.each(['GET', 'HEAD', 'OPTIONS'])('laisse passer %s — méthode sans effet de bord', method => {
+      const { guard } = buildGuard();
+      const ctx = mockExecutionContext({ method, authVia: 'cookie', cookies: {} });
+      expect(guard.canActivate(ctx)).toBe(true);
+    });
 
     it('laisse passer un client Bearer — aucun cookie ambiant, donc aucun vecteur CSRF', () => {
       const { guard } = buildGuard();
@@ -77,13 +74,13 @@ describe('CsrfGuard', () => {
       [{}, {}, 'ni cookie ni en-tête'],
       [{ ws_csrf: TOKEN }, { 'x-csrf-token': 'autre-valeur' }, 'valeurs divergentes'],
       [{ ws_csrf: '' }, { 'x-csrf-token': '' }, 'deux valeurs vides'],
-    ])('refuse : %s / %s (%s)', (cookies, headers) => {
+    ])('refuse : %s / %s (%s)', (cookies, headers, _label) => {
       const { guard } = buildGuard();
       const ctx = mockExecutionContext({
         method: 'POST',
         authVia: 'cookie',
-        cookies: cookies as Record<string, string>,
-        headers: headers as Record<string, string>,
+        cookies: cookies,
+        headers: headers,
       });
       expect(() => guard.canActivate(ctx)).toThrow(ForbiddenException);
     });

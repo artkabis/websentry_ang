@@ -194,7 +194,9 @@ export class SsrfService {
     if (!body) return '';
 
     const decoder = new TextDecoder('utf-8');
-    const reader = body.getReader();
+    // Annotation explicite : le typage d'undici rend `value` implicitement `any`,
+    // qui se propagerait ensuite dans tout le calcul de taille.
+    const reader = body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
     let total = 0;
     let text = '';
 
@@ -302,7 +304,13 @@ export class SsrfService {
    * ne renvoyant que les IP déjà validées — c'est là que l'anti-rebinding se joue.
    */
   private createPinnedAgent(addresses: ResolvedAddress[]): Agent {
-    const first = addresses[0] as ResolvedAddress;
+    const first = addresses[0];
+    if (!first) {
+      // Inatteignable : `resolvePublicAddresses` refuse une résolution vide. La
+      // garde explicite vaut mieux qu'une assertion, qui masquerait une
+      // régression future de cet invariant.
+      throw new SsrfBlockedError('Aucune adresse validée à épingler');
+    }
     return new Agent({
       keepAliveTimeout: AGENT_KEEP_ALIVE_MS,
       keepAliveMaxTimeout: AGENT_CACHE_TTL_MS,
@@ -324,7 +332,7 @@ export class SsrfService {
           }
         },
       },
-    } as unknown as ConstructorParameters<typeof Agent>[0]);
+    });
   }
 
   /** Récupère (ou crée) l'agent épinglé pour un hôte et son jeu d'IP validées. */

@@ -11,7 +11,9 @@ import { LoginComponent } from './login.component';
  * leur rôle, jamais par une classe CSS ou une structure interne. Une refonte du
  * balisage ne casse donc pas ces tests tant que l'écran reste utilisable.
  */
-function setup(over: { login?: ReturnType<typeof vi.fn>; error?: string | null; retour?: string } = {}) {
+function setup(
+  over: { login?: ReturnType<typeof vi.fn>; error?: string | null; retour?: string } = {},
+) {
   const login = over.login ?? vi.fn().mockResolvedValue({ role: 'tester', username: 'alice' });
   const navigateByUrl = vi.fn().mockResolvedValue(true);
 
@@ -149,9 +151,9 @@ describe('LoginComponent', () => {
     await user.click(screen.getByRole('button', { name: 'Se connecter' }));
     await screen.findByRole('alert');
 
-    expect((screen.getByLabelText('Mot de passe') as HTMLInputElement).value).toBe('');
+    expect(screen.getByLabelText<HTMLInputElement>('Mot de passe').value).toBe('');
     // L'identifiant est conservé : le retaper à chaque essai serait pénible.
-    expect((screen.getByLabelText('Identifiant') as HTMLInputElement).value).toBe('alice');
+    expect(screen.getByLabelText<HTMLInputElement>('Identifiant').value).toBe('alice');
   });
 
   it('borne la saisie aux longueurs du schéma partagé', async () => {

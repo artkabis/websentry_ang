@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import * as dns from 'node:dns/promises';
-import { AppConfigService } from '../config/app-config.service.js';
+import { type AppConfigService } from '../config/app-config.service.js';
 import { SsrfBlockedError, SsrfService } from './ssrf.service.js';
 
 /**

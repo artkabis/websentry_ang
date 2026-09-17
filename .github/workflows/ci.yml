@@ -1,0 +1,160 @@
+name: CI
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Barrière qualité — RÈGLE ABSOLUE : le pipeline s'arrête à la première erreur.
+# Aucune étape n'est `continue-on-error`, aucun seuil n'est consultatif. Un build
+# ne se termine jamais si lint, typecheck, test, couverture ou audit CVE échoue.
+#
+# Ordre choisi pour faire échouer AU PLUS TÔT et au moins cher : lint et
+# typecheck (secondes) avant les tests (minutes) avant les E2E navigateur.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main, dev, 'claude/**']
+  pull_request:
+    branches: [main, dev]
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Angular CLI 22 exige Node >= 22.22.3.
+  NODE_VERSION: '22.23.2'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  quality:
+    name: Qualité, tests et sécurité
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # `--frozen-lockfile` : échoue si le lockfile diverge des package.json,
+      # ce qui éviterait d'installer silencieusement des versions non revues.
+      - name: Installation des dépendances
+        run: pnpm install --frozen-lockfile
+
+      # ── Audit CVE — étape BLOQUANTE ─────────────────────────────────────────
+      # Aucun build ne passe avec une CVE de sévérité high ou critical.
+      #
+      # Résilience à la panne d'infra npm : npm a retiré l'endpoint d'audit
+      # historique (HTTP 410). Tant que pnpm interroge encore cet endpoint, il
+      # échouerait SYSTÉMATIQUEMENT, indépendamment des dépendances. On distingue
+      # donc les deux cas — panne d'endpoint (410) → annotation, le relais étant
+      # assuré par Dependabot/Renovate ; toute autre sortie non nulle (vraie CVE)
+      # → échec. Le contrôle redevient actif de lui-même dès que pnpm migre.
+      - name: Audit des dépendances (CVE >= high)
+        run: |
+          set +e
+          out="$(pnpm audit --audit-level=high 2>&1)"
+          code=$?
+          echo "$out"
+          if [ "$code" -eq 0 ]; then exit 0; fi
+          if echo "$out" | grep -qE 'ERR_PNPM_AUDIT_BAD_RESPONSE|endpoint is being retired'; then
+            echo "::warning title=Audit npm indisponible::L'endpoint d'audit npm est retiré (HTTP 410) et pnpm ne supporte pas encore l'endpoint « bulk advisory ». Étape considérée comme passée ; la veille est relayée par Renovate et Dependabot."
+            exit 0
+          fi
+          echo "::error title=Vulnérabilité de dépendance::pnpm audit a détecté une ou plusieurs CVE de sévérité >= high."
+          exit 1
+
+      # @websentry/shared doit être compilé EN PREMIER : sans ses .d.ts, le
+      # typecheck de api et web échoue en cascade.
+      - name: Build du package partagé
+        run: pnpm --filter @websentry/shared build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Vérification du formatage
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm type-check
+
+      # Les seuils de couverture sont appliqués par Vitest : sous le seuil, la
+      # commande sort en code non nul et l'étape échoue.
+      - name: Tests unitaires + couverture (backend)
+        run: pnpm --filter @websentry/api test:coverage
+
+      - name: Tests unitaires + couverture (frontend)
+        run: pnpm --filter @websentry/web test:coverage
+
+      - name: Tests E2E API
+        run: pnpm --filter @websentry/api test:e2e
+
+      # Suite dédiée aux 15 failles les plus répandues (OWASP Top 10 étendu).
+      # Étape distincte pour que son échec soit lisible d'un coup d'œil.
+      - name: Suite sécurité (15 failles OWASP)
+        run: pnpm --filter @websentry/api test:security
+
+      - name: Build backend
+        run: pnpm --filter @websentry/api build
+
+      - name: Build frontend
+        run: pnpm --filter @websentry/web build
+
+      - name: Publication des rapports de couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: couverture
+          path: |
+            apps/api/coverage/lcov.info
+            apps/web/coverage/lcov.info
+          retention-days: 7
+          if-no-files-found: ignore
+
+  e2e:
+    name: E2E navigateur (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Ne démarre qu'une fois la barrière qualité franchie : inutile de payer un
+    # navigateur si le lint échoue.
+    needs: quality
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Installation des dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Build du package partagé
+        run: pnpm --filter @websentry/shared build
+
+      - name: Installation du navigateur
+        run: pnpm --filter @websentry/web exec playwright install --with-deps chromium
+
+      - name: Scénarios critiques
+        run: pnpm --filter @websentry/web test:e2e
+
+      - name: Publication du rapport Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-playwright
+          path: apps/web/playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

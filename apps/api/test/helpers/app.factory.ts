@@ -231,12 +231,10 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
   const config = app.get(AppConfigService);
   const fastifyCookie = (await import('@fastify/cookie')).default;
   const helmet = (await import('@fastify/helmet')).default;
-  type PluginArg = Parameters<NestFastifyApplication['register']>[0];
-
-  await app.register(fastifyCookie as unknown as PluginArg, {
+  await app.register(fastifyCookie, {
     parseOptions: { sameSite: 'strict', path: '/' },
   });
-  await app.register(helmet as unknown as PluginArg, {
+  await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],

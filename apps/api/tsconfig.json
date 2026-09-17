@@ -6,7 +6,8 @@
     "module": "node16",
     "moduleResolution": "node16",
     "outDir": "./dist",
-    "rootDir": "./src",
+    // Pas de `rootDir` ici : ce fichier couvre aussi test/ et les configurations
+    // Vitest. La racine d'émission est fixée par tsconfig.build.json.
     "types": ["node", "vitest/globals"],
 
     "experimentalDecorators": true,
@@ -20,6 +21,6 @@
     "strictNullChecks": true,
     "strictPropertyInitialization": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "test", "**/*.spec.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "vitest.e2e.config.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
 }

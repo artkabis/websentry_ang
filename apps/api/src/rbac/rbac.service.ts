@@ -66,7 +66,7 @@ export class RbacService {
   async listForUser(userId: string): Promise<GrantedPermission[]> {
     const rows = await this.permissions.findAllForUser(userId);
     return rows.map(r => ({
-      permission: r.permission as GrantedPermission['permission'],
+      permission: r.permission,
       gammes: this.normalizeGammes(r.gammes),
     }));
   }

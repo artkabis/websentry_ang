@@ -68,10 +68,9 @@ export class UserRepository {
 
   /** Remet le compteur d'échecs à zéro après une connexion réussie. */
   async resetFailedLogins(userId: string): Promise<void> {
-    await this.db.execute(
-      'UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?',
-      [userId],
-    );
+    await this.db.execute('UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?', [
+      userId,
+    ]);
   }
 
   /**
