@@ -1,0 +1,47 @@
+{
+  "name": "websentry-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "WebSentry v2 — audit SEO/qualité web (Nest.js + Angular)",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @websentry/shared build && pnpm --filter @websentry/api build && pnpm --filter @websentry/web build",
+    "dev:api": "pnpm --filter @websentry/api dev",
+    "dev:web": "pnpm --filter @websentry/web dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{ts,html,css,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,html,css,json,md,yaml,yml}\"",
+    "type-check": "pnpm -r type-check",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "test:security": "pnpm --filter @websentry/api test:security",
+    "test:e2e": "pnpm --filter @websentry/api test:e2e",
+    "audit:ci": "pnpm audit --audit-level=high",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
+    "prettier": "^3.8.4",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.61.0"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{html,css,json,md,yaml,yml}": [
+      "prettier --write"
+    ]
+  }
+}

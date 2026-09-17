@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist/cjs",
+    "rootDir": "./src",
+    // Le package.json source déclare `"type": "commonjs"` : TypeScript émet donc
+    // du CommonJS, consommable par le backend Nest via `require()`.
+    "module": "node16",
+    "moduleResolution": "node16",
+    "tsBuildInfoFile": "./dist/cjs/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

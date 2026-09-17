@@ -1,0 +1,49 @@
+{
+  "name": "@websentry/api",
+  "version": "2.0.0",
+  "private": true,
+  "description": "WebSentry v2 \u2014 API Nest.js sur adapter Fastify",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "node --watch --experimental-strip-types src/main.ts",
+    "start": "node dist/main.js",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:security": "vitest run --config vitest.e2e.config.ts test/security"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/helmet": "^13.1.1",
+    "@nestjs/common": "^12.0.3",
+    "@nestjs/config": "^12.0.0",
+    "@nestjs/core": "^12.0.3",
+    "@nestjs/jwt": "^12.0.2",
+    "@nestjs/platform-fastify": "^12.0.3",
+    "@nestjs/throttler": "^6.6.0",
+    "@standard-schema/spec": "^1.1.0",
+    "@websentry/shared": "workspace:*",
+    "fastify": "^5.12.5",
+    "mysql2": "^3.24.4",
+    "pino": "^10.2.0",
+    "pino-http": "^11.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "undici": "^7.18.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^12.0.3",
+    "@swc/core": "^1.16.2",
+    "@types/node": "^22.19.1",
+    "@types/supertest": "^6.0.3",
+    "@vitest/coverage-v8": "^5.0.1",
+    "supertest": "^7.2.2",
+    "typescript": "~6.0.3",
+    "unplugin-swc": "^1.6.0",
+    "vitest": "^5.0.1"
+  },
+  "type": "module"
+}

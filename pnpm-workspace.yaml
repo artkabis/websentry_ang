@@ -1,0 +1,22 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+overrides:
+  # Une SEULE copie de fastify dans l'arbre. Deux versions coexistantes produisent
+  # deux jeux de déclarations `FastifyInstance` structurellement distincts : les
+  # augmentations de @fastify/cookie et @fastify/helmet s'appliquent alors à l'une
+  # et pas à l'autre, et `register()` cesse de type-checker.
+  fastify: '5.12.5'
+
+# Build scripts autorisés explicitement (pnpm >=10 les bloque par défaut).
+onlyBuiltDependencies:
+  - esbuild
+  - '@parcel/watcher'
+  - unrs-resolver
+  - '@swc/core'
+
+# `pnpm audit --audit-level=high` est un step BLOQUANT de la CI.
+# Toute exception doit être documentée ici avec sa justification et une date de revue.
+auditConfig:
+  ignoreGhsas: []
