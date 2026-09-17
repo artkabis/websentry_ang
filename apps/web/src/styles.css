@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind CSS 4 — configuration par directives CSS, sans fichier de config JS.
+ * Les jetons de couleur reprennent la charte de la v1.
+ */
+@theme {
+  --color-brand-50: oklch(0.97 0.02 250);
+  --color-brand-500: oklch(0.58 0.18 250);
+  --color-brand-600: oklch(0.51 0.18 250);
+  --color-brand-700: oklch(0.44 0.16 250);
+}

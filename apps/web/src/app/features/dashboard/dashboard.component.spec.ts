@@ -1,0 +1,100 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { Router } from '@angular/router';
+import { RANKS, type CurrentUser } from '@websentry/shared';
+import { render, screen } from '@testing-library/angular';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { AuthService } from '../../core/auth/auth.service';
+import { DashboardComponent } from './dashboard.component';
+
+function profile(rank: number, permissions: CurrentUser['permissions'] = []): CurrentUser {
+  return { id: 'u1', username: 'alice', rank, role: 'tester', status: 'active', permissions };
+}
+
+function setup(user: CurrentUser | null, role = 'tester') {
+  const logout = vi.fn().mockResolvedValue(undefined);
+  const navigateByUrl = vi.fn().mockResolvedValue(true);
+
+  const auth = {
+    user: () => user,
+    role: () => role,
+    isAdmin: () => (user?.rank ?? 0) >= RANKS.ADMIN,
+    logout,
+  };
+
+  return {
+    logout,
+    navigateByUrl,
+    providers: [
+      provideZonelessChangeDetection(),
+      { provide: AuthService, useValue: auth },
+      { provide: Router, useValue: { navigateByUrl } },
+    ],
+  };
+}
+
+describe('DashboardComponent', () => {
+  it('affiche l’utilisateur connecté et son rôle', async () => {
+    const t = setup(profile(RANKS.TESTER), 'tester');
+    await render(DashboardComponent, { providers: t.providers });
+
+    expect(screen.getByRole('heading', { name: 'Tableau de bord' })).toBeDefined();
+    expect(screen.getByText(/alice/)).toBeDefined();
+    expect(screen.getByText(/tester/)).toBeDefined();
+  });
+
+  it('MASQUE la section d’administration à un tester', async () => {
+    const t = setup(profile(RANKS.TESTER));
+    await render(DashboardComponent, { providers: t.providers });
+    expect(screen.queryByRole('heading', { name: 'Administration' })).toBeNull();
+  });
+
+  it('affiche la section d’administration à un admin', async () => {
+    const t = setup(profile(RANKS.ADMIN), 'admin');
+    await render(DashboardComponent, { providers: t.providers });
+    expect(screen.getByRole('heading', { name: 'Administration' })).toBeDefined();
+  });
+
+  it('affiche la section d’administration à un super_admin', async () => {
+    const t = setup(profile(RANKS.SUPER_ADMIN), 'super_admin');
+    await render(DashboardComponent, { providers: t.providers });
+    expect(screen.getByRole('heading', { name: 'Administration' })).toBeDefined();
+  });
+
+  it('signale l’absence de permission fine', async () => {
+    const t = setup(profile(RANKS.TESTER, []));
+    await render(DashboardComponent, { providers: t.providers });
+    expect(screen.getByText('Aucune permission fine accordée.')).toBeDefined();
+  });
+
+  it('liste les permissions accordées avec leur scope', async () => {
+    const t = setup(
+      profile(RANKS.EDITOR, [
+        { permission: 'docs:read', gammes: ['premium', 'essentiel'] },
+        { permission: 'usage:read', gammes: null },
+      ]),
+    );
+    await render(DashboardComponent, { providers: t.providers });
+
+    expect(screen.getByText('docs:read')).toBeDefined();
+    expect(screen.getByText(/premium, essentiel/)).toBeDefined();
+    expect(screen.getByText('usage:read')).toBeDefined();
+  });
+
+  it('déconnecte puis redirige vers l’écran de connexion', async () => {
+    const user = userEvent.setup();
+    const t = setup(profile(RANKS.TESTER));
+    await render(DashboardComponent, { providers: t.providers });
+
+    await user.click(screen.getByRole('button', { name: 'Se déconnecter' }));
+
+    expect(t.logout).toHaveBeenCalled();
+    expect(t.navigateByUrl).toHaveBeenCalledWith('/connexion');
+  });
+
+  it('reste affichable sans profil résolu', async () => {
+    const t = setup(null);
+    await render(DashboardComponent, { providers: t.providers });
+    expect(screen.getByRole('heading', { name: 'Tableau de bord' })).toBeDefined();
+  });
+});

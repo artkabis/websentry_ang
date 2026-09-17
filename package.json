@@ -2,10 +2,10 @@
   "name": "websentry-v2",
   "version": "2.0.0",
   "private": true,
-  "description": "WebSentry v2 — audit SEO/qualité web (Nest.js + Angular)",
+  "description": "WebSentry v2 \u2014 audit SEO/qualit\u00e9 web (Nest.js + Angular)",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.22.3",
     "pnpm": ">=10.0.0"
   },
   "scripts": {
