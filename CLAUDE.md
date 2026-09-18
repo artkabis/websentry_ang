@@ -25,10 +25,10 @@ Sont donc **autorisées et attendues**, sans demander à chaque fois :
 - **Améliorer une logique métier** quand le port met au jour une incohérence, un
   cas limite non traité, une règle implicite jamais écrite, ou un comportement
   que les tests de la v1 ne garantissaient pas.
-- **Moderniser l'UX et l'UI** : ergonomie, hiérarchie visuelle, états de
+- **Moderniser l'UX et l'UI** — ergonomie, hiérarchie visuelle, états de
   chargement et d'erreur, accessibilité, retours immédiats, densité
   d'information, parcours en moins d'étapes. Le fait que la v1 fasse autrement
-  n'est pas un argument en soi.
+  n'est pas un argument en soi. Le cap détaillé est au §2.
 - **Proposer des fonctionnalités adjacentes** quand elles tombent naturellement
   du module en cours et coûtent peu à côté de ce qui est déjà construit.
 
@@ -50,7 +50,56 @@ Sont donc **autorisées et attendues**, sans demander à chaque fois :
 
 ---
 
-## 2. Règle absolue du build
+## 2. Cap UX/UI : moderne et fonctionnel, dans cet ordre
+
+Reproduire l'interface de la v1 n'est pas un objectif. Les principes ci-dessous
+s'appliquent à chaque écran produit ou repris.
+
+**Toujours quatre états, jamais un seul.** Un écran qui affiche des données a un
+état _chargement_, _vide_, _erreur_ et _nominal_. Le vide explique quoi faire
+ensuite plutôt que d'afficher « Aucun résultat » ; l'erreur dit ce qui a échoué
+et propose une reprise ; le chargement utilise un squelette calqué sur la forme
+réelle du contenu, pas un spinner centré qui fait sauter la mise en page.
+
+**Le retour est immédiat.** Une action rend la main tout de suite : état en
+attente sur le contrôle actionné, jamais un gel silencieux. Là où l'écriture est
+sûre et réversible, on affiche le résultat par anticipation et on corrige si le
+serveur refuse. Ce qui est destructeur se confirme ; ce qui ne l'est pas
+s'annule plutôt qu'il ne se confirme.
+
+**L'erreur est exploitable.** Un message dit ce qui s'est passé, pourquoi, et
+quelle est la prochaine action — au plus près du champ concerné. La validation
+côté client rejoue le schéma partagé et avertit avant l'appel réseau, sans
+jamais s'y substituer : l'API reste la seule autorité.
+
+**L'accessibilité n'est pas une option.** Cible WCAG 2.2 AA : navigation
+clavier complète et ordre de tabulation cohérent, focus toujours visible, rôles
+et libellés explicites, contrastes vérifiés, annonces des changements d'état aux
+lecteurs d'écran (`role="status"`, `aria-live`), respect de
+`prefers-reduced-motion`. Les tests de composants interrogent l'arbre
+accessible (rôles et libellés) plutôt que des classes CSS : ce qui est testable
+par le rôle est utilisable au clavier.
+
+**La densité sert l'expert.** WebSentry s'adresse à une équipe qualité qui
+enchaîne les audits : tableaux triables et filtrables, filtres reflétés dans
+l'URL (donc partageables et rechargeables), sélection multiple et actions
+groupées là où le geste est répétitif, raccourcis clavier sur les parcours
+quotidiens. On préfère montrer l'information plutôt que de l'enfouir sous des
+onglets.
+
+**Cohérence par composants.** Tailwind 4 avec des jetons de design (couleurs,
+espacements, rayons, typographie) définis une fois et réutilisés ; des
+composants partagés pour tout motif qui apparaît deux fois. Pas de valeurs
+arbitraires dispersées dans les gabarits. Responsive réel, thème sombre inclus
+dès la conception et non ajouté après coup.
+
+**Angular moderne.** Standalone, signals, zoneless, `@if`/`@for`,
+`input()`/`output()`, `OnPush` implicite, chargement différé par route.
+Le rendu ne bloque pas sur la donnée la plus lente de la page.
+
+---
+
+## 3. Règle absolue du build
 
 **Un build ne se termine jamais si une erreur est détectée, à n'importe quelle
 étape** : lint, format, typecheck, test, couverture sous le seuil, audit CVE.
@@ -63,7 +112,7 @@ connue n'est tolérée.
 
 ---
 
-## 3. Seuils de test non négociables
+## 4. Seuils de test non négociables
 
 | Périmètre                                    | Seuil                |
 | -------------------------------------------- | -------------------- |
@@ -78,7 +127,7 @@ creux pour flatter la couverture.
 
 ---
 
-## 4. Stack imposée
+## 5. Stack imposée
 
 - **Backend** — Nest.js sur `@nestjs/platform-fastify` (jamais l'adaptateur
   Express), TypeScript strict (`noUncheckedIndexedAccess` compris), Zod comme
@@ -94,7 +143,7 @@ creux pour flatter la couverture.
 
 ---
 
-## 5. Méthode
+## 6. Méthode
 
 Migration **module par module** (strangler pattern) : chaque module est testé,
 sécurisé et déployable avant d'entamer le suivant. On écrit en français — code,
