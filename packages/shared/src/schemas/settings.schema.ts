@@ -140,7 +140,15 @@ export const DEFAULT_EXCLUDED_DOMAINS: readonly string[] = [
   'logflare.app',
 ];
 
-export const AnalysisSettingsSchema = z
+/**
+ * Objet de base des réglages, AVANT contrôles croisés.
+ *
+ * Exposé séparément parce qu'un schéma raffiné (`.superRefine`) n'est plus un
+ * objet : il n'offre ni `.partial()` ni `.extend()`. Une surcharge partielle de
+ * réglages en a besoin — et l'obtenir autrement reviendrait à redéclarer la
+ * forme une seconde fois, donc à la laisser diverger.
+ */
+export const AnalysisSettingsObjectSchema = z
   .object({
     meta: z
       .object({
@@ -259,47 +267,48 @@ export const AnalysisSettingsSchema = z
       .partial()
       .optional(),
   })
-  .strict()
-  .superRefine((settings, ctx) => {
-    // Un intervalle inversé passerait la validation champ par champ tout en
-    // rendant le critère insatisfiable : aucune valeur ne peut être à la fois
-    // ≥ min et ≤ max. On le refuse à la frontière plutôt que de laisser
-    // l'analyse produire des résultats incompréhensibles.
-    const ranges: Array<[string, number, number]> = [
-      ['meta.title', settings.meta.title.min, settings.meta.title.max],
-      ['meta.description', settings.meta.description.min, settings.meta.description.max],
-      ['hn', settings.hn.minLength, settings.hn.maxLength],
-      ['bold', settings.bold.min, settings.bold.max],
-    ];
+  .strict();
 
-    for (const [path, min, max] of ranges) {
-      if (min > max) {
-        ctx.addIssue({
-          code: 'custom',
-          path: path.split('.'),
-          message: `Intervalle inversé : le minimum (${min}) dépasse le maximum (${max})`,
-        });
-      }
-    }
+export const AnalysisSettingsSchema = AnalysisSettingsObjectSchema.superRefine((settings, ctx) => {
+  // Un intervalle inversé passerait la validation champ par champ tout en
+  // rendant le critère insatisfiable : aucune valeur ne peut être à la fois
+  // ≥ min et ≤ max. On le refuse à la frontière plutôt que de laisser
+  // l'analyse produire des résultats incompréhensibles.
+  const ranges: Array<[string, number, number]> = [
+    ['meta.title', settings.meta.title.min, settings.meta.title.max],
+    ['meta.description', settings.meta.description.min, settings.meta.description.max],
+    ['hn', settings.hn.minLength, settings.hn.maxLength],
+    ['bold', settings.bold.min, settings.bold.max],
+  ];
 
-    // Le seuil d'avertissement doit précéder le seuil d'échec, sinon il ne se
-    // déclencherait jamais.
-    if (settings.images.warningThresholdBytes > settings.images.maxSizeBytes) {
+  for (const [path, min, max] of ranges) {
+    if (min > max) {
       ctx.addIssue({
         code: 'custom',
-        path: ['images', 'warningThresholdBytes'],
-        message: "Le seuil d'avertissement doit être inférieur ou égal au poids maximal",
+        path: path.split('.'),
+        message: `Intervalle inversé : le minimum (${min}) dépasse le maximum (${max})`,
       });
     }
+  }
 
-    if (settings.content.minWords > settings.content.warningWords) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['content', 'warningWords'],
-        message: "Le seuil d'avertissement doit être supérieur ou égal au minimum de mots",
-      });
-    }
-  });
+  // Le seuil d'avertissement doit précéder le seuil d'échec, sinon il ne se
+  // déclencherait jamais.
+  if (settings.images.warningThresholdBytes > settings.images.maxSizeBytes) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['images', 'warningThresholdBytes'],
+      message: "Le seuil d'avertissement doit être inférieur ou égal au poids maximal",
+    });
+  }
+
+  if (settings.content.minWords > settings.content.warningWords) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['content', 'warningWords'],
+      message: "Le seuil d'avertissement doit être supérieur ou égal au minimum de mots",
+    });
+  }
+});
 
 export type AnalysisSettings = z.infer<typeof AnalysisSettingsSchema>;
 

@@ -6,4 +6,6 @@ export * from './schemas/health.schema.js';
 export * from './schemas/settings.schema.js';
 export * from './schemas/profile.schema.js';
 export * from './schemas/scan.schema.js';
+export * from './schemas/report.schema.js';
+export * from './schemas/analysis.schema.js';
 export * from './scan-comparison.js';
