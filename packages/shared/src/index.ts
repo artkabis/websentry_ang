@@ -1,3 +1,7 @@
 export * from './types/rbac.js';
+export * from './analyzers-registry.js';
+export * from './check-weights.js';
 export * from './schemas/auth.schema.js';
 export * from './schemas/health.schema.js';
+export * from './schemas/settings.schema.js';
+export * from './schemas/profile.schema.js';

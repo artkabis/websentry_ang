@@ -25,14 +25,17 @@
     "build": "pnpm run build:cjs && pnpm run build:esm && node ./scripts/write-cjs-package.mjs",
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
-    "type-check": "tsc -p tsconfig.cjs.json --noEmit",
-    "test": "echo \"@websentry/shared: logique couverte par les suites api/web\" && exit 0",
-    "test:coverage": "echo \"@websentry/shared: logique couverte par les suites api/web\" && exit 0"
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "typescript": "~6.0.3"
+    "@types/node": "^22.19.1",
+    "@vitest/coverage-v8": "^5.0.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.1"
   }
 }

@@ -1,3 +1,17 @@
 {
-  "extends": "./tsconfig.cjs.json"
+  // Configuration de RÉFÉRENCE du paquet : elle couvre TOUT le code (sources,
+  // tests, configuration Vitest) et n'émet rien. C'est elle qu'utilisent le
+  // service de projet ESLint et `type-check` — une erreur de type dans un spec
+  // est une erreur.
+  //
+  // L'émission, elle, passe par tsconfig.cjs.json et tsconfig.esm.json, qui
+  // excluent les tests pour qu'ils n'atterrissent pas dans dist/.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "node16",
+    "moduleResolution": "node16",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "vitest.config.mts"]
 }

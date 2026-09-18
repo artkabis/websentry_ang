@@ -10,6 +10,7 @@ import { RankGuard } from './auth/guards/rank.guard.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
+import { ProfilesModule } from './profiles/profiles.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { CsrfGuard } from './security/csrf.guard.js';
 import { SecurityModule } from './security/security.module.js';
@@ -37,6 +38,7 @@ import { SecurityModule } from './security/security.module.js';
     RbacModule,
     AuthModule,
     HealthModule,
+    ProfilesModule,
     ThrottlerModule.forRoot({
       throttlers: [
         // Garde volumétrique par défaut ; les routes sensibles resserrent la limite
