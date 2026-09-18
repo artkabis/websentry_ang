@@ -10,6 +10,7 @@ import { UserRepository } from '../../src/database/repositories/user.repository.
 import { SessionRepository } from '../../src/database/repositories/session.repository.js';
 import { PermissionRepository } from '../../src/database/repositories/permission.repository.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repository.js';
+import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
 
 /**
  * Monte l'application COMPLÈTE (adapter Fastify, helmet, cookies, gardes et
@@ -41,6 +42,21 @@ export class FakeDb {
     { id: string; userId: string; expiresAt: Date; revoked: boolean }
   >();
   readonly auditLog: Array<Record<string, unknown>> = [];
+
+  /** Profils par gamme — reproduit la table `settings_profiles`. */
+  readonly profiles = new Map<
+    string,
+    {
+      gamme: string;
+      label: string;
+      description: string | null;
+      settings: unknown;
+      version: number;
+      created_at: string;
+      updated_at: string;
+      updated_by: string | null;
+    }
+  >();
 
   byUsername(username: string): UserRow | null {
     for (const user of this.users.values()) {
@@ -185,6 +201,80 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     }),
   };
 
+  const profileRepo = {
+    available: true,
+    list: vi.fn(() =>
+      Promise.resolve(
+        [...db.profiles.values()].sort((a, b) => {
+          if (a.gamme === 'default') return -1;
+          if (b.gamme === 'default') return 1;
+          return a.gamme.localeCompare(b.gamme);
+        }) as never,
+      ),
+    ),
+    findByGamme: vi.fn((gamme: string) =>
+      Promise.resolve((db.profiles.get(gamme) ?? null) as never),
+    ),
+    create: vi.fn(
+      (
+        gamme: string,
+        label: string,
+        description: string | null,
+        settings: unknown,
+        by: string | null,
+      ) => {
+        if (db.profiles.has(gamme)) return Promise.resolve(false);
+        const now = new Date().toISOString();
+        db.profiles.set(gamme, {
+          gamme,
+          label,
+          description,
+          settings,
+          version: 1,
+          created_at: now,
+          updated_at: now,
+          updated_by: by,
+        });
+        return Promise.resolve(true);
+      },
+    ),
+    // Reproduit fidèlement l'atomicité du `UPDATE ... WHERE version = ?` :
+    // une version attendue qui ne correspond plus ne touche aucune ligne.
+    updateWithVersion: vi.fn(
+      (
+        gamme: string,
+        label: string,
+        description: string | null,
+        settings: unknown,
+        by: string | null,
+        expectedVersion: number | null,
+      ) => {
+        const existing = db.profiles.get(gamme);
+        if (!existing) return Promise.resolve(false);
+        if (expectedVersion !== null && existing.version !== expectedVersion) {
+          return Promise.resolve(false);
+        }
+        db.profiles.set(gamme, {
+          ...existing,
+          label,
+          description,
+          settings,
+          updated_by: by,
+          version: existing.version + 1,
+          updated_at: new Date().toISOString(),
+        });
+        return Promise.resolve(true);
+      },
+    ),
+    delete: vi.fn((gamme: string) => {
+      if (gamme === 'default') return Promise.resolve(false);
+      return Promise.resolve(db.profiles.delete(gamme));
+    }),
+    currentVersion: vi.fn((gamme: string) =>
+      Promise.resolve(db.profiles.get(gamme)?.version ?? null),
+    ),
+  };
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
@@ -219,6 +309,8 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     .useValue(permissionRepo)
     .overrideProvider(AuditRepository)
     .useValue(auditRepo)
+    .overrideProvider(ProfileRepository)
+    .useValue(profileRepo)
     .compile();
 
   const { FastifyAdapter } = await import('@nestjs/platform-fastify');

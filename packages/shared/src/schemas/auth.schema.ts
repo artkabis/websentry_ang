@@ -77,6 +77,13 @@ export const ApiErrorSchema = z
     message: z.string(),
     /** Identifiant de corrélation : permet de retrouver la trace serveur côté logs. */
     requestId: z.string().optional(),
+    /**
+     * Précisions STRUCTURÉES sur l'erreur, quand le client en a besoin pour se
+     * resynchroniser — par exemple la version courante lors d'un conflit
+     * d'écriture. Seul canal d'enrichissement : le filtre d'exception écarte
+     * tout autre champ de la charge utile de l'exception.
+     */
+    details: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 

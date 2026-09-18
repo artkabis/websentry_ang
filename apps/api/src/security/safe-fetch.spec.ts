@@ -118,6 +118,17 @@ describe('SsrfService.safeFetch', () => {
       expect(first).toBe(second);
     });
 
+    it('avale une erreur d’annulation dans dispose() — elle ne doit rien casser', async () => {
+      const res = response(200);
+      (res as unknown as { body: { cancel: ReturnType<typeof vi.fn> } }).body.cancel = vi
+        .fn()
+        .mockRejectedValue(new Error('corps déjà fermé'));
+      fetch.mockResolvedValue(res);
+
+      const result = await service.safeFetch('https://exemple.fr/');
+      expect(() => result.dispose()).not.toThrow();
+    });
+
     it('libère le corps non lu via dispose()', async () => {
       const res = response(200);
       fetch.mockResolvedValue(res);
@@ -126,6 +137,148 @@ describe('SsrfService.safeFetch', () => {
       expect(
         (res as unknown as { body: { cancel: ReturnType<typeof vi.fn> } }).body.cancel,
       ).toHaveBeenCalled();
+    });
+  });
+
+  describe('épinglage — le mécanisme anti-rebinding lui-même', () => {
+    /** Récupère la fonction `lookup` injectée dans l'agent épinglé. */
+    function pinnedLookup(): (
+      hostname: string,
+      options: { all?: boolean },
+      cb: (err: unknown, address: unknown, family?: number) => void,
+    ) => void {
+      const created = Agent.mock.results[0]?.value as FakeAgent;
+      const options = created.options as {
+        connect: { lookup: (h: string, o: { all?: boolean }, cb: never) => void };
+      };
+      return options.connect.lookup as never;
+    }
+
+    beforeEach(() => {
+      resolvesTo('93.184.216.34', '93.184.216.35');
+    });
+
+    it('court-circuite la résolution d’undici avec les SEULES adresses validées', async () => {
+      // C'est ici que se ferme la fenêtre de DNS rebinding : undici ne re-résout
+      // jamais le nom, il reçoit les adresses déjà contrôlées.
+      await service.safeFetch('https://exemple.fr/');
+
+      const received: unknown[] = [];
+      pinnedLookup()('exemple.fr', { all: true }, (_err, address) => received.push(address));
+
+      expect(received[0]).toEqual([
+        { address: '93.184.216.34', family: 4 },
+        { address: '93.184.216.35', family: 4 },
+      ]);
+    });
+
+    it('sert la première adresse validée en mode simple', async () => {
+      await service.safeFetch('https://exemple.fr/');
+
+      let address: unknown;
+      let family: unknown;
+      pinnedLookup()('exemple.fr', {}, (_err, a, f) => {
+        address = a;
+        family = f;
+      });
+
+      expect(address).toBe('93.184.216.34');
+      expect(family).toBe(4);
+    });
+
+    it('ne consulte JAMAIS le nom d’hôte qu’on lui passe', async () => {
+      // Même sollicité avec un autre nom, l'agent ne rend que les adresses
+      // épinglées : un rebinding en cours de connexion reste sans effet.
+      await service.safeFetch('https://exemple.fr/');
+
+      let address: unknown;
+      pinnedLookup()('attaquant.example', {}, (_err, a) => {
+        address = a;
+      });
+
+      expect(address).toBe('93.184.216.34');
+    });
+  });
+
+  describe('cache d’agents', () => {
+    it('recrée un agent dont l’entrée a expiré, et détruit l’ancien', async () => {
+      vi.useFakeTimers();
+      try {
+        resolvesTo('93.184.216.34');
+        await service.safeFetch('https://exemple.fr/a');
+        const premier = Agent.mock.results[0]?.value as FakeAgent;
+
+        // Au-delà de la durée de vie d'une entrée (30 s), l'agent est renouvelé.
+        vi.advanceTimersByTime(31_000);
+        await service.safeFetch('https://exemple.fr/b');
+
+        expect(Agent).toHaveBeenCalledTimes(2);
+        expect(premier.destroy).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('survit à une destruction d’agent qui échoue', async () => {
+      // Un agent déjà détruit rejette : ce n'est pas une erreur pour l'appelant,
+      // le cache doit simplement poursuivre son nettoyage.
+      resolvesTo('93.184.216.34');
+      await service.safeFetch('https://exemple.fr/');
+      const agent = Agent.mock.results[0]?.value as FakeAgent;
+      agent.destroy.mockRejectedValue(new Error('agent déjà détruit'));
+
+      expect(() => service.reset()).not.toThrow();
+    });
+
+    it('survit à un échec de destruction lors de l’expiration d’une entrée', async () => {
+      vi.useFakeTimers();
+      try {
+        resolvesTo('93.184.216.34');
+        await service.safeFetch('https://exemple.fr/a');
+        const premier = Agent.mock.results[0]?.value as FakeAgent;
+        premier.destroy.mockRejectedValue(new Error('agent déjà détruit'));
+
+        vi.advanceTimersByTime(31_000);
+        await expect(service.safeFetch('https://exemple.fr/b')).resolves.toBeDefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('survit à un échec de destruction lors d’une éviction', async () => {
+      resolvesTo('93.184.216.34');
+      for (let i = 0; i < 260; i++) {
+        lookup.mockResolvedValue([{ address: `93.184.${i % 200}.${i % 250}`, family: 4 }] as never);
+        if (i === 0) {
+          await service.safeFetch('https://hote-0.exemple.fr/');
+          const premier = Agent.mock.results[0]?.value as FakeAgent;
+          premier.destroy.mockRejectedValue(new Error('agent déjà détruit'));
+          continue;
+        }
+        await expect(service.safeFetch(`https://hote-${i}.exemple.fr/`)).resolves.toBeDefined();
+      }
+    });
+
+    it('détruit les agents en cache sur reset()', async () => {
+      resolvesTo('93.184.216.34');
+      await service.safeFetch('https://exemple.fr/');
+      const agent = Agent.mock.results[0]?.value as FakeAgent;
+
+      service.reset();
+      expect(agent.destroy).toHaveBeenCalled();
+    });
+
+    it('ÉVINCE le plus ancien agent quand le pool est saturé', async () => {
+      // Sans éviction, un scan touchant des milliers d'hôtes ferait croître le
+      // pool de sockets sans borne.
+      resolvesTo('93.184.216.34');
+      for (let i = 0; i < 260; i++) {
+        lookup.mockResolvedValue([{ address: `93.184.${i % 200}.${i % 250}`, family: 4 }] as never);
+        await service.safeFetch(`https://hote-${i}.exemple.fr/`);
+      }
+
+      const premier = Agent.mock.results[0]?.value as FakeAgent;
+      expect(premier.destroy).toHaveBeenCalled();
     });
   });
 

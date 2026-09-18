@@ -19,8 +19,7 @@ export class ProfileVersionConflictError extends ConflictException {
         `Le profil ${gamme} a été modifié entre-temps ` +
         `(version courante ${currentVersion}, version soumise ${expectedVersion}). ` +
         'Rechargez-le avant de soumettre vos modifications.',
-      currentVersion,
-      expectedVersion,
+      details: { currentVersion, expectedVersion },
     });
   }
 }

@@ -105,6 +105,71 @@ describe('AllExceptionsFilter', () => {
     });
   });
 
+  describe('canal details', () => {
+    it('laisse passer un objet nu, seul canal d’enrichissement autorisé', () => {
+      const { host, sent } = hostWith();
+      buildFilter(false).catch(
+        new HttpException(
+          { message: 'Conflit', details: { currentVersion: 2, expectedVersion: 1 } },
+          HttpStatus.CONFLICT,
+        ),
+        host,
+      );
+      expect(sent.body.details).toEqual({ currentVersion: 2, expectedVersion: 1 });
+    });
+
+    it('n’ajoute pas de champ details quand l’exception n’en porte pas', () => {
+      const { host, sent } = hostWith();
+      buildFilter(false).catch(new HttpException('Simple', HttpStatus.CONFLICT), host);
+      expect(sent.body).not.toHaveProperty('details');
+    });
+
+    it.each([
+      ['un tableau', ['a', 'b']],
+      ['une chaîne', 'texte'],
+      ['un nombre', 42],
+      ['null', null],
+    ])('REFUSE %s comme details', (_label, candidate) => {
+      const { host, sent } = hostWith();
+      buildFilter(false).catch(
+        new HttpException({ message: 'x', details: candidate }, HttpStatus.CONFLICT),
+        host,
+      );
+      expect(sent.body).not.toHaveProperty('details');
+    });
+
+    it('REFUSE une instance de classe — seul un objet construit à dessein passe', () => {
+      // Une instance d'erreur ou d'entité embarquerait des champs internes que
+      // personne n'a choisi d'exposer.
+      class Interne {
+        secret = 'valeur';
+      }
+      const { host, sent } = hostWith();
+      buildFilter(false).catch(
+        new HttpException({ message: 'x', details: new Interne() }, HttpStatus.CONFLICT),
+        host,
+      );
+      expect(sent.body).not.toHaveProperty('details');
+    });
+
+    it('n’expose AUCUN autre champ de la charge utile de l’exception', () => {
+      const { host, sent } = hostWith();
+      buildFilter(true).catch(
+        new HttpException(
+          { message: 'x', sqlState: '42000', stack: 'at /srv/app.js', query: 'SELECT 1' },
+          HttpStatus.CONFLICT,
+        ),
+        host,
+      );
+      expect(Object.keys(sent.body).sort()).toEqual([
+        'error',
+        'message',
+        'requestId',
+        'statusCode',
+      ]);
+    });
+  });
+
   describe('erreurs de validation Zod', () => {
     it('n’expose que les chemins de champs, jamais les valeurs reçues', () => {
       // Une valeur rejetée peut être un mot de passe : la renvoyer serait une fuite.

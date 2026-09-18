@@ -26,6 +26,15 @@ export interface ResolvedAddress {
   family: number;
 }
 
+/**
+ * Liste d'adresses garantie NON VIDE.
+ *
+ * `resolvePublicAddresses` refuse déjà une résolution vide ; exprimer cette
+ * garantie dans le type évite une garde d'exécution qui ne pourrait jamais se
+ * déclencher — donc du code mort, impossible à tester honnêtement.
+ */
+export type NonEmptyAddresses = [ResolvedAddress, ...ResolvedAddress[]];
+
 export interface SafeFetchOptions {
   method?: 'GET' | 'HEAD';
   headers?: Record<string, string>;
@@ -53,7 +62,7 @@ export class SsrfBlockedError extends Error {
 interface ValidatedTarget {
   parsed: URL;
   /** Adresses publiques validées, ou null si l'hôte est une IP littérale déjà vérifiée. */
-  pinnedAddresses: ResolvedAddress[] | null;
+  pinnedAddresses: NonEmptyAddresses | null;
 }
 
 /** TTL du cache de résolutions validées — court, pour rester proche du DNS réel. */
@@ -77,7 +86,7 @@ const DEFAULT_ACCEPT_LANGUAGE = 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7';
 export class SsrfService {
   private readonly logger = new Logger(SsrfService.name);
 
-  private readonly dnsCache = new Map<string, { addresses: ResolvedAddress[]; ts: number }>();
+  private readonly dnsCache = new Map<string, { addresses: NonEmptyAddresses; ts: number }>();
   private readonly agentCache = new Map<string, { agent: Agent; ts: number }>();
 
   constructor(private readonly config: AppConfigService) {}
@@ -261,7 +270,7 @@ export class SsrfService {
    * Résout un hostname et exige que TOUTES les adresses retournées soient publiques.
    * Lève dès la première adresse privée — politique la plus conservatrice.
    */
-  private async resolvePublicAddresses(bareHostname: string): Promise<ResolvedAddress[]> {
+  private async resolvePublicAddresses(bareHostname: string): Promise<NonEmptyAddresses> {
     const now = Date.now();
     const cached = this.dnsCache.get(bareHostname);
     if (cached && now - cached.ts < DNS_CACHE_TTL_MS) {
@@ -276,23 +285,26 @@ export class SsrfService {
       throw new SsrfBlockedError(`Impossible de résoudre le nom d'hôte : ${bareHostname}`);
     }
 
-    if (resolved.length === 0) {
+    const [head, ...tail] = resolved;
+    if (!head) {
       throw new SsrfBlockedError(`Impossible de résoudre le nom d'hôte : ${bareHostname}`);
     }
+    // À partir d'ici, le type porte la garantie « au moins une adresse ».
+    const validated: NonEmptyAddresses = [head, ...tail];
 
-    for (const { address } of resolved) {
+    for (const { address } of validated) {
       if (isBlockedIp(address)) {
         this.logger.warn(`SSRF bloqué — ${bareHostname} résout vers une adresse privée`);
         throw new SsrfBlockedError('Accès aux adresses IP privées non autorisé.');
       }
     }
 
-    this.dnsCache.set(bareHostname, { addresses: resolved, ts: Date.now() });
-    return resolved;
+    this.dnsCache.set(bareHostname, { addresses: validated, ts: Date.now() });
+    return validated;
   }
 
   /** Clé de cache : hôte + liste d'IP validées triée (réutilisation stricte). */
-  private agentKey(hostname: string, addresses: ResolvedAddress[]): string {
+  private agentKey(hostname: string, addresses: NonEmptyAddresses): string {
     return `${hostname}|${addresses
       .map(a => a.address)
       .sort()
@@ -303,14 +315,8 @@ export class SsrfService {
    * Agent undici keep-alive dont la résolution est court-circuitée par un `lookup`
    * ne renvoyant que les IP déjà validées — c'est là que l'anti-rebinding se joue.
    */
-  private createPinnedAgent(addresses: ResolvedAddress[]): Agent {
-    const first = addresses[0];
-    if (!first) {
-      // Inatteignable : `resolvePublicAddresses` refuse une résolution vide. La
-      // garde explicite vaut mieux qu'une assertion, qui masquerait une
-      // régression future de cet invariant.
-      throw new SsrfBlockedError('Aucune adresse validée à épingler');
-    }
+  private createPinnedAgent(addresses: NonEmptyAddresses): Agent {
+    const [first] = addresses;
     return new Agent({
       keepAliveTimeout: AGENT_KEEP_ALIVE_MS,
       keepAliveMaxTimeout: AGENT_CACHE_TTL_MS,
@@ -336,7 +342,7 @@ export class SsrfService {
   }
 
   /** Récupère (ou crée) l'agent épinglé pour un hôte et son jeu d'IP validées. */
-  private getPinnedAgent(hostname: string, addresses: ResolvedAddress[]): Agent {
+  private getPinnedAgent(hostname: string, addresses: NonEmptyAddresses): Agent {
     const now = Date.now();
     const key = this.agentKey(hostname, addresses);
 
@@ -349,13 +355,17 @@ export class SsrfService {
       this.agentCache.delete(key);
     }
 
-    // Éviction du plus ancien quand le pool est plein.
+    // Éviction du plus ancien quand le pool est plein. Sans borne, un scan
+    // touchant des milliers d'hôtes ferait croître le pool de sockets sans fin.
+    //
+    // Une `Map` itère dans l'ordre d'INSERTION, et l'horodatage croît avec elle :
+    // la première entrée est donc la plus ancienne. Inutile de trier ou de
+    // comparer — la boucle s'arrête dès qu'elle a évincé une entrée.
     if (this.agentCache.size >= MAX_CACHED_AGENTS) {
-      const oldestKey = [...this.agentCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]?.[0];
-      if (oldestKey) {
-        const stale = this.agentCache.get(oldestKey);
-        if (stale) void stale.agent.destroy().catch(() => undefined);
+      for (const [oldestKey, stale] of this.agentCache) {
+        void stale.agent.destroy().catch(() => undefined);
         this.agentCache.delete(oldestKey);
+        break;
       }
     }
 

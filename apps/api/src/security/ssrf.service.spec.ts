@@ -208,6 +208,29 @@ describe('SsrfService', () => {
       );
     });
 
+    it('avale une erreur d’annulation en fin de lecture', async () => {
+      const encoder = new TextEncoder();
+      let done = false;
+      const res = {
+        headers: { get: () => null },
+        body: {
+          getReader: () => ({
+            read: () => {
+              if (done) return Promise.resolve({ done: true, value: undefined });
+              done = true;
+              return Promise.resolve({ done: false, value: encoder.encode('ok') });
+            },
+            releaseLock: () => undefined,
+          }),
+          // L'annulation peut échouer si le flux est déjà clos : ce n'est pas
+          // une erreur pour l'appelant, qui a bien reçu son contenu.
+          cancel: () => Promise.reject(new Error('flux déjà clos')),
+        },
+      } as never;
+
+      await expect(service.readTextCapped(res)).resolves.toBe('ok');
+    });
+
     it('retourne une chaîne vide quand la réponse n’a pas de corps', async () => {
       const res = { headers: { get: () => null }, body: null } as never;
       await expect(service.readTextCapped(res)).resolves.toBe('');

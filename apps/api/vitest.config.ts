@@ -60,6 +60,13 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        // Le cahier des charges exige 100 % sur les modules de sécurité, SSRF compris.
+        'src/security/ssrf.service.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
         'src/security/csrf.guard.ts': {
           lines: 100,
           branches: 100,

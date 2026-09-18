@@ -50,11 +50,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       void reply.header('Retry-After', String(extra.retryAfter));
     }
 
+    // `details` est le SEUL canal par lequel une exception peut enrichir la
+    // réponse. Il est explicite et borné : tout le reste de la charge utile de
+    // l'exception est écarté, pour qu'aucun détail interne ne fuite par
+    // inadvertance (OWASP #13).
+    const details = this.extractDetails(extra);
+
     void reply.status(status).send({
       statusCode: status,
       error,
       message,
       requestId,
+      ...(details ? { details } : {}),
     });
   }
 
@@ -105,6 +112,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
       error: 'Internal Server Error',
       message: 'Une erreur interne est survenue',
     };
+  }
+
+  /**
+   * Extrait le champ `details` d'une réponse d'exception, s'il est un objet nu.
+   *
+   * Un tableau, une chaîne ou une instance de classe sont refusés : seul un
+   * objet simple, construit intentionnellement par l'appelant, passe.
+   */
+  private extractDetails(extra?: Record<string, unknown>): Record<string, unknown> | null {
+    const candidate = extra?.details;
+    if (
+      candidate === null ||
+      typeof candidate !== 'object' ||
+      Array.isArray(candidate) ||
+      Object.getPrototypeOf(candidate) !== Object.prototype
+    ) {
+      return null;
+    }
+    return candidate as Record<string, unknown>;
   }
 
   private labelFor(status: number): string {
