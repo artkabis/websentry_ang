@@ -13,6 +13,7 @@ import { AuditRepository } from '../../src/database/repositories/audit.repositor
 import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
 import { ScanRepository } from '../../src/database/repositories/scan.repository.js';
 import { ScanRetentionRepository } from '../../src/database/repositories/scan-retention.repository.js';
+import { PageFetcherService } from '../../src/analysis/page-fetcher.service.js';
 
 /**
  * Monte l'application COMPLÈTE (adapter Fastify, helmet, cookies, gardes et
@@ -59,6 +60,9 @@ export class FakeDb {
       updated_by: string | null;
     }
   >();
+
+  /** Pages servies au moteur d'analyse, indexées par URL. */
+  readonly pages = new Map<string, string>();
 
   /** Historique des scans — reproduit `sites`, `scan_sessions` et `scan_pages`. */
   readonly scanSites = new Map<string, FakeSite>();
@@ -620,6 +624,29 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
   // validation Zod s'exécute au chargement d'AppConfigModule, trop tôt pour être
   // configurée ici.
 
+  // ── Récupération de page ────────────────────────────────────────────────────
+  // Le double sert du HTML en mémoire : la suite E2E teste les DÉCISIONS de
+  // l'API (accès, validation, forme des réponses), pas la pile réseau — que
+  // couvrent les tests du service SSRF. Aucun test ne doit sortir sur Internet.
+  const pageFetcher = {
+    fetchPage: vi.fn((url: string) => {
+      const html = db.pages.get(url);
+      if (html === undefined) {
+        return Promise.reject(new Error(`Hôte injoignable : ${url}`));
+      }
+      return Promise.resolve({
+        url,
+        html,
+        title: 'Page de test',
+        platform: 'generic' as const,
+        headers: { 'content-type': 'text/html' },
+        statusCode: 200,
+        ttfb: 12,
+        redirectChain: [],
+      });
+    }),
+  };
+
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DatabaseService)
     .useValue(databaseStub)
@@ -637,6 +664,8 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     .useValue(scanRepo)
     .overrideProvider(ScanRetentionRepository)
     .useValue(scanRetentionRepo)
+    .overrideProvider(PageFetcherService)
+    .useValue(pageFetcher)
     .compile();
 
   const { FastifyAdapter } = await import('@nestjs/platform-fastify');

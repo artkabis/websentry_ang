@@ -1,6 +1,7 @@
 import { Module, StandardSchemaValidationPipe } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AnalysisModule } from './analysis/analysis.module.js';
 import { AppConfigModule } from './config/config.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -41,6 +42,7 @@ import { SecurityModule } from './security/security.module.js';
     HealthModule,
     ProfilesModule,
     ScansModule,
+    AnalysisModule,
     ThrottlerModule.forRoot({
       throttlers: [
         // Garde volumétrique par défaut ; les routes sensibles resserrent la limite

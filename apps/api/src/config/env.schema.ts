@@ -86,6 +86,22 @@ export const EnvSchema = z
       .default('true')
       .transform(v => v === 'true'),
 
+    // ── Moteur d'analyse ────────────────────────────────────────────────────
+    /**
+     * `false` exécute les analyses sur le thread principal.
+     *
+     * Le repli existe pour les hébergements qui interdisent `worker_threads` ou
+     * contraignent la mémoire : mieux vaut analyser lentement que pas du tout.
+     */
+    ANALYSIS_WORKERS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform(v => v === 'true'),
+    /** 0 = automatique : un thread de moins que de cœurs disponibles. */
+    ANALYSIS_MAX_WORKERS: intFromEnv(0, 0),
+    /** Pages analysées en parallèle dans un lot — borne l'egress simultané. */
+    ANALYSIS_BATCH_CONCURRENCY: intFromEnv(4, 1),
+
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {

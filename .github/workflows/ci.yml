@@ -92,6 +92,13 @@ jobs:
       - name: Tests unitaires + couverture (paquet partagé)
         run: pnpm --filter @websentry/shared test:coverage
 
+      # Le worker d'analyse est du JavaScript COMPILÉ : un thread Piscina est un
+      # vrai thread Node, sans transformation TypeScript. Sans ce build, le test
+      # qui vérifie le chemin « pool de threads » prendrait sa branche de repli
+      # et ne prouverait rien.
+      - name: Build backend
+        run: pnpm --filter @websentry/api build
+
       - name: Tests unitaires + couverture (backend)
         run: pnpm --filter @websentry/api test:coverage
 
@@ -105,9 +112,6 @@ jobs:
       # Étape distincte pour que son échec soit lisible d'un coup d'œil.
       - name: Suite sécurité (15 failles OWASP)
         run: pnpm --filter @websentry/api test:security
-
-      - name: Build backend
-        run: pnpm --filter @websentry/api build
 
       - name: Build frontend
         run: pnpm --filter @websentry/web build

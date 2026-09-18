@@ -114,6 +114,15 @@ export class AppConfigService {
     };
   }
 
+  /** Réglages du moteur d'analyse. */
+  get analysis(): { workersEnabled: boolean; maxWorkers: number; batchConcurrency: number } {
+    return {
+      workersEnabled: this.get('ANALYSIS_WORKERS_ENABLED'),
+      maxWorkers: this.get('ANALYSIS_MAX_WORKERS'),
+      batchConcurrency: this.get('ANALYSIS_BATCH_CONCURRENCY'),
+    };
+  }
+
   get logLevel(): Env['LOG_LEVEL'] {
     return this.get('LOG_LEVEL');
   }
