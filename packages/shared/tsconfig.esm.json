@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist/esm",
+    "rootDir": "./src",
+    // `esnext` + `bundler` : émission ESM quel que soit le type déclaré par le
+    // package.json source. C'est la variante consommée par le bundler Angular,
+    // qui peut ainsi éliminer le code mort (tree-shaking).
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "tsBuildInfoFile": "./dist/esm/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

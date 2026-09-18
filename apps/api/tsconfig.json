@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Le package.json de l'API déclare `"type": "module"` : `node16` émet donc
+    // de l'ESM, seul format distribué par Nest 12.
+    "module": "node16",
+    "moduleResolution": "node16",
+    "outDir": "./dist",
+    // Pas de `rootDir` ici : ce fichier couvre aussi test/ et les configurations
+    // Vitest. La racine d'émission est fixée par tsconfig.build.json.
+    "types": ["node", "vitest/globals"],
+
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    "declaration": false,
+    "declarationMap": false,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+
+    "strictBindCallApply": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts", "vitest.e2e.config.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
+}

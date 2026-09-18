@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommits"],
+  "timezone": "Europe/Paris",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "bump",
+  "postUpdateOptions": ["pnpmDedupe"],
+
+  "vulnerabilityAlerts": {
+    "labels": ["securite", "urgent"],
+    "schedule": ["at any time"],
+    "prPriority": 10,
+    "automerge": false
+  },
+
+  "packageRules": [
+    {
+      "description": "Mineures et correctifs fusionnés automatiquement — uniquement si la CI est verte de bout en bout (lint, typecheck, couverture, suite sécurité, audit CVE).",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Les majeures restent manuelles : elles demandent une lecture du changelog et, souvent, une adaptation du code.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "majeure"]
+    },
+    {
+      "description": "Angular et Nest se mettent à jour par lot : leurs paquets sont versionnés ensemble et un décalage entre eux casse la compilation.",
+      "matchPackageNames": ["/^@angular//", "/^@nestjs//"],
+      "groupName": "framework"
+    },
+    {
+      "description": "TypeScript encadré : Nest 12 et Angular 22 exigent tous deux la plage 6.0.x.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1.0"
+    },
+    {
+      "description": "Node maintenu sur la ligne LTS paire.",
+      "matchPackageNames": ["node"],
+      "allowedVersions": "<23.0.0"
+    }
+  ]
+}

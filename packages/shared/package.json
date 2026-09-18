@@ -1,0 +1,38 @@
+{
+  "name": "@websentry/shared",
+  "version": "2.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm run build:cjs && pnpm run build:esm && node ./scripts/write-cjs-package.mjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "type-check": "tsc -p tsconfig.cjs.json --noEmit",
+    "test": "echo \"@websentry/shared: logique couverte par les suites api/web\" && exit 0",
+    "test:coverage": "echo \"@websentry/shared: logique couverte par les suites api/web\" && exit 0"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}
