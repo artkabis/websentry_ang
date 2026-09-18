@@ -260,3 +260,109 @@ livrable, et une refonte large se propose plutôt qu'elle ne se code. Une
 amélioration franchit exactement les mêmes portes que le reste — tests,
 couverture, sécurité, lint, typecheck. Enfin, sur le périmètre sécurité, on
 durcit, jamais on n'assouplit, et jamais sans test qui le prouve.
+
+---
+
+## 14. Historique des scans : la base v1 est reprise, pas recréée
+
+**Décision** — Les tables `sites`, `scan_sessions` et `scan_pages` de la v1 sont
+lues telles quelles. Le fichier `003-scan-history.sql` est à la fois une
+création (base neuve) et une migration **additive** (base v1) : il n'ajoute
+qu'une colonne, ne supprime ni ne renomme rien.
+
+**Raison** — Ces tables tournent en production et contiennent l'historique réel.
+Les recréer imposerait une reprise de données, une double écriture pendant la
+bascule, ou une coupure — trois façons de payer cher un modèle qui, lui, est
+sain : la normalisation site → session → page est exactement celle que la v2
+aurait choisie. L'historique est ainsi utilisable dès le premier déploiement, et
+une v1 et une v2 peuvent lire la même base pendant la transition, ce que le mode
+« strangler » exige.
+
+**Coût assumé** — La v2 hérite de conventions qu'elle n'a pas choisies : noms de
+colonnes en `snake_case` anglais, dénormalisation de `gamme`/`epj` sur la
+session, colonne générée `identity_key`. Aucune de ces décisions ne se rediscute
+tant que la v1 lit la même base.
+
+---
+
+## 15. Rapport purgé : 410 Gone, et une colonne pour le savoir
+
+**Décision** — Ajout de `scan_pages.report_purged_at`. Un rapport effacé par la
+rétention donne un **410 Gone** portant la date de purge, là où un scan
+inexistant donne un 404.
+
+**Raison** — La v1 remettait `is_compressed = 0` et vidait les deux colonnes
+après purge : la ligne devenait indiscernable d'une page qui n'a jamais eu de
+rapport, et l'API répondait « scan introuvable ». C'est faux — le scan existe —
+et c'est trompeur : l'utilisateur, puis le support, partent chercher une donnée
+que l'application a elle-même supprimée. Un 410 dit que la donnée a existé,
+qu'elle a été supprimée volontairement, et depuis quand.
+
+**Coût assumé** — Une colonne de plus, et un code HTTP que les clients doivent
+traiter. Les lignes déjà purgées par la v1 restent à `NULL` : elles se
+comportent comme aujourd'hui (rapport indisponible, date inconnue) plutôt que de
+se voir attribuer une date inventée.
+
+---
+
+## 16. Ingestion de l'historique : aucun endpoint HTTP
+
+**Décision** — `ScansService.record()` est appelée **en process** par le module
+d'analyse. Aucune route n'expose l'écriture de l'historique.
+
+**Raison** — L'historique est une base de preuve : on s'y réfère pour dire ce
+qu'était l'état d'un site à une date. Un endpoint d'ingestion offrirait à un
+jeton volé — ou à un compte interne mal intentionné — le moyen de **fabriquer un
+passé** : des audits qui n'ont jamais eu lieu, des scores qui n'ont jamais été
+mesurés. Aucune validation d'entrée ne protège de cela, puisque la charge serait
+parfaitement conforme. La seule défense est l'absence de porte.
+
+**Coût assumé** — Un agent externe ne peut pas alimenter l'historique. Si le
+besoin apparaît (sondes réparties, import de données tierces), il faudra une
+route dédiée, authentifiée par un secret distinct du JWT utilisateur, et des
+scans marqués comme provenant de l'extérieur — c'est-à-dire un arbitrage à part
+entière, pas une extension de celui-ci.
+
+**Garde-fou** — Un test de la suite sécurité vérifie qu'aucun `POST` sur
+`/scans`, `/scans/ingest` ou `/scans/sessions` n'est routé.
+
+---
+
+## 17. Comparaison : les améliorations sont montrées, pas seulement les régressions
+
+**Décision** — Le diff entre deux audits porte les dégradations **et** les
+améliorations, les dégradations en tête.
+
+**Raison** — La v1 ne remontait que les dégradations, pour éviter le bruit
+pendant une analyse. Le raisonnement tenait dans ce contexte : on venait de
+lancer un scan, on voulait savoir ce qui s'était cassé. Dans un écran
+d'historique dont le sujet **est** l'évolution, il revient à ne montrer que la
+moitié de l'information — et à laisser croire qu'un site ne progresse jamais,
+alors même que l'équipe qualité vient de passer une semaine à le corriger.
+
+Deux autres écarts avec la v1 suivent la même logique : une page disparue entre
+deux audits est **signalée** au lieu d'être écartée (un site qui perd la moitié
+de ses pages est un fait à montrer), et une page dont seul le score bouge —
+pondération modifiée, statuts identiques — compte comme changée.
+
+**Coût assumé** — Un diff plus volumineux, et un écran qui doit hiérarchiser au
+lieu de tout aligner. Le tri fait ce travail : dégradations d'abord, puis delta
+croissant, puis URL — un ordre total, donc reproductible d'un appel à l'autre.
+
+---
+
+## 18. Statistiques de l'historique : cache court plutôt que table d'agrégats
+
+**Décision** — `GET /scans/stats` est servi depuis un cache mémoire d'une
+minute, et limité à 20 appels par minute.
+
+**Raison** — Le calcul balaie la table entière quatre fois. Sans cache, un
+tableau de bord ouvert par trois personnes suffit à peser sur la base — et la
+v1 n'imposait même pas de limite de débit sur cette route. Une table d'agrégats
+entretenue à l'écriture serait plus efficace, mais introduirait un état à
+maintenir cohérent à chaque suppression : un coût permanent pour un écran
+consulté quelques fois par jour.
+
+**Coût assumé** — Un chiffre peut avoir jusqu'à une minute de retard. Le cache
+est invalidé à chaque suppression, qui est le seul évènement rendant les
+chiffres faux d'un coup.

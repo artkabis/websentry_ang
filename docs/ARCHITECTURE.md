@@ -124,6 +124,86 @@ inattendue jusqu'au moteur d'analyse.
 
 ---
 
+## Historique des scans
+
+### Modèle hiérarchique
+
+Trois niveaux, repris **tels quels** de la base v1 en production (cf.
+`DECISIONS.md` §14) :
+
+```
+sites            un couple (domaine, gamme) — identité stable dans le temps
+  └─ scan_sessions   un lancement d'audit (scan unique ou batch)
+       └─ scan_pages   une URL analysée, qui porte le rapport complet
+```
+
+L'identité d'un site est la colonne générée `identity_key` = `domain|gamme`.
+Un `UNIQUE (domain, gamme)` ne suffirait pas : deux `NULL` n'étant jamais égaux
+en SQL, le site « sans gamme » serait dupliqué à chaque scan.
+
+### Stockage du rapport, à trois étages
+
+| Âge du scan                     | Stockage          | Accès                       |
+| ------------------------------- | ----------------- | --------------------------- |
+| < `SCAN_COMPRESS_AFTER_DAYS`    | `report` en clair | immédiat                    |
+| jusqu'à `SCAN_PURGE_AFTER_DAYS` | `report_gz` gzip  | décompression à la demande  |
+| au-delà                         | résumé seul       | **410 Gone** sur le rapport |
+
+`check_summary` n'est **jamais** purgé. C'est ce qui permet de comparer deux
+audits vieux de deux ans, longtemps après que leur détail a disparu.
+
+`report_purged_at` distingue « effacé par la rétention » de « jamais écrit » —
+la v1 confondait les deux et répondait 404 dans les deux cas (`DECISIONS.md`
+§15).
+
+### Rétention
+
+Travail de fond lancé au démarrage puis toutes les 24 h, par **lots bornés** :
+
+```
+findCompressible(jours, lot) → gzip en JS → UPDATE ... CASE groupé
+purge(jours, lot)            → vide report/report_gz, DATE report_purged_at
+countPending()               → ce qui reste : tracé en WARN si non nul
+```
+
+Le minuteur est `unref()` : sans cela, le processus refuserait de s'arrêter
+pendant les heures séparant deux passages, et un conteneur qui ne répond plus à
+`SIGTERM` finit tué de force.
+
+### Comparaison de deux audits
+
+```
+GET /scans/sessions/:a/compare/:b
+       │
+       ├─ refus 400 si les deux sessions ne partagent pas le même site
+       ├─ le plus ANCIEN devient la référence, quel que soit l'ordre reçu
+       ├─ appariement des pages par URL (seule clé stable entre deux lancements)
+       └─ diff : dégradations ET améliorations, tri déterministe
+```
+
+Les règles de comparaison vivent dans `packages/shared/src/scan-comparison.ts` :
+le backend produit le diff, le frontend rejoue les mêmes règles pour trier et
+regrouper. Une seule définition de ce que « régresser » veut dire.
+
+`na` (non applicable) est **hors** de l'échelle de santé : le compter comme un
+échec ferait passer un changement de périmètre pour un effondrement de qualité.
+
+### Modèle d'accès
+
+| Route                    | Ouverture                                         |
+| ------------------------ | ------------------------------------------------- |
+| Lectures de l'historique | `history:read` (admin et éditeur par défaut)      |
+| Suppressions             | `history:delete` (admin par défaut)               |
+| `GET /scans/mine/:id`    | tout compte authentifié, **cloisonné par auteur** |
+
+Le refus sur `/scans/mine` est un **404 et non un 403** : distinguer les deux
+ferait de la route un oracle permettant d'énumérer les audits d'autrui.
+
+Aucune route n'écrit dans l'historique : l'ingestion se fait en process
+(`DECISIONS.md` §16).
+
+---
+
 ## Modèle d'authentification
 
 ### Cookies
@@ -249,13 +329,14 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 
 ## Tests
 
-| Suite              | Emplacement                   | Volume | Seuil                           |
-| ------------------ | ----------------------------- | ------ | ------------------------------- |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`   | 402    | 85 % global, **100 %** sécurité |
-| E2E API            | `apps/api/test/*.e2e-spec.ts` | 23     | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`     | 83     | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`   | 97     | 80 %                            |
-| E2E navigateur     | `apps/web/e2e/`               | 9      | —                               |
+| Suite              | Emplacement                        | Volume | Seuil                           |
+| ------------------ | ---------------------------------- | ------ | ------------------------------- |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 282    | 95 %                            |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 776    | 85 % global, **100 %** sécurité |
+| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 181    | —                               |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 301    | 80 %                            |
+| E2E navigateur     | `apps/web/e2e/`                    | 26     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié
@@ -272,16 +353,21 @@ faire_).
 
 ## Reste à faire
 
-Modules non encore migrés (priorités 3 à 7 du cahier des charges) : historique
-des scans, gestion des utilisateurs, analyse (SSE + Piscina), feedback,
-messagerie, analytics, supervision, portail documentaire.
+Modules non encore migrés (priorités 4 à 7 du cahier des charges) : gestion des
+utilisateurs, analyse (SSE + Piscina), feedback, messagerie, analytics,
+supervision, portail documentaire.
 
 Dettes identifiées sur le périmètre déjà livré :
 
 - **Tests d'intégration MariaDB** — conteneur éphémère en CI, pour valider le SQL
-  réel des repositories. Devient plus important avec le module 2 : le
-  verrouillage optimiste repose sur le comportement d'`UPDATE ... WHERE version`,
-  aujourd'hui reproduit fidèlement par un double mais non exercé contre MariaDB.
+  réel des repositories. La dette s'alourdit à chaque module : le verrouillage
+  optimiste du module 2 repose sur `UPDATE ... WHERE version`, et le module 3
+  ajoute une fonction fenêtre (`ROW_NUMBER() OVER (PARTITION BY …)`), une
+  recherche `MATCH … AGAINST` en mode booléen, une colonne générée `STORED`, des
+  cascades de clés étrangères et un `UPDATE … ORDER BY … LIMIT`. Tout cela est
+  reproduit fidèlement par des doubles, mais rien n'est exercé contre MariaDB —
+  or c'est précisément le genre de SQL dont le comportement varie d'un moteur et
+  d'une version à l'autre.
 - **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
   et les charger en base au moment de la bascule.
 - **Édition des listes longues** — l'éditeur couvre les seuils numériques et les
@@ -294,3 +380,20 @@ Dettes identifiées sur le périmètre déjà livré :
 - **Journal d'audit append-only en base** — l'absence de méthode `UPDATE`/`DELETE`
   est garantie côté applicatif et testée ; la verrouiller aussi par des droits
   MariaDB (`GRANT INSERT, SELECT` uniquement) serait plus robuste.
+- **Corbeille des scans supprimés** — la v1 dispose d'une table `scan_archive`
+  qui conserve les sessions supprimées en masse avant purge, avec restauration
+  et export. Le module 3 livre les suppressions **sans** ce filet. La table
+  existe et n'est pas touchée ; le module qui la réexpose reste à faire, et
+  d'ici là une suppression est définitive — ce que l'interface annonce.
+- **Détail d'une page dans l'interface** — l'API sert le rapport complet d'une
+  page (`GET /scans/:id`), avec le 410 des rapports purgés. L'écran qui
+  l'affiche attend le module 4 : le rendu d'un rapport appartient au module
+  d'analyse, le dupliquer ici créerait deux vues à maintenir.
+- **Thème sombre** — le cap UX (`CLAUDE.md` §2) le demande dès la conception.
+  Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
+  serait pire que rien. La bascule est un passage transverse sur les jetons de
+  design, à mener d'un bloc plutôt qu'au fil des modules.
+- **Suppressions depuis l'interface** — l'API expose les quatre portées (pages,
+  session, site, domaine) et la suite sécurité les couvre ; l'interface ne les
+  propose pas encore. Elles attendent la corbeille : offrir une suppression
+  définitive d'un domaine entier en un clic, sans filet, serait imprudent.

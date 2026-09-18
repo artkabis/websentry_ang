@@ -16,7 +16,7 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | RBAC + permissions fines                     | ✅      | ✅       | **Livré** |
 | Socle sécurité (SSRF, CSRF, audit, en-têtes) | ✅      | —        | **Livré** |
 | Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
-| Historique des scans                         | ⬜      | ⬜       | À faire   |
+| Historique des scans                         | ✅      | ✅       | **Livré** |
 | Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
 | Analyse (page, batch, sitemap, SSE)          | ⬜      | ⬜       | À faire   |
 | Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
@@ -25,10 +25,10 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 872 au total — 186 paquet partagé, 506 unitaires backend,
-181 E2E + sécurité API, 168 unitaires frontend, 17 E2E navigateur.
+**Tests** : 1661 au total — 282 paquet partagé, 776 unitaires backend,
+276 E2E + sécurité API, 301 unitaires frontend, 26 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 100 % lignes backend
-(100 % sur chaque module de sécurité), 98 % lignes frontend.
+(100 % sur chaque module de sécurité), 98,8 % lignes frontend.
 
 ---
 
