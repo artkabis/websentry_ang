@@ -15,7 +15,7 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Auth (cookies + Bearer, JWT rotatif)         | ✅      | ✅       | **Livré** |
 | RBAC + permissions fines                     | ✅      | ✅       | **Livré** |
 | Socle sécurité (SSRF, CSRF, audit, en-têtes) | ✅      | —        | **Livré** |
-| Settings & profils par gamme                 | ⬜      | ⬜       | À faire   |
+| Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
 | Historique des scans                         | ⬜      | ⬜       | À faire   |
 | Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
 | Analyse (page, batch, sitemap, SSE)          | ⬜      | ⬜       | À faire   |
@@ -95,3 +95,5 @@ Seuils de couverture appliqués :
   leur coût
 - [`docs/SECURITE.md`](docs/SECURITE.md) — les 15 failles et leur couverture,
   mesures permanentes
+- [`CLAUDE.md`](CLAUDE.md) — consignes permanentes de développement : règle
+  absolue du build, seuils de test, et le cap fonctionnel de la migration

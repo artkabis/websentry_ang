@@ -224,3 +224,39 @@ migration ; en pratique les deux sont identiques.
 
 **Raison** — Angular CLI 22 le refuse en deçà. Mieux vaut que l'installation
 échoue immédiatement, avec un message clair, qu'au premier build.
+
+---
+
+## 13. Cap fonctionnel : la migration peut améliorer, pas seulement transcrire
+
+**Décision** — Le port d'un module n'est pas tenu de reproduire les choix
+fonctionnels de la v1 quand ils sont perfectibles. Corriger une logique métier
+bancale, traiter un cas limite laissé de côté, ou moderniser un parcours
+d'interface fait partie du travail de migration et ne nécessite pas d'accord
+préalable module par module.
+
+**Raison** — Recopier à l'identique un comportement dont on a constaté le défaut
+pendant le port, c'est payer deux fois : une fois la recopie, une fois la
+correction ultérieure — avec entre-temps une v2 qui hérite d'une dette qu'elle
+n'avait aucune raison de contracter. Le moment où l'on relit une règle métier
+ligne à ligne pour la porter est précisément celui où ses angles morts sont
+visibles ; les laisser passer est un gâchis d'attention.
+
+Trois améliorations de ce type sont déjà actées et documentées ici : la
+révocation qui refuse au lieu de laisser passer (§8), l'unification des deux
+fichiers de réglages divergents (§11), et le verrouillage optimiste des profils,
+absent de la v1.
+
+**Coût assumé** — La v2 cesse d'être comparable à la v1 ligne à ligne : une
+différence de comportement n'est plus, en soi, la preuve d'un bug de migration.
+C'est ce qui rend la règle suivante non négociable — **toute divergence
+fonctionnelle assumée est consignée dans ce document**, avec sa raison et son
+coût. Ce qui n'y figure pas et diffère de la v1 reste, lui, un bug.
+
+**Garde-fous** — Aucune régression : ce que la v1 fait, la v2 le fait au minimum
+(retirer une capacité n'est pas une amélioration, c'est un arbitrage qui se
+discute avant). Améliorer n'est pas élargir : le périmètre demandé reste le
+livrable, et une refonte large se propose plutôt qu'elle ne se code. Une
+amélioration franchit exactement les mêmes portes que le reste — tests,
+couverture, sécurité, lint, typecheck. Enfin, sur le périmètre sécurité, on
+durcit, jamais on n'assouplit, et jamais sans test qui le prouve.
