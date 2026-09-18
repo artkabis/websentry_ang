@@ -13,6 +13,7 @@ import {
   ScanStatsSchema,
   SessionReportSchema,
   SiteDeleteSchema,
+  SiteSelectorSchema,
   SiteSummarySchema,
   siteIdentityKey,
 } from './scan.schema.js';
@@ -354,6 +355,36 @@ describe('SiteDeleteSchema', () => {
     expect(SiteDeleteSchema.safeParse({ domain: 'exemple.fr', gamme: null }).success).toBe(true);
     expect(SiteDeleteSchema.safeParse({ domain: 'exemple.fr', gamme: 'premium' }).success).toBe(
       true,
+    );
+  });
+});
+
+describe('SiteSelectorSchema', () => {
+  it('lit les coordonnées d’un site avec sa gamme', () => {
+    expect(SiteSelectorSchema.parse({ domain: 'exemple.fr', gamme: 'premium' })).toEqual({
+      domain: 'exemple.fr',
+      gamme: 'premium',
+    });
+  });
+
+  it.each([
+    ['absente', {}],
+    ['vide', { gamme: '' }],
+  ])('traite une gamme %s comme « sans gamme »', (_label, over) => {
+    // Un formulaire dont le champ n'est pas rempli envoie `gamme=` : distinguer
+    // les deux formes ferait échouer la recherche d'un site sans gamme dès
+    // qu'elle passe par l'interface plutôt que par un lien construit à la main.
+    const result = SiteSelectorSchema.parse({ domain: 'exemple.fr', ...over });
+    expect(result.gamme).toBeNull();
+  });
+
+  it('exige le domaine', () => {
+    expect(SiteSelectorSchema.safeParse({ gamme: 'premium' }).success).toBe(false);
+  });
+
+  it('refuse un paramètre surnuméraire', () => {
+    expect(SiteSelectorSchema.safeParse({ domain: 'exemple.fr', siteId: UUID_A }).success).toBe(
+      false,
     );
   });
 });
