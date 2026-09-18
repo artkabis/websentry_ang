@@ -36,6 +36,21 @@ export const routes: Routes = [
       import('./features/profiles/profile-editor.component').then(m => m.ProfileEditorComponent),
   },
   {
+    path: 'historique',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/scans/scan-history.component').then(m => m.ScanHistoryComponent),
+  },
+  {
+    // Le site est identifié par ses COORDONNÉES (`domain`, `gamme`) et non par
+    // un identifiant technique : c'est ce couple que connaît l'API, et l'URL
+    // reste lisible et partageable.
+    path: 'historique/site',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/scans/site-sessions.component').then(m => m.SiteSessionsComponent),
+  },
+  {
     path: 'acces-refuse',
     loadComponent: () => import('./features/forbidden.component').then(m => m.ForbiddenComponent),
   },
