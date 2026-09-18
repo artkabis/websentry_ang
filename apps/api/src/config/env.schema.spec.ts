@@ -56,6 +56,37 @@ describe('validateEnv', () => {
     });
   });
 
+  describe('seuils de rétention', () => {
+    it('REFUSE une purge antérieure à la compression', () => {
+      // Purger avant d'avoir compressé rend la compression inutile : le défaut
+      // ne se verrait qu'à la facture de stockage, des mois plus tard.
+      expect(() =>
+        validateEnv(env({ SCAN_COMPRESS_AFTER_DAYS: '30', SCAN_PURGE_AFTER_DAYS: '7' })),
+      ).toThrow(/SCAN_PURGE_AFTER_DAYS/);
+    });
+
+    it('refuse deux seuils égaux', () => {
+      expect(() =>
+        validateEnv(env({ SCAN_COMPRESS_AFTER_DAYS: '30', SCAN_PURGE_AFTER_DAYS: '30' })),
+      ).toThrow(/SCAN_PURGE_AFTER_DAYS/);
+    });
+
+    it('accepte un ordre cohérent', () => {
+      const parsed = validateEnv(
+        env({ SCAN_COMPRESS_AFTER_DAYS: '7', SCAN_PURGE_AFTER_DAYS: '365' }),
+      );
+      expect(parsed.SCAN_PURGE_AFTER_DAYS).toBe(365);
+    });
+
+    it('applique les valeurs par défaut', () => {
+      const parsed = validateEnv(env());
+      expect(parsed.SCAN_COMPRESS_AFTER_DAYS).toBe(7);
+      expect(parsed.SCAN_PURGE_AFTER_DAYS).toBe(180);
+      expect(parsed.SCAN_RETENTION_BATCH).toBe(500);
+      expect(parsed.SCAN_RETENTION_ENABLED).toBe(true);
+    });
+  });
+
   describe('coercition et valeurs par défaut', () => {
     it('convertit les entiers reçus sous forme de chaînes', () => {
       const parsed = validateEnv(env({ PORT: '8080', DB_PORT: '3307' }));

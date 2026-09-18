@@ -90,6 +90,30 @@ export class AppConfigService {
     return this.get('FETCH_TIMEOUT_MS');
   }
 
+  /**
+   * Politique de rétention des rapports.
+   *
+   * L'ordre des deux seuils est vérifié au démarrage plutôt qu'à l'exécution :
+   * une purge plus précoce que la compression effacerait les rapports avant de
+   * les avoir compressés, rendant la compression inutile — une erreur de
+   * configuration silencieuse, qui ne se verrait que sur la facture de stockage.
+   */
+  get retention(): {
+    enabled: boolean;
+    compressAfterDays: number;
+    purgeAfterDays: number;
+    batchSize: number;
+  } {
+    const compressAfterDays = this.get('SCAN_COMPRESS_AFTER_DAYS');
+    const purgeAfterDays = this.get('SCAN_PURGE_AFTER_DAYS');
+    return {
+      enabled: this.get('SCAN_RETENTION_ENABLED'),
+      compressAfterDays,
+      purgeAfterDays,
+      batchSize: this.get('SCAN_RETENTION_BATCH'),
+    };
+  }
+
   get logLevel(): Env['LOG_LEVEL'] {
     return this.get('LOG_LEVEL');
   }

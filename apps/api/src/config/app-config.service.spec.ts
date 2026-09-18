@@ -23,6 +23,10 @@ function build(over: Partial<Env> = {}): AppConfigService {
     DB_ENABLED: true,
     FETCH_USER_AGENT: 'WebSentry/2.0',
     FETCH_TIMEOUT_MS: 15_000,
+    SCAN_COMPRESS_AFTER_DAYS: 7,
+    SCAN_PURGE_AFTER_DAYS: 180,
+    SCAN_RETENTION_BATCH: 500,
+    SCAN_RETENTION_ENABLED: true,
     LOG_LEVEL: 'info',
     ...over,
   };
@@ -83,6 +87,21 @@ describe('AppConfigService', () => {
         password: 'motdepasse',
         connectionLimit: 10,
       });
+    });
+  });
+
+  describe('retention', () => {
+    it('expose la politique de rétention', () => {
+      expect(build().retention).toEqual({
+        enabled: true,
+        compressAfterDays: 7,
+        purgeAfterDays: 180,
+        batchSize: 500,
+      });
+    });
+
+    it('laisse désactiver entièrement le travail de fond', () => {
+      expect(build({ SCAN_RETENTION_ENABLED: false }).retention.enabled).toBe(false);
     });
   });
 

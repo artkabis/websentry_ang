@@ -203,20 +203,25 @@ export const ScanSearchQuerySchema = z
 
 export type ScanSearchQuery = z.infer<typeof ScanSearchQuerySchema>;
 
-/** Enveloppe de pagination commune aux listes de l'historique. */
-function paginated<T extends z.ZodTypeAny>(items: T, key: string) {
-  return z
-    .object({
-      total: z.number().int().min(0),
-      page: z.number().int().min(1),
-      limit: z.number().int().min(1),
-      pages: z.number().int().min(0),
-      [key]: z.array(items),
-    })
-    .strict();
-}
+/**
+ * Enveloppe de pagination commune aux listes de l'historique.
+ *
+ * Les deux listes l'ÉTENDENT plutôt que de recevoir leur nom de champ en
+ * paramètre : une clé calculée (`[key]: z.array(...)`) se réduirait à une
+ * signature d'index une fois inférée, et `result.scans` serait typé
+ * `number | ScanPage[]` — un type qui ne protège plus de rien, ni ici ni dans
+ * le client Angular qui le consomme.
+ */
+const PaginationSchema = z.object({
+  total: z.number().int().min(0),
+  page: z.number().int().min(1),
+  limit: z.number().int().min(1),
+  pages: z.number().int().min(0),
+});
 
-export const ScanPageListSchema = paginated(ScanPageSchema, 'scans');
+export const ScanPageListSchema = PaginationSchema.extend({
+  scans: z.array(ScanPageSchema),
+}).strict();
 export type ScanPageList = z.infer<typeof ScanPageListSchema>;
 
 // ── Vue par site ─────────────────────────────────────────────────────────────
@@ -242,7 +247,9 @@ export const SiteSummarySchema = z
 
 export type SiteSummary = z.infer<typeof SiteSummarySchema>;
 
-export const SiteListSchema = paginated(SiteSummarySchema, 'sites');
+export const SiteListSchema = PaginationSchema.extend({
+  sites: z.array(SiteSummarySchema),
+}).strict();
 export type SiteList = z.infer<typeof SiteListSchema>;
 
 /** Une session d'un site, telle que listée dans l'historique du site. */
@@ -262,6 +269,28 @@ export const SiteSessionSchema = z
 export type SiteSession = z.infer<typeof SiteSessionSchema>;
 
 export const SiteSessionListSchema = z.array(SiteSessionSchema);
+
+/**
+ * Sélection d'un site par ses coordonnées, depuis une query string.
+ *
+ * `gamme` absente et `gamme=` vide désignent la MÊME chose — le site sans gamme
+ * — parce qu'un formulaire HTML dont le champ n'est pas rempli envoie la seconde
+ * forme. Les traiter différemment ferait échouer la recherche sur un site sans
+ * gamme dès qu'elle passe par l'interface plutôt que par un lien construit à la
+ * main.
+ */
+export const SiteSelectorSchema = z
+  .object({
+    domain: ScanDomainSchema,
+    gamme: z
+      .string()
+      .max(50)
+      .optional()
+      .transform(value => (value == null || value === '' ? null : value)),
+  })
+  .strict();
+
+export type SiteSelector = z.infer<typeof SiteSelectorSchema>;
 
 // ── Détail d'une session ─────────────────────────────────────────────────────
 

@@ -81,6 +81,15 @@ export default defineConfig({
         },
         'src/auth/guards/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
         'src/rbac/rbac.service.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Traduction des filtres de recherche en SQL : le seul endroit du module
+        // 3 où une valeur atteint la STRUCTURE d'une requête et non ses
+        // paramètres. À ce titre, il relève du même régime que les gardes.
+        'src/scans/scan-query.util.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

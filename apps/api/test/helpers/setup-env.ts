@@ -14,3 +14,13 @@ process.env.REFRESH_TOKEN_TTL = '604800';
 process.env.LOGIN_MAX_ATTEMPTS = '5';
 process.env.LOGIN_LOCKOUT_SECONDS = '900';
 process.env.LOG_LEVEL = 'error';
+
+/**
+ * Le travail de fond de rétention reste DÉSACTIVÉ pendant les tests.
+ *
+ * Il se déclencherait au démarrage de chaque application montée par la
+ * fabrique, écrirait dans le double de base pendant qu'un test l'inspecte, et
+ * laisserait un minuteur derrière lui. Sa logique est couverte par ses propres
+ * tests unitaires, où elle est pilotée explicitement.
+ */
+process.env.SCAN_RETENTION_ENABLED = 'false';

@@ -5,6 +5,8 @@ import { SessionRepository } from './repositories/session.repository.js';
 import { PermissionRepository } from './repositories/permission.repository.js';
 import { AuditRepository } from './repositories/audit.repository.js';
 import { ProfileRepository } from './repositories/profile.repository.js';
+import { ScanRepository } from './repositories/scan.repository.js';
+import { ScanRetentionRepository } from './repositories/scan-retention.repository.js';
 
 @Global()
 @Module({
@@ -15,6 +17,8 @@ import { ProfileRepository } from './repositories/profile.repository.js';
     PermissionRepository,
     AuditRepository,
     ProfileRepository,
+    ScanRepository,
+    ScanRetentionRepository,
   ],
   exports: [
     DatabaseService,
@@ -23,6 +27,8 @@ import { ProfileRepository } from './repositories/profile.repository.js';
     PermissionRepository,
     AuditRepository,
     ProfileRepository,
+    ScanRepository,
+    ScanRetentionRepository,
   ],
 })
 export class DatabaseModule {}
