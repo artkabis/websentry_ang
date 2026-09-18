@@ -14,7 +14,10 @@ Trois fichiers :
 - `owasp-scans.e2e-spec.ts` — celle du module 3 : recherche à nombreux filtres
   alimentant une requête SQL, **tri atteignant la structure de cette requête**,
   contrôle d'accès à deux niveaux (permission globale contre appartenance
-  personnelle), suppressions irréversibles en masse.
+  personnelle), suppressions irréversibles en masse ;
+- `owasp-analysis.e2e-spec.ts` — celle du module 4, la plus exposée : c'est le
+  **seul module qui émette des requêtes sortantes**, vers une URL fournie par
+  l'appelant.
 
 Elle s'exécute contre l'application **assemblée** et la sollicite par HTTP réel.
 
@@ -36,10 +39,12 @@ Elle s'exécute contre l'application **assemblée** et la sollicite par HTTP ré
 | 14  | Traversée de chemin           | 4 encodages, aucun service de fichiers statiques exposé                                                                                                                                                                                       | OWASP §14                                                                    |
 | 15  | Mass assignment               | Clés surnuméraires rejetées (`.strict()`), 11 charges malformées, bornes exactes, corps surdimensionné                                                                                                                                        | OWASP §15                                                                    |
 
-**Note sur la faille n°8** — La politique SSRF est couverte à 100 % par les tests
-unitaires, mais aucune route de la priorité 1 n'émet de requête sortante : les
-analyseurs arrivent au module 4. La suite OWASP porte un marqueur explicite qui
-rappelle cette dette de couverture E2E, à lever dès la première route sortante.
+**Note sur la faille n°8** — La dette de couverture E2E signalée jusqu'au module 3
+est LEVÉE : les routes d'analyse émettent des requêtes sortantes, et la suite du
+module 4 vérifie que `file://`, `gopher://`, `data:`, `javascript:` et `ftp://`
+sont refusés dès la validation du schéma — sur l'analyse unitaire, dans un lot,
+sur le flux SSE et à la lecture d'un sitemap. Un sitemap est traité comme une
+source NON FIABLE : c'est une liste d'URL contrôlée par le site analysé.
 
 ---
 

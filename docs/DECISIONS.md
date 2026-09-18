@@ -366,3 +366,78 @@ consulté quelques fois par jour.
 **Coût assumé** — Un chiffre peut avoir jusqu'à une minute de retard. Le cache
 est invalidé à chaque suppression, qui est le seul évènement rendant les
 chiffres faux d'un coup.
+
+---
+
+## 19. Isolation CPU : Piscina, avec repli en ligne obligatoire
+
+**Décision** — Les analyses s'exécutent dans un pool Piscina dimensionné à un
+thread de moins que de cœurs. Quand le pool ne peut pas démarrer, l'analyse se
+fait **en ligne**, sur le thread principal.
+
+**Raison** — Le parse du DOM d'une page de plusieurs centaines de kilo-octets
+bloque la boucle d'événements assez longtemps pour retarder toutes les autres
+requêtes servies. C'est le seul calcul lourd de l'application, et il est
+parfaitement isolable : un analyseur ne touche ni la base ni l'état partagé.
+
+Le repli n'est pas une commodité de test. Le produit cible des hébergements
+mutualisés, où `worker_threads` peut être indisponible ou la mémoire contrainte.
+Sur ces environnements, analyser lentement vaut mieux que ne pas analyser.
+
+**Coût assumé** — Deux chemins d'exécution à maintenir, donc à tester tous les
+deux. Le worker étant du JavaScript compilé, le chemin « pool » n'existe qu'après
+`pnpm build` : la CI bâtit désormais le backend AVANT la suite de tests, sans
+quoi le test du pool prendrait sa branche de repli et ne prouverait rien.
+
+---
+
+## 20. Le rapport d'analyse est décrit par un schéma, pas par une interface
+
+**Décision** — `AnalysisReport` et tout ce qu'il contient sont des schémas Zod,
+validés à la production comme à la relecture.
+
+**Raison** — Ce rapport franchit trois frontières : la sérialisation vers un
+worker, l'écriture en base, et la relecture des mois plus tard. Une interface
+TypeScript ne survit à aucune des trois — elle disparaît à la compilation. À
+chacune, une forme inattendue doit être détectée là où elle apparaît, et non
+trois écrans plus loin sous la forme d'un champ manquant.
+
+Le filtrage des en-têtes HTTP par **liste fermée** relève du même souci : un
+rapport est stocké puis relu par des tiers, et y recopier tous les en-têtes
+ferait entrer cookies, jetons de session et noms de serveurs internes sans que
+personne ne l'ait décidé.
+
+**Coût assumé** — Une validation supplémentaire par rapport produit. Le coût est
+réel sur un lot de deux cents pages ; il reste inférieur à celui d'un rapport
+corrompu stocké définitivement.
+
+**Nuance** — L'historique (module 3) garde `report: z.unknown()` de son côté. Ce
+n'est pas une incohérence : il restitue des rapports écrits par des versions
+ANTÉRIEURES du moteur, et leur opposer le schéma courant rendrait illisibles les
+scans déjà stockés.
+
+---
+
+## 21. Module 4 livré par l'architecture, pas par le nombre d'analyseurs
+
+**Décision** — Le module 4 livre le pipeline complet (récupération SSRF-sûre,
+profils, pool de threads, flux SSE, sitemap, historisation, suite sécurité) avec
+**7 analyseurs sur les 29** de la v1. Les 22 restants suivent, sans changement de
+structure.
+
+**Raison** — Les analyseurs représentent près de 12 000 lignes en v1, et leur
+port est un travail mécanique : ils ne posent aucune question d'architecture,
+seulement du volume et des tests. Le pipeline, lui, tranche toutes les questions
+difficiles — isolation CPU, sortie réseau, progression, assainissement des
+erreurs hors filtre global, ordre de résolution des réglages. Livrer le pipeline
+d'abord rend le port des analyseurs suivants purement additif : chacun est une
+classe et un fichier de tests, sans effet sur le reste.
+
+L'inverse aurait été pire : vingt-neuf analyseurs sans pipeline ne s'exécutent
+nulle part, et les questions difficiles se seraient posées à la fin, quand les
+reprendre coûte le plus cher.
+
+**Coût assumé** — Le rapport produit est PARTIEL, et le score global ne porte que
+sur les critères présents. Il n'est donc pas comparable à un score v1, et le
+module ne peut pas basculer en production tant que les 29 ne sont pas là. C'est
+une dette explicite, listée critère par critère dans `ARCHITECTURE.md`.

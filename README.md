@@ -18,17 +18,25 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
 | Historique des scans                         | ✅      | ✅       | **Livré** |
 | Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
-| Analyse (page, batch, sitemap, SSE)          | ⬜      | ⬜       | À faire   |
+| Analyse (page, batch, sitemap, SSE)          | 🟨      | ⬜       | Partiel   |
 | Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
 | Messagerie in-app                            | ⬜      | ⬜       | À faire   |
 | Analytics d'usage / RGPD                     | ⬜      | ⬜       | À faire   |
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 1666 au total — 287 paquet partagé, 776 unitaires backend,
-276 E2E + sécurité API, 301 unitaires frontend, 26 E2E navigateur.
-**Couverture** : 100 % lignes paquet partagé, 100 % lignes backend
+**Tests** : 1896 au total — 337 paquet partagé, 972 unitaires backend,
+311 E2E + sécurité API, 301 unitaires frontend, 26 E2E navigateur.
+**Couverture** : 100 % lignes paquet partagé, 95,6 % lignes backend
 (100 % sur chaque module de sécurité), 98,8 % lignes frontend.
+
+> **Module 4 — partiel.** Le pipeline d'analyse est livré de bout en bout
+> (récupération SSRF-sûre, profils, pool de threads, flux SSE, sitemap,
+> historisation, suite sécurité) avec **7 analyseurs sur les 29** de la v1. Le
+> rapport produit est donc incomplet et son score global n'est pas comparable à
+> celui de la v1. Détail et liste des critères restants dans
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrage en
+> [`docs/DECISIONS.md`](docs/DECISIONS.md) §21.
 
 ---
 

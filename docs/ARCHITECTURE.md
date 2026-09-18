@@ -204,6 +204,75 @@ Aucune route n'écrit dans l'historique : l'ingestion se fait en process
 
 ---
 
+## Moteur d'analyse
+
+### Chaîne d'exécution
+
+```
+POST /analyze
+  │
+  ├─ schéma : protocole restreint à http/https (1re barrière SSRF)
+  ├─ PageFetcherService → SsrfService.safeFetch (DNS multi-adresses, IP épinglée)
+  ├─ résolution du profil : gamme DÉTECTÉE < profil CHOISI < surcharges
+  ├─ AnalysisRunnerService → thread Piscina (repli en ligne)
+  │     └─ orchestrateur : règles par page → analyseurs en parallèle → polarité
+  └─ ScansService.record() — en process, jamais exposé en HTTP
+```
+
+### Isolation CPU
+
+Le parse du DOM est du calcul pur. Le pool est dimensionné à **un thread de
+moins que de cœurs** : le thread principal doit continuer à servir les requêtes
+pendant qu'un lot tourne.
+
+Le worker est du **JavaScript compilé** — un thread Piscina est un vrai thread
+Node, sans la transformation TypeScript de l'outillage de développement. Son
+existence est vérifiée AVANT la création du pool : en développement, l'analyse
+s'exécute en ligne et le démarrage le dit.
+
+### Flux SSE
+
+Un flux SSE prend la main sur la réponse : dès le premier octet écrit, le filtre
+d'exceptions global ne peut plus rien produire. `SseWriter` refait donc à la
+main tout ce que le filtre garantit ailleurs — message assaini choisi **par
+type** d'erreur, jamais recopié depuis l'exception.
+
+La progression traverse un `MessageChannel` transféré au worker, et se mesure
+sur les **critères réellement terminés** : une barre qui avance sur une minuterie
+ment dès que le site analysé est lent.
+
+### Analyseurs
+
+Un analyseur est une fonction **pure** d'une page et de réglages vers un
+résultat : ni base, ni état partagé, ni injection. C'est ce qui permet de
+l'exécuter dans un worker en ne transportant que du JSON, et de le tester sans
+rien monter.
+
+Portés à ce jour (7 sur les 29 de la v1) : `METAS`, `HN_STRUCTURE`,
+`CONTENT_LENGTH`, `CANONICAL`, `OPEN_GRAPH`, `LANG`, `REDIRECTS`. Tous purs,
+sans requête sortante.
+
+Restent à porter, par ordre de dépendance croissante :
+
+| Nature                      | Critères                                                                                                                                                                                                     |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DOM pur                     | `HN_LENGTH`, `BOLD`, `FAVICON`, `TRACKING`, `STRUCTURED_DATA`, `ROBOTS_META`, `DUDA_PARAMS`, `CTA`, `LOGO`, `PICTOGRAM`, `NAV_STRUCTURE`, `ACCESSIBILITY`, `SPLIT_LINKS`, `DATA_BINDING`, `MENTIONS_LEGALES` |
+| DOM + cartographie de liens | `LINKS`, `ANCHOR_TEXT`                                                                                                                                                                                       |
+| Requêtes sortantes          | `IMAGES` (poids), `BROKEN_LINKS`, `DUPLICATE_IMAGES`, `MENTIONS_LEGALES_DATA`, `CONTRAST_V2`                                                                                                                 |
+
+Les derniers demandent une capacité de requête **dans le worker** : la politique
+SSRF devra y être instanciée, jamais contournée.
+
+### Règles par page
+
+Un profil vaut pour un site ; certaines pages appellent des exceptions — une
+page de contact n'a pas à contenir 300 mots. Les règles produisent des réglages
+**éphémères**, dans un type `EffectiveSettings` distinct des réglages persistés :
+la v1 logeait `hnByTag` dans ces derniers avec un commentaire « jamais
+persisté », garantie qui tient jusqu'à ce que quelqu'un ne le lise pas.
+
+---
+
 ## Modèle d'authentification
 
 ### Cookies
@@ -331,7 +400,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
-| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 287    | 95 %                            |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 776    | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 181    | —                               |
@@ -353,9 +422,14 @@ faire_).
 
 ## Reste à faire
 
-Modules non encore migrés (priorités 4 à 7 du cahier des charges) : gestion des
-utilisateurs, analyse (SSE + Piscina), feedback, messagerie, analytics,
-supervision, portail documentaire.
+Modules non encore migrés (priorités 5 à 7 du cahier des charges) : gestion des
+utilisateurs, feedback, messagerie, analytics, supervision, portail
+documentaire.
+
+Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
+sitemap, sécurité) avec 7 analyseurs sur 29. Les 22 restants sont listés plus
+haut ; ils ne demandent aucun changement de structure, sauf les cinq qui émettent
+des requêtes sortantes.
 
 Dettes identifiées sur le périmètre déjà livré :
 
@@ -393,6 +467,16 @@ Dettes identifiées sur le périmètre déjà livré :
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de
   design, à mener d'un bloc plutôt qu'au fil des modules.
+- **Analyseurs restants** — 22 des 29 critères de la v1 ne sont pas encore
+  portés. Le rapport produit est donc partiel, et le score global porte sur les
+  seuls critères présents. À lever avant toute bascule de production.
+- **Interface d'analyse** — le backend expose l'analyse unitaire, le lot, le
+  sitemap et le flux SSE ; aucun écran ne les utilise encore. L'historique
+  (module 3) affiche en revanche les rapports produits.
+- **Requête sortante dans le worker** — cinq analyseurs vérifient des ressources
+  distantes (poids d'images, liens cassés, contraste). Ils demandent que la
+  politique SSRF soit instanciée DANS le thread, ce que l'architecture prévoit
+  mais que rien n'exerce encore.
 - **Suppressions depuis l'interface** — l'API expose les quatre portées (pages,
   session, site, domaine) et la suite sécurité les couvre ; l'interface ne les
   propose pas encore. Elles attendent la corbeille : offrir une suppression
