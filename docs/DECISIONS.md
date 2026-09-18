@@ -173,7 +173,52 @@ pas pouvoir être enfermé dehors par une panne.
 
 ---
 
-## 9. Environnement : Node ≥ 22.22.3
+## 10. Profils par gamme : MariaDB, plus export fichier
+
+**Décision** — La base est la source de vérité ; des endpoints d'export/import
+JSON conservent le format fichier.
+
+**Raison** — La v1 stockait un `settings-{gamme}.json` par gamme sur disque. Ce
+modèle portait trois défauts :
+
+1. Son verrouillage optimiste lisait la version, comparait, puis réécrivait —
+   une **fenêtre de course** entre les deux. En base, la condition et l'incrément
+   tiennent dans le même `UPDATE`, donc sont indivisibles.
+2. Son cache TTL de 5 minutes servait des profils **périmés** derrière un
+   répartiteur de charge : chaque instance avait sa propre vue du disque.
+3. Le nom de gamme construisait un **chemin de fichier**. La traversée de chemin
+   disparaît comme surface au lieu d'être contenue par une normalisation qu'il
+   faudrait maintenir indéfiniment.
+
+L'export/import préserve ce que le modèle fichier avait de bon : versionner un
+profil dans Git, le rejouer d'un environnement à l'autre, l'inspecter hors ligne.
+
+**Coût assumé** — Une table de plus, et un script d'import des fichiers existants
+à écrire au moment de la bascule en production.
+
+**Garde-fou** — Contrainte `CHECK (gamme REGEXP '^[a-z0-9-]+$')` en base, en plus
+de la normalisation applicative : même un appelant qui contournerait le service
+ne peut pas écrire une gamme hors de l'alphabet attendu.
+
+---
+
+## 11. Réglages globaux : une seule source de vérité
+
+**Décision** — `/settings` opère sur le profil `default`. Les deux endpoints
+restent exposés, mais s'appuient sur une seule ligne en base.
+
+**Raison** — La v1 tenait `settings.json` ET `settings-default.json`, deux
+fichiers remplissant le même rôle et pouvant diverger sans que rien ne le
+signale. Un opérateur modifiant l'un pouvait constater que l'analyse continuait
+d'appliquer l'autre.
+
+**Coût assumé** — Si une installation v1 avait délibérément fait diverger les
+deux fichiers, la bascule retient le profil `default`. À vérifier lors de la
+migration ; en pratique les deux sont identiques.
+
+---
+
+## 12. Environnement : Node ≥ 22.22.3
 
 **Décision** — Plancher relevé de 22.0.0 à 22.22.3.
 

@@ -3,7 +3,12 @@
 ## Suite des 15 failles
 
 Suite automatisée, **step bloquant de la CI** :
-`pnpm --filter @websentry/api test:security` → `apps/api/test/security/owasp.e2e-spec.ts`.
+`pnpm --filter @websentry/api test:security` → `apps/api/test/security/`.
+
+Deux fichiers : `owasp.e2e-spec.ts` couvre le socle (auth, RBAC, en-têtes),
+`owasp-profiles.e2e-spec.ts` la surface ajoutée par le module 2 — des routes
+d'écriture administrateur, un dictionnaire à clés libres, un nom de gamme qui
+circule jusqu'à un en-tête HTTP, et un import de fichier.
 
 Elle s'exécute contre l'application **assemblée** et la sollicite par HTTP réel.
 
@@ -70,6 +75,21 @@ service trivial.
 Message d'erreur identique, coût scrypt identique (hash factice sur identifiant
 inconnu), temporisation uniforme de 500 ms, verrouillage révélé seulement après
 validation du mot de passe.
+
+### Pollution de prototype — trois couches
+
+Le module 2 introduit des dictionnaires à clés libres (`checkWeights`,
+`subCheckPolarity`). Trois couches indépendantes les protègent :
+
+1. **Fastify** refuse `__proto__` dès l'analyse du corps JSON (400) ;
+2. le **pipe de validation de Nest** retire `constructor` et `prototype` avant
+   de valider, si bien que la requête aboutit mais débarrassée de la clé ;
+3. le **schéma partagé** les rejette explicitement, ce qui couvre les chemins qui
+   n'empruntent pas le pipe — import depuis un fichier, appel direct au service.
+
+Les tests portent sur le RÉSULTAT et non sur l'une de ces couches : quel que soit
+le code de statut, la clé dangereuse ne doit jamais être persistée et le
+prototype ne doit jamais bouger.
 
 ### Audit des dépendances
 

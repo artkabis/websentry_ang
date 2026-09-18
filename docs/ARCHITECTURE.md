@@ -61,6 +61,69 @@ Réordonner ces providers casserait silencieusement les exemptions.
 
 ---
 
+## Réglages et profils par gamme
+
+Chaque gamme commerciale porte son propre jeu de règles d'analyse. Le profil
+`default` est le **repli universel** : il s'applique quand la gamme n'est pas
+détectée ou qu'aucun profil ne lui correspond.
+
+### Stockage
+
+Table `settings_profiles`, une ligne par gamme. Le passage du fichier à la base
+est argumenté dans `DECISIONS.md` §10 ; l'essentiel tient en trois points :
+verrouillage optimiste **atomique**, cohérence entre instances, et disparition de
+la traversée de chemin comme surface d'attaque.
+
+### Verrouillage optimiste
+
+```
+Client lit le profil        → version 3
+Client modifie, enregistre  → PUT { settings, expectedVersion: 3 }
+                                │
+   UPDATE ... SET version = version + 1 WHERE gamme = ? AND version = 3
+                                │
+        ┌───────────────────────┴───────────────────────┐
+   1 ligne touchée                              0 ligne touchée
+   → version 4                                  → 409 + version courante
+```
+
+La condition et l'incrément sont dans la **même instruction**. Deux écritures
+concurrentes ne peuvent pas toutes deux réussir : la seconde reçoit un 409 avec
+la version courante, et l'interface propose un rechargement plutôt que
+d'écraser silencieusement le travail d'autrui.
+
+Omettre `expectedVersion` écrase sans condition — réservé aux créations et aux
+imports délibérés.
+
+### Réglages globaux
+
+`/settings` **est** le profil `default` (cf. `DECISIONS.md` §11). Les deux
+endpoints coexistent pour la compatibilité des clients, sur une seule ligne.
+
+### Export / import
+
+L'enveloppe d'export est versionnée et autodescriptive : un fichier versionné
+dans Git doit pouvoir être relu sans contexte extérieur. À l'import, la gamme de
+destination vient de **l'URL**, jamais du fichier — laisser le fichier choisir sa
+cible ouvrirait un écrasement non voulu. La version source est exportée pour
+information mais jamais réimportée : la base réattribue la sienne.
+
+### Registre des critères
+
+26 critères visibles et 263 sous-critères, servis depuis le paquet partagé, donc
+sans accès en base. L'éditeur de profils s'adapte à un ajout côté backend sans
+redéploiement du frontend.
+
+### Validation
+
+Le schéma `AnalysisSettings` est appliqué **à l'écriture ET à la lecture**. La
+seconde validation n'est pas redondante : une ligne peut avoir été écrite par une
+version antérieure du schéma, ou modifiée à la main en base. Dans ce cas le
+service retombe sur les défauts et le signale, plutôt que de propager une forme
+inattendue jusqu'au moteur d'analyse.
+
+---
+
 ## Modèle d'authentification
 
 ### Cookies
@@ -209,14 +272,21 @@ faire_).
 
 ## Reste à faire
 
-Modules non encore migrés (priorités 2 à 7 du cahier des charges) : settings et
-profils, historique des scans, gestion des utilisateurs, analyse (SSE + Piscina),
-feedback, messagerie, analytics, supervision, portail documentaire.
+Modules non encore migrés (priorités 3 à 7 du cahier des charges) : historique
+des scans, gestion des utilisateurs, analyse (SSE + Piscina), feedback,
+messagerie, analytics, supervision, portail documentaire.
 
 Dettes identifiées sur le périmètre déjà livré :
 
 - **Tests d'intégration MariaDB** — conteneur éphémère en CI, pour valider le SQL
-  réel des repositories.
+  réel des repositories. Devient plus important avec le module 2 : le
+  verrouillage optimiste repose sur le comportement d'`UPDATE ... WHERE version`,
+  aujourd'hui reproduit fidèlement par un double mais non exercé contre MariaDB.
+- **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
+  et les charger en base au moment de la bascule.
+- **Édition des listes longues** — l'éditeur couvre les seuils numériques et les
+  critères actifs ; les mots exclus, domaines exclus, règles par page et
+  pondérations sont CONSERVÉS mais pas encore éditables dans l'interface.
 - **Couverture E2E du SSRF** — la politique est couverte à 100 % en unitaire,
   mais aucune route de la priorité 1 n'émet de requête sortante. À lever dès la
   première route sortante (module 4). Un marqueur explicite le rappelle dans la
