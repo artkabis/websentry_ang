@@ -1,16 +1,20 @@
 import type { BaseAnalyzer } from '../base.analyzer.js';
 import { AccessibilityAnalyzer } from './accessibility.analyzer.js';
+import { BrokenLinksAnalyzer } from './broken-links.analyzer.js';
 import { BoldAnalyzer } from './bold.analyzer.js';
 import { CanonicalAnalyzer } from './canonical.analyzer.js';
 import { ContentLengthAnalyzer } from './content-length.analyzer.js';
 import { CtaAnalyzer } from './cta.analyzer.js';
 import { DudaParamsAnalyzer } from './duda-params.analyzer.js';
+import { DuplicateImagesAnalyzer } from './duplicate-images.analyzer.js';
 import { FaviconAnalyzer } from './favicon.analyzer.js';
 import { HnAnalyzer } from './hn.analyzer.js';
 import { HnLengthAnalyzer } from './hn-length.analyzer.js';
+import { ImagesAnalyzer } from './images.analyzer.js';
 import { LangAnalyzer } from './lang.analyzer.js';
 import { LogoAnalyzer } from './logo.analyzer.js';
 import { MentionsLegalesAnalyzer } from './mentions-legales.analyzer.js';
+import { MentionsLegalesDataAnalyzer } from './mentions-legales-data.analyzer.js';
 import { MetasAnalyzer } from './metas.analyzer.js';
 import { NavStructureAnalyzer } from './nav-structure.analyzer.js';
 import { OpenGraphAnalyzer } from './opengraph.analyzer.js';
@@ -37,6 +41,7 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new BoldAnalyzer(),
     new CtaAnalyzer(),
     new MentionsLegalesAnalyzer(),
+    new MentionsLegalesDataAnalyzer(),
     new AccessibilityAnalyzer(),
     new CanonicalAnalyzer(),
     new OpenGraphAnalyzer(),
@@ -44,10 +49,13 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new RedirectsAnalyzer(),
     new RobotsMetaAnalyzer(),
     new SplitLinksAnalyzer(),
+    new BrokenLinksAnalyzer(),
     new TrackingAnalyzer(),
     new StructuredDataAnalyzer(),
     new FaviconAnalyzer(),
     new LogoAnalyzer(),
+    new ImagesAnalyzer(),
+    new DuplicateImagesAnalyzer(),
     new PictogramAnalyzer(),
     new NavStructureAnalyzer(),
     new DudaParamsAnalyzer(),
