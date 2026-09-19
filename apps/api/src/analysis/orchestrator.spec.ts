@@ -25,8 +25,31 @@ const GOOD_PAGE = `
     <meta property="og:url" content="https://exemple.fr/" />
     <script src="https://www.googletagmanager.com/gtag/js?id=G-XYZ"></script>
     <script src="https://static.axeptio.eu/sdk.js"></script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Bakery",
+            "name": "Boulangerie Durand",
+            "telephone": "+33472000000",
+            "address": { "@type": "PostalAddress", "streetAddress": "1 rue du Pain" }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
+    <header>
+      <div class="logo">
+        <a href="https://exemple.fr/"
+          ><img src="/logo.png" alt="Boulangerie Durand" title="Accueil"
+        /></a>
+      </div>
+      <a href="tel:0472000000">04 72 00 00 00</a>
+      <a href="mailto:contact@exemple.fr">Nous écrire</a>
+      <button type="button">Demander un devis</button>
+    </header>
     <h1>Boulangerie artisanale à Lyon — pains au levain cuits sur place</h1>
     <h2>Nos pains au levain naturel, façonnés et cuits chaque matin</h2>
     <p>${'Un texte de contenu suffisamment long pour satisfaire le seuil minimal. '.repeat(20)} Nos <strong>pains au levain</strong> sont façonnés à la main et nos <b>viennoiseries</b> cuites sur place chaque matin.</p>
@@ -46,6 +69,20 @@ describe('runAnalysis', () => {
   it('note haut une page bien construite', async () => {
     const report = await runAnalysis(makePage(GOOD_PAGE), makeSettings());
     expect(report.globalScore).toBeGreaterThanOrEqual(4);
+  });
+
+  it('ne fait ÉCHOUER aucun critère sur la page de référence', async () => {
+    // Un seuil global se franchit avec des critères en échec compensés par
+    // d'autres : c'est ainsi que la page de référence a pu rester « bien
+    // construite » tout en échouant à trois critères. On nomme donc les
+    // fautifs, ce qui force la page à grandir avec chaque vague de portage.
+    const report = await runAnalysis(makePage(GOOD_PAGE), makeSettings());
+
+    const failing = Object.values(report.checks)
+      .filter(check => check.status === 'fail')
+      .map(check => check.checkId);
+
+    expect(failing).toEqual([]);
   });
 
   it('exécute TOUS les analyseurs enregistrés', async () => {

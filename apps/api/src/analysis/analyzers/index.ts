@@ -2,15 +2,19 @@ import type { BaseAnalyzer } from '../base.analyzer.js';
 import { BoldAnalyzer } from './bold.analyzer.js';
 import { CanonicalAnalyzer } from './canonical.analyzer.js';
 import { ContentLengthAnalyzer } from './content-length.analyzer.js';
+import { CtaAnalyzer } from './cta.analyzer.js';
 import { DudaParamsAnalyzer } from './duda-params.analyzer.js';
 import { FaviconAnalyzer } from './favicon.analyzer.js';
 import { HnAnalyzer } from './hn.analyzer.js';
 import { HnLengthAnalyzer } from './hn-length.analyzer.js';
 import { LangAnalyzer } from './lang.analyzer.js';
+import { LogoAnalyzer } from './logo.analyzer.js';
 import { MetasAnalyzer } from './metas.analyzer.js';
 import { OpenGraphAnalyzer } from './opengraph.analyzer.js';
+import { PictogramAnalyzer } from './pictogram.analyzer.js';
 import { RedirectsAnalyzer } from './redirects.analyzer.js';
 import { RobotsMetaAnalyzer } from './robots-meta.analyzer.js';
+import { StructuredDataAnalyzer } from './structured-data.analyzer.js';
 import { TrackingAnalyzer } from './tracking.analyzer.js';
 
 /**
@@ -27,13 +31,17 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new HnLengthAnalyzer(),
     new ContentLengthAnalyzer(),
     new BoldAnalyzer(),
+    new CtaAnalyzer(),
     new CanonicalAnalyzer(),
     new OpenGraphAnalyzer(),
     new LangAnalyzer(),
     new RedirectsAnalyzer(),
     new RobotsMetaAnalyzer(),
     new TrackingAnalyzer(),
+    new StructuredDataAnalyzer(),
     new FaviconAnalyzer(),
+    new LogoAnalyzer(),
+    new PictogramAnalyzer(),
     new DudaParamsAnalyzer(),
   ];
 }

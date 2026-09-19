@@ -14,6 +14,15 @@ export interface HtmlPage extends SerializablePage {
   $: CheerioAPI;
 }
 
+/**
+ * Sélection Cheerio, telle que `$(sélecteur)` la rend.
+ *
+ * L'alias évite d'importer `domhandler` — dépendance TRANSITIVE de cheerio —
+ * dans chaque analyseur qui manipule un élément : en dépendre directement
+ * sans le déclarer casserait à la première montée de version de cheerio.
+ */
+export type Selection = ReturnType<CheerioAPI>;
+
 /** Portion transférable d'une page — ce qui franchit la frontière du worker. */
 export interface SerializablePage {
   /** URL FINALE, redirections suivies. */
