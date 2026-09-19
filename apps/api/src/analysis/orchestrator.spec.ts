@@ -55,6 +55,11 @@ const GOOD_PAGE = `
     <p>${'Un texte de contenu suffisamment long pour satisfaire le seuil minimal. '.repeat(20)} Nos <strong>pains au levain</strong> sont façonnés à la main et nos <b>viennoiseries</b> cuites sur place chaque matin.</p>
     <h2>Nos horaires d’ouverture et nos jours de fermeture hebdomadaire</h2>
     <p>${'Encore du contenu rédactionnel pour atteindre le volume attendu. '.repeat(20)} La <strong>boutique</strong> vous accueille du mardi au dimanche matin sans interruption.</p>
+    <footer>
+      <a href="/mentions-legales">Mentions légales</a>
+      <a href="/confidentialite">Politique de confidentialité</a>
+      <p>Hébergeur : OVH SAS, 2 rue Kellermann, 59100 Roubaix.</p>
+    </footer>
   </body>
 </html>`;
 
