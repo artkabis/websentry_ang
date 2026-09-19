@@ -271,6 +271,40 @@ page de contact n'a pas à contenir 300 mots. Les règles produisent des réglag
 la v1 logeait `hnByTag` dans ces derniers avec un commentaire « jamais
 persisté », garantie qui tient jusqu'à ce que quelqu'un ne le lise pas.
 
+### Écran d'analyse — trois niveaux de lecture
+
+L'écran `/analyse` ne présente pas les vingt-neuf critères au même rang, comme
+le fait la v1. Un rapport dont la grande majorité des lignes sont vertes
+s'apprend à survoler, et qui le survole rate aussi les rouges. La lecture est
+donc hiérarchisée :
+
+| Niveau | Contenu                                   | Visible d'emblée          |
+| ------ | ----------------------------------------- | ------------------------- |
+| 1      | Score, verdict, 3 corrections à mener     | Oui                       |
+| 2      | Critères groupés SEO / Technique / Design | Filtrés sur « à traiter » |
+| 3      | Occurrences et recommandations            | Au dépli d'un critère     |
+
+Les corrections prioritaires sont triées par gravité (échec avant
+avertissement) puis par **poids du critère** dans le score, l'identifiant du
+critère départageant les égalités pour que l'ordre soit stable d'un rendu à
+l'autre. Les critères de poids nul n'y figurent jamais : corriger ce qui ne
+pèse rien sur le score n'est pas une priorité.
+
+Le filtre par défaut masque les critères conformes, mais **le nombre de
+critères masqués reste affiché**, globalement et non par groupe : un groupe
+entièrement conforme disparaît de la liste, et son compte disparaîtrait avec
+lui s'il était rendu à l'intérieur.
+
+Le flux passe par `fetch` + `ReadableStream`, pas par `EventSource` : celui-ci
+ne sait faire que du GET, ce qui exposerait l'URL auditée dans une barre
+d'adresse et dans les journaux des proxys. Corollaire assumé : la reconnexion
+automatique d'`EventSource` est perdue, donc un flux coupé avant la fin est
+signalé explicitement plutôt que silencieusement relancé.
+
+Le lien « Voir dans la page » s'appuie sur les fragments de texte
+(`#:~:text=`). Les caractères `-` et `,` y sont des séparateurs de syntaxe :
+seul le contenu est encodé, jamais les séparateurs que nous émettons.
+
 ---
 
 ## Modèle d'authentification
@@ -401,11 +435,11 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 776    | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 972    | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`          | 181    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 301    | 80 %                            |
-| E2E navigateur     | `apps/web/e2e/`                    | 26     | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 387    | 80 %                            |
+| E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié
@@ -460,9 +494,10 @@ Dettes identifiées sur le périmètre déjà livré :
   existe et n'est pas touchée ; le module qui la réexpose reste à faire, et
   d'ici là une suppression est définitive — ce que l'interface annonce.
 - **Détail d'une page dans l'interface** — l'API sert le rapport complet d'une
-  page (`GET /scans/:id`), avec le 410 des rapports purgés. L'écran qui
-  l'affiche attend le module 4 : le rendu d'un rapport appartient au module
-  d'analyse, le dupliquer ici créerait deux vues à maintenir.
+  page (`GET /scans/:id`), avec le 410 des rapports purgés. Le blocage est levé
+  depuis que le module 4 livre le rendu d'un rapport : il reste à brancher
+  l'historique sur ces mêmes composants, et à traiter le 410 par un état dédié
+  plutôt que par une erreur générique.
 - **Thème sombre** — le cap UX (`CLAUDE.md` §2) le demande dès la conception.
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de
@@ -470,9 +505,11 @@ Dettes identifiées sur le périmètre déjà livré :
 - **Analyseurs restants** — 22 des 29 critères de la v1 ne sont pas encore
   portés. Le rapport produit est donc partiel, et le score global porte sur les
   seuls critères présents. À lever avant toute bascule de production.
-- **Interface d'analyse** — le backend expose l'analyse unitaire, le lot, le
-  sitemap et le flux SSE ; aucun écran ne les utilise encore. L'historique
-  (module 3) affiche en revanche les rapports produits.
+- **Lot et sitemap dans l'interface** — `/analyse` couvre la page unitaire ; le
+  backend expose aussi le lot et le sitemap, sans écran. Le rendu du rapport
+  étant désormais factorisé (`report-view.ts` et ses cartes), un écran de lot
+  consiste surtout à empiler des rapports et à suivre plusieurs flux, pas à
+  réécrire l'affichage.
 - **Requête sortante dans le worker** — cinq analyseurs vérifient des ressources
   distantes (poids d'images, liens cassés, contraste). Ils demandent que la
   politique SSRF soit instanciée DANS le thread, ce que l'architecture prévoit

@@ -18,15 +18,15 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
 | Historique des scans                         | ✅      | ✅       | **Livré** |
 | Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
-| Analyse (page, batch, sitemap, SSE)          | 🟨      | ⬜       | Partiel   |
+| Analyse (page, batch, sitemap, SSE)          | 🟨      | 🟨       | Partiel   |
 | Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
 | Messagerie in-app                            | ⬜      | ⬜       | À faire   |
 | Analytics d'usage / RGPD                     | ⬜      | ⬜       | À faire   |
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 1896 au total — 337 paquet partagé, 972 unitaires backend,
-311 E2E + sécurité API, 301 unitaires frontend, 26 E2E navigateur.
+**Tests** : 2042 au total — 337 paquet partagé, 972 unitaires backend,
+311 E2E + sécurité API, 387 unitaires frontend, 35 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 95,6 % lignes backend
 (100 % sur chaque module de sécurité), 98,8 % lignes frontend.
 
@@ -34,9 +34,11 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 > (récupération SSRF-sûre, profils, pool de threads, flux SSE, sitemap,
 > historisation, suite sécurité) avec **7 analyseurs sur les 29** de la v1. Le
 > rapport produit est donc incomplet et son score global n'est pas comparable à
-> celui de la v1. Détail et liste des critères restants dans
-> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrage en
-> [`docs/DECISIONS.md`](docs/DECISIONS.md) §21.
+> celui de la v1. Côté interface, `/analyse` couvre **la page unitaire** —
+> progression en direct et rapport à divulgation progressive ; les écrans de lot
+> et de sitemap restent à faire. Détail et liste des critères restants dans
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrages en
+> [`docs/DECISIONS.md`](docs/DECISIONS.md) §21 et §22.
 
 ---
 

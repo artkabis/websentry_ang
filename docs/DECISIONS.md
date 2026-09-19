@@ -441,3 +441,49 @@ reprendre coûte le plus cher.
 sur les critères présents. Il n'est donc pas comparable à un score v1, et le
 module ne peut pas basculer en production tant que les 29 ne sont pas là. C'est
 une dette explicite, listée critère par critère dans `ARCHITECTURE.md`.
+
+---
+
+## 22. Le rapport d'analyse se lit en trois niveaux, pas en une liste
+
+**Décision** — L'écran `/analyse` ne reproduit pas la liste plate de la v1, où
+les vingt-neuf critères sont affichés au même rang visuel. Il hiérarchise :
+score, verdict et trois corrections prioritaires d'abord ; critères groupés et
+**filtrés sur « à traiter »** ensuite ; occurrences et recommandations au dépli
+d'un critère. C'est une divergence fonctionnelle assumée vis-à-vis de la v1, au
+sens de `CLAUDE.md` §1.
+
+**Raison** — Un rapport dont vingt-cinq lignes sur vingt-neuf sont vertes
+apprend à l'équipe à le survoler, et qui le survole rate aussi les quatre
+rouges. Le tri des corrections prioritaires par gravité puis par **poids du
+critère** répond à la même logique : deux échecs ne coûtent pas le même score,
+et l'écran doit dire lequel traiter d'abord plutôt que laisser l'auditeur le
+recalculer. Les critères de poids nul en sont exclus — corriger ce qui ne pèse
+rien sur le score n'est pas une priorité.
+
+**Aucune régression** — Rien n'est retiré : l'intégralité du rapport reste
+atteignable, en un clic sur le filtre « tout afficher », et le nombre de
+critères masqués est affiché en permanence. Le masquage par défaut ne devient
+jamais un masquage implicite.
+
+**Coût assumé** — Trois coûts, tous acceptés :
+
+1. **Un geste de plus pour la lecture exhaustive.** Un auditeur qui veut relire
+   les vingt-neuf critères doit changer de filtre. C'est le prix de l'inversion :
+   le cas fréquent (« qu'est-ce qui ne va pas ? ») coûte zéro geste, le cas rare
+   en coûte un.
+2. **Une logique de présentation à tester pour elle-même.** Priorisation,
+   groupement, filtrage et comptes masqués sont du code, donc des bugs
+   possibles — d'où `report-view.ts` en fonctions pures testées à part, plutôt
+   que des expressions dispersées dans les gabarits.
+3. **Un écart de vocabulaire avec la v1.** Le « verdict » et les « corrections
+   prioritaires » n'existent pas en v1 ; une équipe habituée à l'ancien écran
+   doit relier les deux vues. Les libellés de critères, eux, sont inchangés.
+
+**Corollaire technique** — Le flux passe par `fetch` + `ReadableStream` plutôt
+que par `EventSource`, qui ne sait faire que du GET et exposerait l'URL auditée
+dans une barre d'adresse et dans les journaux des proxys. Coût : la reconnexion
+automatique d'`EventSource` est perdue. Un flux interrompu avant la fin est donc
+signalé explicitement, avec proposition de relance, plutôt que repris en
+silence — ce qui vaut mieux qu'une reprise invisible qui relancerait une analyse
+complète à l'insu de l'utilisateur.
