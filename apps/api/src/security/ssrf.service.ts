@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { Agent, fetch, type Response as UndiciResponse } from 'undici';
@@ -34,6 +34,20 @@ export interface ResolvedAddress {
  * déclencher — donc du code mort, impossible à tester honnêtement.
  */
 export type NonEmptyAddresses = [ResolvedAddress, ...ResolvedAddress[]];
+
+/**
+ * Ce dont la politique SSRF a besoin de la configuration — et rien de plus.
+ *
+ * Le type est étroit pour une raison précise : un thread Piscina n'a pas de
+ * conteneur Nest, donc pas d'`AppConfigService`. Il reçoit ces deux valeurs par
+ * la tâche, sérialisées, et construit la politique lui-même. Dépendre de
+ * l'objet de configuration complet obligerait à le reconstruire — c'est-à-dire
+ * à relire et revalider l'environnement dans chaque thread.
+ */
+export interface OutboundConfig {
+  readonly fetchTimeoutMs: number;
+  readonly fetchUserAgent: string;
+}
 
 export interface SafeFetchOptions {
   method?: 'GET' | 'HEAD';
@@ -89,7 +103,7 @@ export class SsrfService {
   private readonly dnsCache = new Map<string, { addresses: NonEmptyAddresses; ts: number }>();
   private readonly agentCache = new Map<string, { agent: Agent; ts: number }>();
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(@Inject(AppConfigService) private readonly config: OutboundConfig) {}
 
   /**
    * Vérifie qu'une URL est sûre à contacter, sans l'appeler.

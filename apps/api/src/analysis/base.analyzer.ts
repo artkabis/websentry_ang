@@ -1,5 +1,6 @@
 import type { CheckItem, CheckResult } from '@websentry/shared';
 import type { EffectiveSettings } from './effective-settings.js';
+import type { NetworkProbe } from './network-probe.js';
 import type { HtmlPage } from './page.model.js';
 
 /**
@@ -15,7 +16,18 @@ export abstract class BaseAnalyzer {
   abstract readonly id: string;
   abstract readonly title: string;
 
-  abstract analyze(page: HtmlPage, settings: EffectiveSettings): Promise<CheckResult>;
+  /**
+   * `net` n'est fourni qu'aux critères qui vérifient des ressources distantes.
+   * Il peut manquer — repli en ligne sans configuration de sortie, test
+   * unitaire d'un critère purement DOM — et un analyseur qui en dépend doit
+   * alors le DIRE dans son rapport plutôt que de conclure à tort qu'une
+   * ressource est saine.
+   */
+  abstract analyze(
+    page: HtmlPage,
+    settings: EffectiveSettings,
+    net?: NetworkProbe,
+  ): Promise<CheckResult>;
 
   protected pass(items: CheckItem[], summary: string, score = 5): CheckResult {
     return {

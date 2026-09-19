@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { defaultAnalysisSettings } from '@websentry/shared';
 import type { AppConfigService } from '../config/app-config.service.js';
+import type { SsrfService } from '../security/ssrf.service.js';
 import { AnalysisRunnerService } from './analysis-runner.service.js';
 import type { SerializablePage } from './page.model.js';
 
@@ -22,8 +23,14 @@ const ANALYZE_ID = '11111111-1111-4111-8111-111111111111';
 function build(workersEnabled: boolean) {
   const config = {
     analysis: { workersEnabled, maxWorkers: 1, batchConcurrency: 4 },
+    fetchTimeoutMs: 5_000,
+    fetchUserAgent: 'WebSentry/2.0 (tests)',
   } as unknown as AppConfigService;
-  return new AnalysisRunnerService(config);
+  // La politique SSRF n'est jamais sollicitée ici : aucun des critères de ce
+  // jeu de pages ne sort sur le réseau. La passer quand même garde le service
+  // construit comme en production.
+  const ssrf = { safeFetch: vi.fn(), readTextCapped: vi.fn() } as unknown as SsrfService;
+  return new AnalysisRunnerService(config, ssrf);
 }
 
 describe('AnalysisRunnerService', () => {

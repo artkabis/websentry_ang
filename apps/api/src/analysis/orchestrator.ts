@@ -9,7 +9,9 @@ import {
 } from '@websentry/shared';
 import type { BaseAnalyzer } from './base.analyzer.js';
 import { createAnalyzers } from './analyzers/index.js';
+import { parseDudaParameters } from './duda-parameters.js';
 import type { EffectiveSettings } from './effective-settings.js';
+import type { NetworkProbe } from './network-probe.js';
 import type { HtmlPage } from './page.model.js';
 import { applyPageRules } from './page-rules.js';
 
@@ -32,7 +34,7 @@ export type ProgressCallback = (result: CheckResult, completed: number, total: n
 export async function runAnalysis(
   page: HtmlPage,
   settings: EffectiveSettings,
-  options: { analyzeId?: string; onProgress?: ProgressCallback } = {},
+  options: { analyzeId?: string; onProgress?: ProgressCallback; net?: NetworkProbe } = {},
 ): Promise<AnalysisReport> {
   const startedAt = Date.now();
   const analyzeId = options.analyzeId ?? randomUUID();
@@ -45,7 +47,7 @@ export async function runAnalysis(
 
   const results = await Promise.all(
     analyzers.map(async analyzer => {
-      const result = await runOne(analyzer, page, effective, polarity);
+      const result = await runOne(analyzer, page, effective, polarity, options.net);
       completed += 1;
       options.onProgress?.(result, completed, total);
       return result;
@@ -63,9 +65,10 @@ async function runOne(
   page: HtmlPage,
   settings: EffectiveSettings,
   polarity: Record<string, 'present' | 'absent'>,
+  net: NetworkProbe | undefined,
 ): Promise<CheckResult> {
   try {
-    return applyPolarity(await analyzer.analyze(page, settings), polarity);
+    return applyPolarity(await analyzer.analyze(page, settings, net), polarity);
   } catch (err) {
     return {
       checkId: analyzer.id,
@@ -176,9 +179,8 @@ function buildReport(
     redirectChain: page.redirectChain,
     htmlSize: Buffer.byteLength(page.html, 'utf8'),
     httpHeaders: pickReportedHeaders(page.headers),
-    // Renseigné par l'analyseur DUDA_PARAMS lorsqu'il sera porté ; `null` dit
-    // « pas de paramètres Duda », ce qui est vrai pour toute page non Duda.
-    dudaParams: null,
+    // `null` dit « pas un site Duda » — le cas de la majorité des pages.
+    dudaParams: parseDudaParameters(page.html),
     checks,
   };
 }

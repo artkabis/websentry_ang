@@ -3,23 +3,35 @@ import { AnalysisReportSchema, type CheckResult, type CheckStatus } from '@webse
 import { applyPolarity, runAnalysis } from './orchestrator.js';
 import { makePage, makeSettings } from './testing/page.factory.js';
 
+/**
+ * Page de référence — conforme à TOUS les critères portés.
+ *
+ * Elle grandit à chaque vague de portage, et c'est voulu : un critère nouveau
+ * dont la page témoin ne parle pas ne serait jamais exercé sur son chemin
+ * nominal, et le test « note haut une page bien construite » deviendrait un
+ * test de la moyenne, pas de la conformité.
+ */
 const GOOD_PAGE = `
 <html lang="fr">
   <head>
-    <title>Boulangerie artisanale à Lyon — pains au levain</title>
+    <title>Boulangerie artisanale à Lyon — pains au levain naturel</title>
     <meta name="description" content="Notre boulangerie artisanale lyonnaise propose des pains au levain naturel, viennoiseries et pâtisseries préparés chaque matin sur place." />
     <link rel="canonical" href="https://exemple.fr/" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta property="og:title" content="Boulangerie artisanale" />
     <meta property="og:description" content="Pains au levain" />
     <meta property="og:image" content="https://exemple.fr/img.jpg" />
     <meta property="og:url" content="https://exemple.fr/" />
+    <script src="https://www.googletagmanager.com/gtag/js?id=G-XYZ"></script>
+    <script src="https://static.axeptio.eu/sdk.js"></script>
   </head>
   <body>
-    <h1>Boulangerie artisanale à Lyon</h1>
-    <h2>Nos pains</h2>
-    <p>${'Un texte de contenu suffisamment long pour satisfaire le seuil minimal. '.repeat(20)}</p>
-    <h2>Nos horaires</h2>
-    <p>${'Encore du contenu rédactionnel pour atteindre le volume attendu. '.repeat(20)}</p>
+    <h1>Boulangerie artisanale à Lyon — pains au levain cuits sur place</h1>
+    <h2>Nos pains au levain naturel, façonnés et cuits chaque matin</h2>
+    <p>${'Un texte de contenu suffisamment long pour satisfaire le seuil minimal. '.repeat(20)} Nos <strong>pains au levain</strong> sont façonnés à la main et nos <b>viennoiseries</b> cuites sur place chaque matin.</p>
+    <h2>Nos horaires d’ouverture et nos jours de fermeture hebdomadaire</h2>
+    <p>${'Encore du contenu rédactionnel pour atteindre le volume attendu. '.repeat(20)} La <strong>boutique</strong> vous accueille du mardi au dimanche matin sans interruption.</p>
   </body>
 </html>`;
 

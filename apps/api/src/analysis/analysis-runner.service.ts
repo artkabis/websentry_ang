@@ -6,7 +6,9 @@ import { availableParallelism } from 'node:os';
 import { Piscina } from 'piscina';
 import type { AnalysisReport, CheckResult } from '@websentry/shared';
 import { AppConfigService } from '../config/app-config.service.js';
+import { SsrfService, type OutboundConfig } from '../security/ssrf.service.js';
 import type { EffectiveSettings } from './effective-settings.js';
+import { SsrfNetworkProbe } from './network-probe.js';
 import { rehydratePage } from './page-fetcher.service.js';
 import { runAnalysis, type ProgressCallback } from './orchestrator.js';
 import type { SerializablePage } from './page.model.js';
@@ -30,7 +32,24 @@ export class AnalysisRunnerService implements OnModuleDestroy {
   private pool: Piscina<AnalysisTask, AnalysisReport> | null = null;
   private poolFailed = false;
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(
+    private readonly config: AppConfigService,
+    private readonly ssrf: SsrfService,
+  ) {}
+
+  /**
+   * Valeurs de sortie réseau transmises au thread.
+   *
+   * Extraites du service de configuration parce qu'un thread ne peut pas le
+   * recevoir : il n'a pas de conteneur Nest, et reconstruire la configuration
+   * complète reviendrait à relire l'environnement dans chaque thread.
+   */
+  private outbound(): OutboundConfig {
+    return {
+      fetchTimeoutMs: this.config.fetchTimeoutMs,
+      fetchUserAgent: this.config.fetchUserAgent,
+    };
+  }
 
   /** Analyse une page, dans le pool si disponible. */
   async run(
@@ -42,7 +61,7 @@ export class AnalysisRunnerService implements OnModuleDestroy {
     if (!pool) return this.runInline(page, settings, analyzeId);
 
     try {
-      const task: AnalysisTask = { page, settings, analyzeId };
+      const task: AnalysisTask = { page, settings, analyzeId, outbound: this.outbound() };
       return await pool.run(task);
     } catch (err) {
       // Une défaillance du pool ne doit pas se voir comme une analyse
@@ -77,7 +96,13 @@ export class AnalysisRunnerService implements OnModuleDestroy {
     );
 
     try {
-      const task: AnalysisTask = { page, settings, analyzeId, progressPort: channel.port2 };
+      const task: AnalysisTask = {
+        page,
+        settings,
+        analyzeId,
+        progressPort: channel.port2,
+        outbound: this.outbound(),
+      };
       return await pool.run(task, { transferList: [channel.port2] });
     } catch (err) {
       this.reportPoolFailure(err);
@@ -94,7 +119,13 @@ export class AnalysisRunnerService implements OnModuleDestroy {
     analyzeId: string,
     onProgress?: ProgressCallback,
   ): Promise<AnalysisReport> {
-    return runAnalysis(rehydratePage(page), settings, { analyzeId, onProgress });
+    return runAnalysis(rehydratePage(page), settings, {
+      analyzeId,
+      onProgress,
+      // En ligne, la politique SSRF est celle du conteneur : c'est la MÊME que
+      // dans le worker, injectée au lieu d'être reconstruite.
+      net: new SsrfNetworkProbe(this.ssrf, { timeoutMs: this.config.fetchTimeoutMs }),
+    });
   }
 
   /**
