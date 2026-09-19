@@ -36,6 +36,12 @@ export const routes: Routes = [
       import('./features/profiles/profile-editor.component').then(m => m.ProfileEditorComponent),
   },
   {
+    path: 'analyse',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/analysis/analysis.component').then(m => m.AnalysisComponent),
+  },
+  {
     path: 'historique',
     canActivate: [authGuard],
     loadComponent: () =>
