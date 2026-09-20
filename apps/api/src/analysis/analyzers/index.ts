@@ -5,6 +5,7 @@ import { BoldAnalyzer } from './bold.analyzer.js';
 import { CanonicalAnalyzer } from './canonical.analyzer.js';
 import { ContentLengthAnalyzer } from './content-length.analyzer.js';
 import { CtaAnalyzer } from './cta.analyzer.js';
+import { DataBindingAnalyzer } from './data-binding.analyzer.js';
 import { DudaParamsAnalyzer } from './duda-params.analyzer.js';
 import { DuplicateImagesAnalyzer } from './duplicate-images.analyzer.js';
 import { FaviconAnalyzer } from './favicon.analyzer.js';
@@ -12,6 +13,7 @@ import { HnAnalyzer } from './hn.analyzer.js';
 import { HnLengthAnalyzer } from './hn-length.analyzer.js';
 import { ImagesAnalyzer } from './images.analyzer.js';
 import { LangAnalyzer } from './lang.analyzer.js';
+import { LinksAnalyzer } from './links.analyzer.js';
 import { LogoAnalyzer } from './logo.analyzer.js';
 import { MentionsLegalesAnalyzer } from './mentions-legales.analyzer.js';
 import { MentionsLegalesDataAnalyzer } from './mentions-legales-data.analyzer.js';
@@ -49,6 +51,7 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new RedirectsAnalyzer(),
     new RobotsMetaAnalyzer(),
     new SplitLinksAnalyzer(),
+    new LinksAnalyzer(),
     new BrokenLinksAnalyzer(),
     new TrackingAnalyzer(),
     new StructuredDataAnalyzer(),
@@ -58,6 +61,7 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new DuplicateImagesAnalyzer(),
     new PictogramAnalyzer(),
     new NavStructureAnalyzer(),
+    new DataBindingAnalyzer(),
     new DudaParamsAnalyzer(),
   ];
 }
