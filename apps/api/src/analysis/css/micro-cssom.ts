@@ -488,7 +488,15 @@ function compareSpec(x: Specificity, y: Specificity): number {
   return xc - yc;
 }
 
-/** Sépare une liste de sélecteurs au niveau supérieur (virgules hors parenthèses/crochets). */
+/**
+ * Sépare une liste de sélecteurs au niveau supérieur — virgules hors
+ * parenthèses et crochets.
+ *
+ * L'indexation des règles découpait naïvement sur `,` : une règle
+ * `:is(.a, .b) { … }` donnait deux morceaux invalides, tous deux rejetés, et
+ * la règle disparaissait sans bruit. Les sélecteurs fonctionnels sont pourtant
+ * courants dans les feuilles modernes.
+ */
 function splitSelectorList(sel: string): string[] {
   const out: string[] = [];
   let depth = 0;
@@ -791,6 +799,134 @@ const DEFAULT_VIEWPORT: Viewport = {
 };
 
 /**
+ * Ce que le document contient réellement — balises, classes, identifiants.
+ *
+ * Une feuille de style de thème porte des centaines de règles dont la plupart
+ * visent d'autres gabarits que la page analysée. Chercher chacune dans tout le
+ * document est le poste le plus cher du moteur ; savoir qu'elle ne peut RIEN
+ * viser coûte trois consultations d'ensemble.
+ */
+export interface DocumentIndex {
+  byTag: Map<string, unknown[]>;
+  byClass: Map<string, unknown[]>;
+  byId: Map<string, unknown[]>;
+}
+
+export function indexDocument($: CheerioAPI): DocumentIndex {
+  const index: DocumentIndex = { byTag: new Map(), byClass: new Map(), byId: new Map() };
+  const add = (bucket: Map<string, unknown[]>, key: string, node: unknown): void => {
+    const existing = bucket.get(key);
+    if (existing) existing.push(node);
+    else bucket.set(key, [node]);
+  };
+
+  // UN seul parcours du document, dans l'ordre où il se lit : les paniers
+  // gardent donc l'ordre documentaire, comme une requête Cheerio.
+  $('*').each((_i: number, rawNode: unknown) => {
+    const node = rawNode as DomNode;
+    if (node.name) add(index.byTag, node.name, rawNode);
+
+    const attribs = node.attribs ?? {};
+    const id = attribs['id'];
+    if (id) add(index.byId, id, rawNode);
+
+    const classes = attribs['class'];
+    if (!classes) return;
+    for (const token of classes.split(/\s+/)) {
+      if (token) add(index.byClass, token, rawNode);
+    }
+  });
+
+  return index;
+}
+
+/** Clé du dernier maillon : ce que l'élément visé doit obligatoirement porter. */
+interface SelectorKey {
+  bucket: 'byTag' | 'byClass' | 'byId';
+  name: string;
+}
+
+function keyOf(selector: string): SelectorKey | null {
+  const compound = lastCompoundOf(selector);
+  if (!compound) return null;
+
+  // Une parenthèse signale une pseudo-classe fonctionnelle. Une barre oblique
+  // inverse signale un échappement : `.md\:flex` ou `.w-1\/2`, que les
+  // utilitaires modernes produisent en masse, et dont la clé lue naïvement
+  // serait « md » ou « w-1 » — une classe qui n'existe pas, donc une règle
+  // écartée à tort. Dans les deux cas, on renonce à la clé.
+  if (compound.includes('(') || compound.includes('\\')) return null;
+
+  const id = /#([\w-]+)/.exec(compound);
+  if (id?.[1]) return { bucket: 'byId', name: id[1] };
+
+  const className = /\.([\w-]+)/.exec(compound);
+  if (className?.[1]) return { bucket: 'byClass', name: className[1] };
+
+  const tag = /^([a-zA-Z][\w-]*)/.exec(compound);
+  if (tag?.[1]) return { bucket: 'byTag', name: tag[1].toLowerCase() };
+
+  return null;
+}
+
+/**
+ * Le sélecteur se réduit-il à sa clé ?
+ *
+ * `.promo`, `#entete` ou `p` n'exigent rien d'autre : les éléments du panier
+ * sont la réponse, sans qu'il faille les éprouver un à un.
+ */
+function isBareKey(selector: string): boolean {
+  return /^(?:[.#][\w-]+|[a-zA-Z][\w-]*)$/.test(selector.trim());
+}
+
+/**
+ * Éléments visés par un sélecteur.
+ *
+ * Trois chemins, du moins cher au plus cher :
+ *   1. le sélecteur se réduit à sa clé → le panier EST la réponse ;
+ *   2. il a une clé → seuls les éléments du panier sont éprouvés, au lieu de
+ *      parcourir le document entier ;
+ *   3. pas de clé lisible (`*`, attribut seul, `:is()`…) → requête normale.
+ *
+ * Un panier absent vaut certitude : aucun élément ne porte cette classe, cet
+ * identifiant ou cette balise, donc la règle ne vise personne.
+ */
+function nodesFor($: CheerioAPI, selector: string, index: DocumentIndex): unknown[] {
+  const key = keyOf(selector);
+  if (!key) return $(selector).toArray();
+
+  const bucket = index[key.bucket].get(key.name);
+  if (!bucket) return [];
+  if (isBareKey(selector)) return bucket;
+
+  return $(bucket as Parameters<typeof $>[0])
+    .filter(selector)
+    .toArray();
+}
+
+/**
+ * Dernier maillon d'un sélecteur — celui qui décide de l'élément visé.
+ *
+ * La lecture se fait à REBOURS, en ignorant les combinateurs situés dans des
+ * crochets ou des parenthèses : `a[href=" > "]` n'a qu'un seul maillon.
+ */
+function lastCompoundOf(selector: string): string {
+  const trimmed = selector.trim();
+  let depth = 0;
+
+  for (let i = trimmed.length - 1; i >= 0; i -= 1) {
+    const char = trimmed[i];
+    if (char === ']' || char === ')') depth += 1;
+    else if (char === '[' || char === '(') depth -= 1;
+    else if (depth === 0 && (char === ' ' || char === '>' || char === '+' || char === '~')) {
+      return trimmed.slice(i + 1);
+    }
+  }
+
+  return trimmed;
+}
+
+/**
  * Construit le CSSOM d'un document.
  *
  * `source` accepte un document DÉJÀ analysé : l'analyseur de contraste reçoit
@@ -818,6 +954,9 @@ export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {})
 
   /* 2. Parsing + indexation par nœud (filtrage media si viewport) */
   const nodeRules = new Map<object, RuleEntry[]>();
+  // Ce que le document contient : de quoi écarter d'emblée les règles qui ne
+  // peuvent viser personne, sans les chercher.
+  const present = indexDocument($);
   // Registre global des custom properties de palette (:root/html/body uniquement).
   // Fallback conforme : ces définitions s'appliquent à tout élément (ancêtres de tous),
   // contrairement à une collecte « toutes règles » qui injecterait des valeurs erronées.
@@ -833,7 +972,7 @@ export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {})
         if (!rule.media.every(cond => matchMedia(cond, viewport))) continue;
       }
       // Registre de palette : seuls :root / html / body font autorité.
-      for (const sel of rule.selectorText.split(',')) {
+      for (const sel of splitSelectorList(rule.selectorText)) {
         const s = sel.trim();
         if (s === ':root' || s === 'html' || s === 'body') {
           for (const prop in rule.declarations) {
@@ -846,14 +985,21 @@ export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {})
         }
       }
       const layerIndex = rule.layer != null ? layerOrder.get(rule.layer) : undefined;
-      for (const sel of rule.selectorText.split(',')) {
+      for (const sel of splitSelectorList(rule.selectorText)) {
         const selector = sel.trim();
         if (!selector) continue;
+        // L'ordre de cascade avance MÊME pour une règle écartée : il numérote
+        // les règles de la feuille, pas celles qui ont trouvé preneur.
+        // Un numéro par sélecteur DÉCLARÉ, qu'il vise quelqu'un ou non. Seule
+        // la monotonie compte pour la cascade, et numéroter ainsi garde la
+        // numérotation indépendante du contenu de la page — donc comparable
+        // d'une page à l'autre en débogage.
         const spec = specificity(selector);
         const ord = order++;
+
         let matched: unknown[];
         try {
-          matched = $(selector).toArray();
+          matched = nodesFor($, selector, present);
         } catch {
           continue;
         }

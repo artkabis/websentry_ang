@@ -315,6 +315,14 @@ deux lectures se font sur les attributs, sans sélecteur CSS.
 
 #### Le contraste sans navigateur
 
+Les règles d'une feuille ne sont pas cherchées dans tout le document : un index
+des classes, identifiants et balises réellement présents est construit en un
+parcours, et chaque règle y puise ses candidats. Une règle qui ne peut viser
+personne n'est jamais cherchée ; une règle réduite à sa clé (`.promo`, `#entete`,
+`p`) est servie par l'index seul. L'extraction de clé est CONSERVATRICE : devant
+une pseudo-classe fonctionnelle ou une classe échappée — `.md\:flex` — elle
+renonce et la requête normale reprend la main.
+
 `CONTRAST_V2` ne peut pas se lire dans le HTML : il faut résoudre la cascade.
 Un micro-moteur CSS embarqué (`analysis/css/`) calcule les styles — spécificité,
 héritage, custom properties, `@media`/`@layer`/`@supports`/`@container` — puis un
@@ -502,7 +510,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1682   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1696   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
