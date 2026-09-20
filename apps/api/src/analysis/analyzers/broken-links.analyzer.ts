@@ -89,9 +89,7 @@ export class BrokenLinksAnalyzer extends BaseAnalyzer {
     const results = await net.checkMany(checked);
     const sorted = sortResults(results);
 
-    const items: CheckItem[] = [
-      { key: 'BROKEN.checked', label: 'Lien(s) vérifié(s)', status: 'pass', value: checked.length },
-    ];
+    const items: CheckItem[] = [];
     const recommendations: string[] = [];
 
     if (urls.length > checked.length) {
@@ -106,12 +104,31 @@ export class BrokenLinksAnalyzer extends BaseAnalyzer {
       });
     }
 
+    const verified = checked.length - sorted.unverified.length;
+    if (sorted.unverified.length > 0) {
+      // Sans clé, comme la notice de plafond : ce n'est pas un sous-critère de
+      // qualité, et la note du critère n'en tient pas compte.
+      items.push({
+        label: `${sorted.unverified.length} lien(s) non vérifié(s) — quota de requêtes atteint`,
+        status: 'info',
+        detail:
+          'Le quota borne les requêtes émises par ce critère pour une page. Les liens concernés ne sont ni sains ni cassés : ils n’ont pas été interrogés.',
+      });
+    }
+
     const byUrl = index(elements);
     this.reportBroken(sorted.broken, byUrl, items, recommendations);
     this.reportUnreachable(sorted.unreachable, byUrl, items, recommendations);
     this.reportRedirected(sorted.redirected, byUrl, items);
     this.reportRefused(sorted.refused, items);
     this.reportInventory(sorted.healthy, elements, items);
+
+    items.unshift({
+      key: 'BROKEN.checked',
+      label: 'Lien(s) vérifié(s)',
+      status: 'pass',
+      value: verified,
+    });
 
     const failures = sorted.broken.length;
     const warnings = sorted.unreachable.length;
@@ -122,7 +139,11 @@ export class BrokenLinksAnalyzer extends BaseAnalyzer {
       globalScore: failures >= 3 ? 0 : failures >= 1 ? 2 : warnings > 2 ? 3 : warnings > 0 ? 4 : 5,
       status: failures > 0 ? 'fail' : warnings > 0 ? 'warning' : 'pass',
       items,
-      summary: `${checked.length} lien(s) vérifié(s) — ${failures} cassé(s), ${warnings} injoignable(s), ${sorted.redirected.length} redirection(s), ${sorted.refused.length} à vérifier manuellement.`,
+      summary:
+        `${verified} lien(s) vérifié(s) — ${failures} cassé(s), ${warnings} injoignable(s), ${sorted.redirected.length} redirection(s), ${sorted.refused.length} à vérifier manuellement` +
+        (sorted.unverified.length > 0
+          ? `, ${sorted.unverified.length} non vérifié(s) faute de quota.`
+          : '.'),
       recommendations,
       // Alimente la réconciliation du maillage : un lien dont la cible redirige
       // vers une page joignable n'est PAS un futur 404.
@@ -262,10 +283,13 @@ interface SortedResults {
   redirected: ProbeResult[];
   refused: ProbeResult[];
   healthy: ProbeResult[];
+  /** Liens laissés de côté faute de quota — un manque de NOTRE part. */
+  unverified: ProbeResult[];
 }
 
 function sortResults(results: readonly ProbeResult[]): SortedResults {
   const sorted: SortedResults = {
+    unverified: [],
     broken: [],
     unreachable: [],
     redirected: [],
@@ -274,7 +298,11 @@ function sortResults(results: readonly ProbeResult[]): SortedResults {
   };
 
   for (const result of results) {
-    if (result.status === null) {
+    // Un quota atteint n'est pas un constat sur le lien : il n'entre donc ni
+    // dans les échecs ni dans les injoignables, et ne pèse pas sur la note.
+    if (result.exhausted) {
+      sorted.unverified.push(result);
+    } else if (result.status === null) {
       sorted.unreachable.push(result);
     } else if (result.status >= 400) {
       const refusal =

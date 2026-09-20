@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ProbeResult } from '../network-probe.js';
+import { asProbe } from '../testing/probe.factory.js';
 import { makePage, makeSettings } from '../testing/page.factory.js';
 import { ImagesAnalyzer } from './images.analyzer.js';
 
@@ -21,15 +22,51 @@ function probe(byUrl: Record<string, { size?: number; type?: string }> = {}) {
     };
   };
 
-  return {
+  return asProbe({
     check: vi.fn(url => Promise.resolve(describe(url))),
     checkMany: vi.fn((urls: readonly string[]) => Promise.resolve(urls.map(describe))),
     fetchText: vi.fn(),
     remaining: 500,
-  };
+  });
+}
+
+/** Sonde dont le quota est épuisé : rien n'est pesé. */
+function exhaustedProbe() {
+  const describe = (url: string): ProbeResult => ({
+    url,
+    status: null,
+    ok: false,
+    redirected: false,
+    finalUrl: url,
+    contentLength: null,
+    contentType: null,
+    exhausted: true,
+    error: 'Quota de vérifications atteint pour ce critère',
+  });
+
+  return asProbe({
+    check: vi.fn(url => Promise.resolve(describe(url))),
+    checkMany: vi.fn((urls: readonly string[]) => Promise.resolve(urls.map(describe))),
+    fetchText: vi.fn(),
+    remaining: 0,
+  });
 }
 
 describe('ImagesAnalyzer', () => {
+  it('ANNONCE les poids non mesurés faute de quota', async () => {
+    // Sans cette mention, le rapport laisserait croire que le poids des images
+    // a été contrôlé et jugé correct.
+    const result = await analyzer.analyze(
+      makePage('<img src="/a.webp" alt="Une image">'),
+      settings,
+      exhaustedProbe(),
+    );
+
+    const notice = result.items.find(item => item.label.includes('quota'));
+    expect(notice?.status).toBe('info');
+    expect(result.items.some(item => item.key === 'IMAGES.weight_fail')).toBe(false);
+  });
+
   it('se déclare NON APPLICABLE sans image', async () => {
     const result = await analyzer.analyze(makePage('<p>Texte</p>'), settings, probe());
 

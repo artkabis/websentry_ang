@@ -163,6 +163,16 @@ export class ImagesAnalyzer extends BaseAnalyzer {
       items.push({ key: 'IMAGES.weight_ok', label: 'Poids des images correct', status: 'pass' });
     }
 
+    const unverified = results.filter(result => result.exhausted).length;
+    if (unverified > 0) {
+      // Comme pour le plafond : une limite que nous nous imposons ne se
+      // reproche pas au site, elle s'annonce.
+      items.push({
+        label: `Poids non mesuré pour ${unverified} image(s) — quota de requêtes atteint`,
+        status: 'info',
+      });
+    }
+
     const notMeasured = urls.length - measured.length;
     if (notMeasured > 0) {
       items.push({

@@ -47,7 +47,16 @@ export async function runAnalysis(
 
   const results = await Promise.all(
     analyzers.map(async analyzer => {
-      const result = await runOne(analyzer, page, effective, polarity, options.net);
+      // Chaque analyseur reçoit SA vue de la sonde : son quota de requêtes est
+      // fixé d'avance, et ne dépend donc pas de l'ordre dans lequel les
+      // analyseurs se réveillent.
+      const result = await runOne(
+        analyzer,
+        page,
+        effective,
+        polarity,
+        options.net?.forCheck(analyzer.id),
+      );
       completed += 1;
       options.onProgress?.(result, completed, total);
       return result;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NetworkProbe, ProbeResult } from '../network-probe.js';
+import { asProbe } from '../testing/probe.factory.js';
 import { makePage, makeSettings } from '../testing/page.factory.js';
 import { MentionsLegalesAnalyzer } from './mentions-legales.analyzer.js';
 
@@ -18,12 +19,12 @@ function probe(over: Partial<ProbeResult> = {}, body = 'Hébergeur : OVH SAS'): 
     contentType: 'text/html',
     ...over,
   };
-  return {
+  return asProbe({
     check: vi.fn().mockResolvedValue(result),
     checkMany: vi.fn().mockResolvedValue([result]),
     fetchText: vi.fn().mockResolvedValue({ result, body: result.ok ? body : null }),
     remaining: 10,
-  };
+  });
 }
 
 const FOOTER = `
@@ -36,6 +37,19 @@ function page(body: string) {
 }
 
 describe('MentionsLegalesAnalyzer', () => {
+  it('NE DÉCLARE PAS mort un lien légal qu’il n’a pas interrogé', async () => {
+    // Accuser un site de mentions légales inaccessibles parce que notre quota
+    // était épuisé serait un reproche fabriqué.
+    const result = await analyzer.analyze(
+      page(FOOTER),
+      settings,
+      probe({ status: null, ok: false, exhausted: true, error: 'Quota…' }),
+    );
+
+    expect(result.items.some(item => item.key === 'ML.legal_inaccessible')).toBe(false);
+    expect(result.items.find(item => item.label.includes('quota'))?.status).toBe('info');
+  });
+
   it('valide un site complet', async () => {
     const result = await analyzer.analyze(page(FOOTER), settings, probe());
 

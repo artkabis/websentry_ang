@@ -178,6 +178,30 @@ describe('runAnalysis', () => {
     const serialized = JSON.stringify(report);
     expect(serialized).not.toMatch(/at .*\.ts:\d+/);
   });
+
+  it('donne à CHAQUE analyseur la vue de sonde de son critère', async () => {
+    // C'est ce qui rend le rapport reproductible : sans vue par critère, les
+    // analyseurs se partagent une enveloppe commune dans l'ordre où ils se
+    // réveillent, et deux analyses de la même page ne rendent pas la même
+    // chose.
+    const asked: string[] = [];
+    const net = {
+      check: () => Promise.reject(new Error('non sollicité')),
+      checkMany: () => Promise.resolve([]),
+      fetchText: () => Promise.reject(new Error('non sollicité')),
+      remaining: 0,
+      forCheck: (checkId: string) => {
+        asked.push(checkId);
+        return net;
+      },
+    };
+
+    await runAnalysis(makePage(GOOD_PAGE), makeSettings(), { net });
+
+    expect(asked).toContain('BROKEN_LINKS');
+    expect(asked).toContain('IMAGES');
+    expect(new Set(asked).size).toBe(asked.length);
+  });
 });
 
 describe('applyPolarity', () => {

@@ -2,7 +2,8 @@ import type { MessagePort } from 'node:worker_threads';
 import type { AnalysisReport } from '@websentry/shared';
 import { SsrfService, type OutboundConfig } from '../security/ssrf.service.js';
 import type { EffectiveSettings } from './effective-settings.js';
-import { SsrfNetworkProbe } from './network-probe.js';
+import { AnalysisProbe } from './network-probe.js';
+import { SsrfProbeEngine } from './probe-engine.js';
 import { rehydratePage } from './page-fetcher.service.js';
 import { runAnalysis } from './orchestrator.js';
 import type { SerializablePage } from './page.model.js';
@@ -72,7 +73,11 @@ export default async function analyzeInWorker(task: AnalysisTask): Promise<Analy
     return await runAnalysis(page, task.settings, {
       analyzeId: task.analyzeId,
       net: task.outbound
-        ? new SsrfNetworkProbe(ssrfFor(task.outbound), { timeoutMs: task.outbound.fetchTimeoutMs })
+        ? new AnalysisProbe(
+            new SsrfProbeEngine(ssrfFor(task.outbound), {
+              timeoutMs: task.outbound.fetchTimeoutMs,
+            }),
+          )
         : undefined,
       onProgress: port
         ? (result, completed, total) => {

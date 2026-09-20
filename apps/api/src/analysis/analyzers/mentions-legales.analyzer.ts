@@ -152,6 +152,16 @@ export class MentionsLegalesAnalyzer extends BaseAnalyzer {
       return;
     }
 
+    if (result.exhausted) {
+      // Quota atteint : le lien n'a pas été interrogé. Le déclarer mort
+      // reprocherait au site une limite qui est la nôtre.
+      items.push({
+        label: 'Lien mentions légales non vérifié — quota de requêtes atteint',
+        status: 'info',
+      });
+      return;
+    }
+
     // Un lien présent mais mort vaut une absence : le visiteur n'atteint pas
     // le document, et l'obligation n'est pas remplie pour autant.
     items.push({

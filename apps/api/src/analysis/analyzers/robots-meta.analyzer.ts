@@ -170,6 +170,16 @@ export class RobotsMetaAnalyzer extends BaseAnalyzer {
       return;
     }
 
+    if (result.exhausted) {
+      // Sans clé et en `info` : le quota est une limite de l'analyse, pas un
+      // défaut du site, et il ne doit pas peser sur la note du critère.
+      items.push({
+        label: 'robots.txt non vérifié — quota de requêtes atteint',
+        status: 'info',
+      });
+      return;
+    }
+
     if (result.status === null) {
       items.push({
         key: 'ROBOTS.robots_txt_error',

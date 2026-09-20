@@ -8,7 +8,8 @@ import type { AnalysisReport, CheckResult } from '@websentry/shared';
 import { AppConfigService } from '../config/app-config.service.js';
 import { SsrfService, type OutboundConfig } from '../security/ssrf.service.js';
 import type { EffectiveSettings } from './effective-settings.js';
-import { SsrfNetworkProbe } from './network-probe.js';
+import { AnalysisProbe } from './network-probe.js';
+import { SsrfProbeEngine } from './probe-engine.js';
 import { rehydratePage } from './page-fetcher.service.js';
 import { runAnalysis, type ProgressCallback } from './orchestrator.js';
 import type { SerializablePage } from './page.model.js';
@@ -124,7 +125,9 @@ export class AnalysisRunnerService implements OnModuleDestroy {
       onProgress,
       // En ligne, la politique SSRF est celle du conteneur : c'est la MÊME que
       // dans le worker, injectée au lieu d'être reconstruite.
-      net: new SsrfNetworkProbe(this.ssrf, { timeoutMs: this.config.fetchTimeoutMs }),
+      net: new AnalysisProbe(
+        new SsrfProbeEngine(this.ssrf, { timeoutMs: this.config.fetchTimeoutMs }),
+      ),
     });
   }
 

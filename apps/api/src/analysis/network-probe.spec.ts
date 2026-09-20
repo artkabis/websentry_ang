@@ -1,285 +1,230 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  SsrfBlockedError,
-  type SafeFetchResult,
-  type SsrfService,
-} from '../security/ssrf.service.js';
-import { SsrfNetworkProbe, clearProbeCache } from './network-probe.js';
+  AnalysisProbe,
+  CHECK_QUOTAS,
+  DEFAULT_CHECK_QUOTA,
+  type ProbeResult,
+} from './network-probe.js';
+import type { BilledResult, BilledText, ProbeEngine } from './probe-engine.js';
 
-/** Réponse minimale — seuls le statut et les en-têtes intéressent la sonde. */
-function reply(status: number, headers: Record<string, string> = {}): SafeFetchResult {
-  const map = new Map(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+function ok(url: string): ProbeResult {
   return {
-    response: {
-      status,
-      ok: status >= 200 && status < 300,
-      headers: { get: (name: string) => map.get(name.toLowerCase()) ?? null },
-    },
-    finalUrl: 'https://exemple.fr/cible',
-    redirectChain: [],
+    url,
+    status: 200,
+    ok: true,
     redirected: false,
-    dispose: () => undefined,
-  } as unknown as SafeFetchResult;
-}
-
-type Ssrf = Pick<SsrfService, 'safeFetch' | 'readTextCapped'>;
-
-function makeSsrf(impl: Ssrf['safeFetch'], text = '') {
-  return {
-    safeFetch: vi.fn(impl),
-    readTextCapped: vi.fn<Ssrf['readTextCapped']>().mockResolvedValue(text),
+    finalUrl: url,
+    contentLength: null,
+    contentType: 'text/html',
   };
 }
 
-describe('SsrfNetworkProbe', () => {
-  beforeEach(() => {
-    clearProbeCache();
-  });
+/**
+ * Moteur simulé.
+ *
+ * Il facture la PREMIÈRE demande d'une URL et rend les suivantes gratuites,
+ * comme le fait le vrai moteur avec son cache — c'est ce qui permet de vérifier
+ * que le quota est remboursé quand rien n'est sorti sur le réseau.
+ */
+function fakeEngine(delayMs = 0): ProbeEngine & { calls: string[]; seen: Set<string> } {
+  const calls: string[] = [];
+  const seen = new Set<string>();
 
-  describe('vérification d’une URL', () => {
-    it('rend le statut, le type et le poids annoncés', async () => {
-      const ssrf = makeSsrf(() =>
-        Promise.resolve(reply(200, { 'content-length': '4096', 'content-type': 'image/webp' })),
+  const settle = async (url: string): Promise<BilledResult> => {
+    calls.push(url);
+    const billable = !seen.has(url);
+    seen.add(url);
+    if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+    return { result: ok(url), billable };
+  };
+
+  return {
+    calls,
+    seen,
+    resolve: settle,
+    text: async (url: string): Promise<BilledText> => ({ ...(await settle(url)), body: 'corps' }),
+  };
+}
+
+describe('AnalysisProbe', () => {
+  describe('répartition du budget', () => {
+    it('donne à chaque critère un quota qui NE DÉPEND PAS des autres', async () => {
+      // Sans quotas, les critères se servent dans l'ordre où ils se réveillent :
+      // deux analyses de la même page rendraient deux rapports différents.
+      const engine = fakeEngine();
+      const probe = new AnalysisProbe(engine, { budget: 300 });
+
+      const links = probe.forCheck('BROKEN_LINKS');
+      const images = probe.forCheck('IMAGES');
+      await links.checkMany(Array.from({ length: 500 }, (_, i) => `https://exemple.fr/l${i}`));
+
+      expect(images.remaining).toBe(CHECK_QUOTAS['IMAGES']);
+    });
+
+    it('rend la MÊME vue pour un critère donné', () => {
+      // Deux vues seraient deux quotas : le critère dépenserait le double.
+      const probe = new AnalysisProbe(fakeEngine());
+
+      expect(probe.forCheck('IMAGES')).toBe(probe.forCheck('IMAGES'));
+    });
+
+    it('une vue de critère se rend elle-même', () => {
+      const view = new AnalysisProbe(fakeEngine()).forCheck('IMAGES');
+
+      expect(view.forCheck('IMAGES')).toBe(view);
+    });
+
+    it('accorde un quota modeste à un critère qui n’en déclare pas', () => {
+      const view = new AnalysisProbe(fakeEngine()).forCheck('CRITERE_INCONNU');
+
+      expect(view.remaining).toBe(DEFAULT_CHECK_QUOTA);
+    });
+
+    it('REFUSE de sortir au-delà du quota du critère', async () => {
+      const engine = fakeEngine();
+      const view = new AnalysisProbe(engine).forCheck('ROBOTS_META');
+
+      const urls = Array.from(
+        { length: CHECK_QUOTAS['ROBOTS_META']! + 3 },
+        (_, i) => `https://e.fr/${i}`,
       );
+      const results = await view.checkMany(urls);
 
-      const result = await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/i.webp');
-
-      expect(result.ok).toBe(true);
-      expect(result.status).toBe(200);
-      expect(result.contentLength).toBe(4096);
-      expect(result.contentType).toBe('image/webp');
+      expect(engine.calls).toHaveLength(CHECK_QUOTAS['ROBOTS_META']!);
+      expect(results.filter(result => result.exhausted)).toHaveLength(3);
     });
 
-    it('interroge en HEAD, pas en GET — on ne télécharge pas ce qu’on compte', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)));
-      await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/gros.pdf');
+    it('marque un dépassement comme NON VÉRIFIÉ, pas comme un échec du site', async () => {
+      // Le quota est une limite de l'analyse : la confondre avec un lien mort
+      // reprocherait au site ce que nous avons décidé de ne pas faire.
+      const view = new AnalysisProbe(fakeEngine(), { budget: 0 }).forCheck('BROKEN_LINKS');
 
-      expect(ssrf.safeFetch).toHaveBeenCalledWith(
-        'https://exemple.fr/gros.pdf',
-        expect.objectContaining({ method: 'HEAD' }),
-      );
-    });
+      const result = await view.check('https://exemple.fr/a');
 
-    it.each([403, 405, 501])(
-      'REPREND en GET quand le serveur refuse la méthode (%i)',
-      async status => {
-        // La v1 ne réessayait que sur 405 et comptait donc comme cassés des
-        // liens parfaitement valides derrière un WAF qui répond 403 à un HEAD.
-        const ssrf = makeSsrf((_url, opts) =>
-          Promise.resolve(opts?.method === 'HEAD' ? reply(status) : reply(200)),
-        );
-
-        const result = await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/page');
-
-        expect(result.ok).toBe(true);
-        expect(result.status).toBe(200);
-      },
-    );
-
-    it('NE REPREND PAS un 404 en GET — la réponse est déjà la vérité', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(404)));
-
-      const result = await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/absent');
-
-      expect(result.ok).toBe(false);
-      expect(result.status).toBe(404);
-      expect(ssrf.safeFetch).toHaveBeenCalledTimes(1);
-    });
-
-    it('ignore un Content-Length non numérique au lieu de propager NaN', async () => {
-      // `Number('abc')` vaut NaN, et NaN rend fausse TOUTE comparaison de
-      // poids sans jamais lever : l'image serait déclarée conforme en silence.
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200, { 'content-length': 'abc' })));
-
-      const result = await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/i.png');
-
-      expect(result.contentLength).toBeNull();
-    });
-  });
-
-  describe('échecs', () => {
-    it('DISTINGUE un refus de la politique SSRF d’une panne réseau', async () => {
-      const ssrf = makeSsrf(() => Promise.reject(new SsrfBlockedError('IP privée')));
-
-      const result = await new SsrfNetworkProbe(ssrf).check('http://127.0.0.1/admin');
-
-      expect(result.blocked).toBe(true);
-      expect(result.ok).toBe(false);
+      expect(result.exhausted).toBe(true);
       expect(result.status).toBeNull();
+      expect(result.error).toContain('Quota');
     });
 
-    it('ne recopie JAMAIS le message de l’exception dans le rapport', async () => {
-      // Un rapport est relu par des comptes qui n'ont pas à connaître les hôtes
-      // internes : le message est choisi par TYPE d'erreur, jamais hérité.
-      const ssrf = makeSsrf(() => Promise.reject(new Error('connect ECONNREFUSED 10.1.2.3:8080')));
+    it('fait respecter le plafond ABSOLU de l’analyse', async () => {
+      // Le plafond ne répartit pas — les quotas s'en chargent — mais il empêche
+      // qu'une page très fournie fasse du serveur un amplificateur.
+      const engine = fakeEngine();
+      const probe = new AnalysisProbe(engine, { budget: 5 });
 
-      const result = await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/x');
+      await probe
+        .forCheck('BROKEN_LINKS')
+        .checkMany(Array.from({ length: 20 }, (_, i) => `https://exemple.fr/a${i}`));
+      const images = await probe.forCheck('IMAGES').check('https://exemple.fr/i.png');
 
-      expect(result.error).toBe('Hôte injoignable');
-      expect(result.error).not.toContain('10.1.2.3');
+      expect(engine.calls).toHaveLength(5);
+      expect(images.exhausted).toBe(true);
     });
+  });
 
-    it('nomme un délai dépassé pour ce qu’il est', async () => {
-      const timeout = new Error('délai');
-      timeout.name = 'TimeoutError';
-      const ssrf = makeSsrf(() => Promise.reject(timeout));
+  describe('déduplication', () => {
+    it('ne vérifie qu’UNE FOIS un lien répété dans la page', async () => {
+      // Le menu et le pied de page citent les mêmes liens des dizaines de fois
+      // sur chaque page d'un site.
+      const engine = fakeEngine();
+      const view = new AnalysisProbe(engine).forCheck('BROKEN_LINKS');
 
-      const result = await new SsrfNetworkProbe(ssrf).check('https://exemple.fr/lent');
-
-      expect(result.error).toBe('Délai dépassé');
-    });
-
-    it('ne laisse pas une URL injoignable faire tomber le critère', async () => {
-      const ssrf = makeSsrf(() => Promise.reject(new Error('panne')));
-
-      // Le contrat tient dans cette absence de `rejects` : la sonde REND
-      // l'échec, elle ne le propage pas.
-      await expect(new SsrfNetworkProbe(ssrf).check('https://exemple.fr/x')).resolves.toMatchObject(
-        {
-          ok: false,
-        },
+      const results = await view.checkMany(
+        Array.from({ length: 30 }, () => 'https://e.fr/accueil'),
       );
-    });
-  });
 
-  describe('budget de requêtes', () => {
-    it('REFUSE de sortir au-delà du quota de l’analyse', async () => {
-      // Une page hostile listant mille liens ne doit pas transformer le serveur
-      // en amplificateur : le quota se décompte avant la requête, pas après.
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)));
-      const probe = new SsrfNetworkProbe(ssrf, { budget: 2 });
-
-      const results = await probe.checkMany([
-        'https://exemple.fr/1',
-        'https://exemple.fr/2',
-        'https://exemple.fr/3',
-      ]);
-
-      expect(ssrf.safeFetch).toHaveBeenCalledTimes(2);
-      expect(results[2]?.error).toContain('Quota');
-      expect(probe.remaining).toBe(0);
+      expect(engine.calls).toHaveLength(1);
+      expect(results).toHaveLength(30);
+      expect(results.every(result => result.ok)).toBe(true);
     });
 
-    it('ne mémorise PAS un quota épuisé — l’analyse suivante a le sien', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)));
-      await new SsrfNetworkProbe(ssrf, { budget: 0 }).check('https://exemple.fr/a');
+    it('ne facture pas une réponse déjà connue', async () => {
+      // Deuxième page d'un lot : le menu est déjà en cache, et le quota du
+      // critère doit rester disponible pour ce que cette page a de propre.
+      const engine = fakeEngine();
+      const view = new AnalysisProbe(engine).forCheck('IMAGES');
+      const before = view.remaining;
 
-      const second = await new SsrfNetworkProbe(ssrf, { budget: 5 }).check('https://exemple.fr/a');
+      await view.check('https://cdn.exemple.fr/logo.svg');
+      await view.check('https://cdn.exemple.fr/logo.svg');
 
-      expect(second.ok).toBe(true);
+      expect(view.remaining).toBe(before - 1);
     });
 
-    it('un corps texte consomme aussi du quota', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)), 'User-agent: *');
-      const probe = new SsrfNetworkProbe(ssrf, { budget: 1 });
-
-      const first = await probe.fetchText('https://exemple.fr/robots.txt');
-      const second = await probe.fetchText('https://exemple.fr/autre.txt');
-
-      expect(first.body).toBe('User-agent: *');
-      expect(second.body).toBeNull();
-      expect(second.result.error).toContain('Quota');
-    });
-  });
-
-  describe('cache', () => {
-    it('ne sort qu’UNE FOIS pour la même URL', async () => {
-      // Le logo d'un CDN apparaît sur chaque page d'un sitemap : sans cache,
-      // un scan de cent pages le vérifierait cent fois.
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)));
-      const probe = new SsrfNetworkProbe(ssrf);
-
-      await probe.check('https://cdn.exemple.fr/logo.svg');
-      await probe.check('https://cdn.exemple.fr/logo.svg');
-
-      expect(ssrf.safeFetch).toHaveBeenCalledTimes(1);
-    });
-
-    it('un résultat mémorisé ne consomme pas de quota', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)));
-      const probe = new SsrfNetworkProbe(ssrf, { budget: 1 });
-
-      await probe.check('https://exemple.fr/a');
-      const again = await probe.check('https://exemple.fr/a');
-
-      expect(again.ok).toBe(true);
-      expect(probe.remaining).toBe(0);
-    });
-  });
-
-  describe('vérifications multiples', () => {
     it('rend les résultats DANS L’ORDRE des URL fournies', async () => {
-      // Le pool est continu : les réponses n'arrivent pas dans l'ordre des
-      // départs, et un rapport qui attribue le statut d'une URL à une autre est
-      // pire qu'un rapport absent.
-      const delays: Record<string, number> = {
-        'https://exemple.fr/lent': 20,
-        'https://exemple.fr/moyen': 10,
-        'https://exemple.fr/rapide': 0,
-      };
-      const ssrf = makeSsrf(((url: string) => {
-        const status = url.endsWith('lent') ? 404 : 200;
-        return new Promise(resolve => setTimeout(() => resolve(reply(status)), delays[url] ?? 0));
-      }) as unknown as Ssrf['safeFetch']);
+      // Un rapport qui attribue le statut d'une URL à une autre est pire qu'un
+      // rapport absent.
+      const engine = fakeEngine();
+      engine.resolve = (url: string) =>
+        Promise.resolve({
+          result: { ...ok(url), status: url.endsWith('lent') ? 404 : 200 },
+          billable: true,
+        });
+      const view = new AnalysisProbe(engine).forCheck('BROKEN_LINKS');
 
-      const results = await new SsrfNetworkProbe(ssrf).checkMany([
+      const results = await view.checkMany([
         'https://exemple.fr/lent',
         'https://exemple.fr/moyen',
         'https://exemple.fr/rapide',
       ]);
 
-      expect(results.map(r => r.status)).toEqual([404, 200, 200]);
+      expect(results.map(result => result.status)).toEqual([404, 200, 200]);
     });
 
-    it('rend un tableau vide sans sortir sur le réseau', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)));
+    it('rend un tableau vide sans rien demander au moteur', async () => {
+      const engine = fakeEngine();
 
-      expect(await new SsrfNetworkProbe(ssrf).checkMany([])).toEqual([]);
-      expect(ssrf.safeFetch).not.toHaveBeenCalled();
+      expect(await new AnalysisProbe(engine).checkMany([])).toEqual([]);
+      expect(engine.calls).toHaveLength(0);
     });
 
-    it('BORNE le nombre de requêtes simultanées', async () => {
+    it('BORNE le nombre de demandes simultanées', async () => {
       let inFlight = 0;
       let peak = 0;
-      const ssrf = makeSsrf((() => {
+      const engine = fakeEngine();
+      engine.resolve = async (url: string) => {
         inFlight += 1;
         peak = Math.max(peak, inFlight);
-        return new Promise(resolve =>
-          setTimeout(() => {
-            inFlight -= 1;
-            resolve(reply(200));
-          }, 5),
-        );
-      }) as unknown as Ssrf['safeFetch']);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return { result: ok(url), billable: true };
+      };
 
-      const urls = Array.from({ length: 12 }, (_, i) => `https://exemple.fr/${i}`);
-      await new SsrfNetworkProbe(ssrf, { concurrency: 3 }).checkMany(urls);
+      const probe = new AnalysisProbe(engine, { poolSize: 3 });
+      await probe.checkMany(Array.from({ length: 12 }, (_, i) => `https://exemple.fr/${i}`));
 
       expect(peak).toBeLessThanOrEqual(3);
     });
   });
 
   describe('lecture d’un corps texte', () => {
-    it('rend le texte et le statut', async () => {
-      const ssrf = makeSsrf(() => Promise.resolve(reply(200)), 'Sitemap: /s.xml');
+    it('consomme du quota', async () => {
+      const view = new AnalysisProbe(fakeEngine()).forCheck('MENTIONS_LEGALES');
+      const before = view.remaining;
 
-      const { result, body } = await new SsrfNetworkProbe(ssrf).fetchText(
-        'https://exemple.fr/robots.txt',
-      );
+      await view.fetchText('https://exemple.fr/mentions');
 
-      expect(result.status).toBe(200);
-      expect(body).toBe('Sitemap: /s.xml');
+      expect(view.remaining).toBe(before - 1);
     });
 
-    it('rend un corps nul quand la requête échoue', async () => {
-      const ssrf = makeSsrf(() => Promise.reject(new SsrfBlockedError('bloqué')));
+    it('ne consomme rien quand le corps est déjà connu', async () => {
+      const view = new AnalysisProbe(fakeEngine()).forCheck('MENTIONS_LEGALES');
 
-      const { result, body } = await new SsrfNetworkProbe(ssrf).fetchText(
-        'http://169.254.169.254/',
-      );
+      await view.fetchText('https://exemple.fr/mentions');
+      const before = view.remaining;
+      const { body } = await view.fetchText('https://exemple.fr/mentions');
+
+      expect(view.remaining).toBe(before);
+      expect(body).toBe('corps');
+    });
+
+    it('rend un corps nul quand le quota est atteint', async () => {
+      const view = new AnalysisProbe(fakeEngine(), { budget: 0 }).forCheck('MENTIONS_LEGALES');
+
+      const { result, body } = await view.fetchText('https://exemple.fr/mentions');
 
       expect(body).toBeNull();
-      expect(result.blocked).toBe(true);
+      expect(result.exhausted).toBe(true);
     });
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ProbeResult } from '../network-probe.js';
+import { asProbe } from '../testing/probe.factory.js';
 import { makePage, makeSettings } from '../testing/page.factory.js';
 import { BrokenLinksAnalyzer } from './broken-links.analyzer.js';
 
@@ -19,12 +20,12 @@ function probe(byUrl: Record<string, Partial<ProbeResult>> = {}) {
     ...byUrl[url],
   });
 
-  return {
+  return asProbe({
     check: vi.fn(url => Promise.resolve(describe(url))),
     checkMany: vi.fn((urls: readonly string[]) => Promise.resolve(urls.map(describe))),
     fetchText: vi.fn(),
     remaining: 500,
-  };
+  });
 }
 
 describe('BrokenLinksAnalyzer', () => {
@@ -106,6 +107,64 @@ describe('BrokenLinksAnalyzer', () => {
       );
 
       expect(result.status).toBe('fail');
+    });
+  });
+
+  describe('quota de requêtes atteint', () => {
+    const quotaProbe = () =>
+      probe({
+        'https://exemple.fr/b': { status: null, ok: false, exhausted: true, error: 'Quota…' },
+      });
+
+    it('NE COMPTE PAS un lien non vérifié comme injoignable', async () => {
+      // Le quota est une limite que nous nous imposons : la faire payer au site
+      // audité, c'est lui reprocher notre propre plafond.
+      const result = await analyzer.analyze(
+        makePage('<a href="/a">A</a><a href="/b">B</a>'),
+        settings,
+        quotaProbe(),
+      );
+
+      expect(result.status).toBe('pass');
+      expect(result.globalScore).toBe(5);
+      expect(result.items.some(item => item.key === 'BROKEN.timeout')).toBe(false);
+    });
+
+    it('le DIT, plutôt que de le taire', async () => {
+      const result = await analyzer.analyze(
+        makePage('<a href="/a">A</a><a href="/b">B</a>'),
+        settings,
+        quotaProbe(),
+      );
+
+      const notice = result.items.find(item => item.label.includes('quota'));
+      expect(notice?.status).toBe('info');
+      // Sans clé : ce n'est pas un point de contrôle, et cela ne doit pas
+      // entrer dans le décompte des sous-critères.
+      expect(notice?.key).toBeUndefined();
+      expect(result.summary).toContain('non vérifié');
+    });
+
+    it('ne compte pas un lien non vérifié parmi les liens vérifiés', async () => {
+      const result = await analyzer.analyze(
+        makePage('<a href="/a">A</a><a href="/b">B</a>'),
+        settings,
+        quotaProbe(),
+      );
+
+      expect(result.items.find(item => item.key === 'BROKEN.checked')?.value).toBe(1);
+    });
+
+    it('ne le donne pas non plus pour joignable au maillage', async () => {
+      // `linkResolutions` alimente la carte du site : y faire entrer une URL
+      // jamais interrogée ferait disparaître un futur 404.
+      const result = await analyzer.analyze(
+        makePage('<a href="/a">A</a><a href="/b">B</a>'),
+        settings,
+        quotaProbe(),
+      );
+
+      expect(result.linkResolutions?.map(entry => entry.url)).toEqual(['https://exemple.fr/a']);
     });
   });
 

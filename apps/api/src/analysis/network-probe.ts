@@ -1,22 +1,25 @@
-import {
-  SsrfBlockedError,
-  type SafeFetchResult,
-  type SsrfService,
-} from '../security/ssrf.service.js';
+import type { ProbeEngine } from './probe-engine.js';
 
 /**
  * Sonde réseau des analyseurs.
  *
- * Cinq critères doivent contacter des ressources distantes : poids des images,
- * liens cassés, images dupliquées, données des mentions légales, robots.txt.
- * Toutes ces URL viennent du DOM d'une page TIERCE — c'est exactement le cas
- * que la politique SSRF existe pour traiter. La sonde est donc la SEULE porte
- * de sortie offerte à un analyseur : elle ne prend pas de `dispatcher`, ne
- * laisse pas passer d'en-têtes arbitraires, et ne rend jamais un corps brut.
+ * Quatre critères doivent contacter des ressources distantes : poids des
+ * images, liens cassés, robots.txt, page de mentions légales. Toutes ces URL
+ * viennent du DOM d'une page TIERCE — c'est exactement le cas que la politique
+ * SSRF existe pour traiter. La sonde est donc la SEULE porte de sortie offerte
+ * à un analyseur : elle ne prend pas de `dispatcher`, ne laisse pas passer
+ * d'en-têtes arbitraires, et ne rend jamais un corps brut.
  *
  * Elle ne lève pas non plus. Un analyseur reçoit un résultat décrivant
  * l'échec ; sans cela, une URL injoignable ferait tomber le critère entier
  * alors que c'est précisément ce qu'il est censé constater.
+ *
+ * Le budget est RÉPARTI À L'AVANCE entre les critères (`CHECK_QUOTAS`). Une
+ * enveloppe commune se distribuerait dans l'ordre où les analyseurs se
+ * réveillent — c'est-à-dire au hasard de l'ordonnancement : deux analyses de la
+ * même page rendraient alors deux rapports différents, l'une ayant pesé les
+ * images, l'autre vérifié les liens. Un audit qui bouge d'une exécution à
+ * l'autre n'est pas un audit.
  */
 
 /** Issue d'une vérification — jamais une exception. */
@@ -34,242 +37,240 @@ export interface ProbeResult {
   error?: string;
   /** Vrai quand c'est la politique SSRF qui a refusé, pas le réseau. */
   blocked?: boolean;
+  /**
+   * Vrai quand l'URL n'a pas été vérifiée faute de quota.
+   *
+   * Ce n'est PAS un constat sur la ressource : c'est une limite que nous nous
+   * imposons. Un analyseur qui la confondrait avec un échec accuserait le site
+   * audité de notre propre plafond.
+   */
+  exhausted?: boolean;
 }
 
 export interface NetworkProbe {
   /** Vérifie une URL (HEAD, repli GET si la méthode est refusée). */
   check(url: string): Promise<ProbeResult>;
-  /** Vérifie plusieurs URL avec un pool continu, dans l'ordre d'entrée. */
+  /** Vérifie plusieurs URL — les doublons ne sont vérifiés qu'une fois. */
   checkMany(urls: readonly string[]): Promise<ProbeResult[]>;
   /** Récupère un corps texte borné — robots.txt, page de mentions légales. */
   fetchText(url: string, maxBytes?: number): Promise<{ result: ProbeResult; body: string | null }>;
-  /** Requêtes encore disponibles pour cette analyse. */
+  /** Requêtes encore disponibles ici. */
   readonly remaining: number;
+  /** Vue à quota propre pour un critère — voir `CHECK_QUOTAS`. */
+  forCheck(checkId: string): NetworkProbe;
 }
 
 /**
- * En-têtes de navigation directe.
+ * Quotas de requêtes par critère, pour UNE analyse de page.
  *
- * Repris de la v1, et pour la même raison : sans eux, les WAF répondent 403 à
- * une requête qui n'a rien d'hostile, et le rapport annonce des liens cassés
- * qui ne le sont pas. On imite un navigateur, on ne contourne aucune
- * protection — une page réellement interdite reste interdite.
+ * Les valeurs suivent ce que chaque critère a réellement à vérifier : beaucoup
+ * de liens, moins d'images, une poignée d'adresses pour les mentions légales,
+ * une pour le robots.txt. Un critère absent de cette table n'a pas vocation à
+ * sortir sur le réseau ; il garde de quoi le faire, mais peu.
  */
-const BROWSER_HEADERS: Readonly<Record<string, string>> = {
-  Accept:
-    'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-  'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Cache-Control': 'max-age=0',
-  'Upgrade-Insecure-Requests': '1',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'none',
-  'Sec-Fetch-User': '?1',
+export const CHECK_QUOTAS: Readonly<Record<string, number>> = {
+  BROKEN_LINKS: 160,
+  IMAGES: 80,
+  MENTIONS_LEGALES: 10,
+  ROBOTS_META: 4,
 };
 
-/**
- * Statuts pour lesquels un repli GET a du sens.
- *
- * La v1 ne réessayait que sur 405. Beaucoup de serveurs répondent pourtant 403
- * ou 501 à un HEAD parfaitement légitime, et la v1 comptait donc ces URL comme
- * cassées. On ne réessaie NI sur 404 NI sur 5xx : la réponse y est déjà la
- * vérité, et doubler les requêtes sur un site en panne l'enfoncerait.
- */
-const RETRY_WITH_GET: ReadonlySet<number> = new Set([403, 405, 501]);
+/** Quota d'un critère qui n'en déclare pas. */
+export const DEFAULT_CHECK_QUOTA = 6;
 
-/** Requêtes sortantes autorisées pour UNE analyse. */
-export const DEFAULT_REQUEST_BUDGET = 200;
-/** Requêtes simultanées — au-delà, on martèle le site audité. */
-export const DEFAULT_CONCURRENCY = 5;
-/** Durée de validité d'un résultat mémorisé. */
-const CACHE_TTL_MS = 10 * 60 * 1000;
-/** Bornes du cache, pour un thread qui vit longtemps. */
-const CACHE_MAX_ENTRIES = 5000;
+/**
+ * Plafond ABSOLU d'une analyse, tous critères confondus.
+ *
+ * Il ne sert pas à répartir — les quotas s'en chargent — mais à garantir qu'une
+ * page hostile ne puisse pas faire du serveur un amplificateur, quel que soit
+ * le nombre de critères actifs.
+ */
+export const DEFAULT_REQUEST_BUDGET = 300;
+
+/** Requêtes simultanées lancées par un même appel `checkMany`. */
+export const DEFAULT_POOL_SIZE = 5;
+
 /** Plafond par défaut d'un corps texte lu par un analyseur. */
 const DEFAULT_TEXT_BYTES = 512 * 1024;
 
-export interface NetworkProbeOptions {
-  timeoutMs?: number;
-  /** Requêtes sortantes autorisées pour cette analyse. */
-  budget?: number;
-  concurrency?: number;
+/**
+ * Porte-monnaie : ce qui autorise — ou non — une requête réelle.
+ *
+ * Une requête servie par le cache ou par une requête déjà en vol n'a rien
+ * coûté : elle est REMBOURSÉE. C'est ce qui permet au menu et au pied de page,
+ * identiques sur tout un site, de ne peser sur le quota que la première fois.
+ */
+interface Wallet {
+  take(): boolean;
+  refund(): void;
+  readonly remaining: number;
 }
 
-/** Cache partagé par le processus — une image de CDN est vue à chaque page. */
-interface CacheEntry {
-  result: ProbeResult;
-  ts: number;
-}
-const sharedCache = new Map<string, CacheEntry>();
-
-/** Vide le cache de sonde — réservé aux tests et aux purges explicites. */
-export function clearProbeCache(): void {
-  sharedCache.clear();
-}
-
-export class SsrfNetworkProbe implements NetworkProbe {
-  private readonly timeoutMs: number;
-  private readonly concurrency: number;
-  private budget: number;
-
-  constructor(
-    private readonly ssrf: Pick<SsrfService, 'safeFetch' | 'readTextCapped'>,
-    options: NetworkProbeOptions = {},
-  ) {
-    this.timeoutMs = options.timeoutMs ?? 10_000;
-    this.budget = options.budget ?? DEFAULT_REQUEST_BUDGET;
-    this.concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
-  }
+class BudgetWallet implements Wallet {
+  constructor(private budget: number) {}
 
   get remaining(): number {
     return this.budget;
   }
 
-  async check(url: string): Promise<ProbeResult> {
-    const cached = cacheGet(url);
-    if (cached) return cached;
-
-    // Le budget est décompté AVANT la requête : une page hostile listant mille
-    // liens ne doit pas pouvoir se servir du serveur comme d'un amplificateur.
-    if (this.budget <= 0) return exhausted(url);
+  take(): boolean {
+    if (this.budget <= 0) return false;
     this.budget -= 1;
+    return true;
+  }
 
-    const result = await this.perform(url);
-    cacheSet(url, result);
+  refund(): void {
+    this.budget += 1;
+  }
+}
+
+/** Quota d'un critère, adossé au plafond de l'analyse. */
+class CheckWallet implements Wallet {
+  constructor(
+    private quota: number,
+    private readonly parent: Wallet,
+  ) {}
+
+  get remaining(): number {
+    return Math.min(this.quota, this.parent.remaining);
+  }
+
+  take(): boolean {
+    if (this.quota <= 0) return false;
+    if (!this.parent.take()) return false;
+    this.quota -= 1;
+    return true;
+  }
+
+  refund(): void {
+    this.quota += 1;
+    this.parent.refund();
+  }
+}
+
+export interface AnalysisProbeOptions {
+  /** Plafond absolu de l'analyse. */
+  budget?: number;
+  /** Requêtes simultanées par appel `checkMany`. */
+  poolSize?: number;
+}
+
+/**
+ * Sonde d'une analyse : un moteur, un plafond, et des vues par critère.
+ *
+ * L'orchestrateur en donne une VUE à chaque analyseur (`forCheck`) plutôt que
+ * la sonde elle-même : c'est cette vue qui porte le quota du critère.
+ */
+export class AnalysisProbe implements NetworkProbe {
+  private readonly views = new Map<string, NetworkProbe>();
+  private readonly probe: BudgetedProbe;
+  private readonly wallet: Wallet;
+
+  constructor(
+    private readonly engine: ProbeEngine,
+    private readonly options: AnalysisProbeOptions = {},
+  ) {
+    this.wallet = new BudgetWallet(options.budget ?? DEFAULT_REQUEST_BUDGET);
+    this.probe = new BudgetedProbe(engine, this.wallet, options.poolSize ?? DEFAULT_POOL_SIZE);
+  }
+
+  get remaining(): number {
+    return this.wallet.remaining;
+  }
+
+  forCheck(checkId: string): NetworkProbe {
+    const existing = this.views.get(checkId);
+    if (existing) return existing;
+
+    const quota = CHECK_QUOTAS[checkId] ?? DEFAULT_CHECK_QUOTA;
+    const view = new BudgetedProbe(
+      this.engine,
+      new CheckWallet(quota, this.wallet),
+      this.options.poolSize ?? DEFAULT_POOL_SIZE,
+    );
+    this.views.set(checkId, view);
+    return view;
+  }
+
+  check(url: string): Promise<ProbeResult> {
+    return this.probe.check(url);
+  }
+
+  checkMany(urls: readonly string[]): Promise<ProbeResult[]> {
+    return this.probe.checkMany(urls);
+  }
+
+  fetchText(url: string, maxBytes?: number): Promise<{ result: ProbeResult; body: string | null }> {
+    return this.probe.fetchText(url, maxBytes);
+  }
+}
+
+/** Sonde adossée à un porte-monnaie — celui de l'analyse ou celui d'un critère. */
+class BudgetedProbe implements NetworkProbe {
+  constructor(
+    private readonly engine: ProbeEngine,
+    private readonly wallet: Wallet,
+    private readonly poolSize: number,
+  ) {}
+
+  get remaining(): number {
+    return this.wallet.remaining;
+  }
+
+  /** Une vue de critère est déjà la vue de son critère. */
+  forCheck(): NetworkProbe {
+    return this;
+  }
+
+  async check(url: string): Promise<ProbeResult> {
+    if (!this.wallet.take()) return exhausted(url);
+
+    const { result, billable } = await this.engine.resolve(url);
+    if (!billable) this.wallet.refund();
     return result;
   }
 
   /**
-   * Pool CONTINU : un emplacement libéré repart aussitôt.
+   * Pool CONTINU sur les URL DISTINCTES.
    *
-   * Des lots séquentiels attendraient l'URL la plus lente de chaque lot — sur
-   * cinquante liens dont un expire, cela ajoute le délai d'expiration entier.
+   * Une page cite le même lien de navigation des dizaines de fois : vérifier la
+   * liste telle quelle dépenserait autant de requêtes. Les doublons sont donc
+   * résolus une seule fois, puis redistribués dans l'ordre demandé — l'ordre
+   * compte, un rapport qui attribue le statut d'une URL à une autre est pire
+   * qu'un rapport absent.
    */
   async checkMany(urls: readonly string[]): Promise<ProbeResult[]> {
     if (urls.length === 0) return [];
 
-    const results = new Array<ProbeResult>(urls.length);
+    const distinct = [...new Set(urls)];
+    const byUrl = new Map<string, ProbeResult>();
     let next = 0;
 
     const worker = async (): Promise<void> => {
-      while (next < urls.length) {
-        const index = next++;
-        const url = urls[index];
-        // `noUncheckedIndexedAccess` : l'indice vient de la longueur, mais le
-        // type ne le sait pas.
-        results[index] = url ? await this.check(url) : exhausted('');
+      while (next < distinct.length) {
+        const url = distinct[next++];
+        if (url === undefined) continue;
+        byUrl.set(url, await this.check(url));
       }
     };
 
     await Promise.all(
-      Array.from({ length: Math.min(this.concurrency, urls.length) }, () => worker()),
+      Array.from({ length: Math.min(this.poolSize, distinct.length) }, () => worker()),
     );
-    return results;
+
+    return urls.map(url => byUrl.get(url) ?? exhausted(url));
   }
 
   async fetchText(
     url: string,
     maxBytes = DEFAULT_TEXT_BYTES,
   ): Promise<{ result: ProbeResult; body: string | null }> {
-    if (this.budget <= 0) return { result: exhausted(url), body: null };
-    this.budget -= 1;
+    if (!this.wallet.take()) return { result: exhausted(url), body: null };
 
-    try {
-      const fetched = await this.ssrf.safeFetch(url, {
-        method: 'GET',
-        headers: { ...BROWSER_HEADERS },
-        timeoutMs: this.timeoutMs,
-      });
-
-      try {
-        const body = await this.ssrf.readTextCapped(fetched.response, maxBytes);
-        return { result: describe(url, fetched), body };
-      } finally {
-        fetched.dispose();
-      }
-    } catch (err) {
-      return { result: failure(url, err), body: null };
-    }
+    const { result, body, billable } = await this.engine.text(url, maxBytes);
+    if (!billable) this.wallet.refund();
+    return { result, body };
   }
-
-  private async perform(url: string): Promise<ProbeResult> {
-    const started = Date.now();
-    try {
-      const head = await this.ssrf.safeFetch(url, {
-        method: 'HEAD',
-        headers: { ...BROWSER_HEADERS },
-        timeoutMs: this.timeoutMs,
-      });
-      head.dispose();
-
-      if (!RETRY_WITH_GET.has(head.response.status)) return describe(url, head);
-
-      // Le serveur refuse la méthode, pas la ressource : on redemande en GET
-      // avec le temps qu'il reste, sans jamais descendre sous trois secondes.
-      const elapsed = Date.now() - started;
-      const get = await this.ssrf.safeFetch(url, {
-        method: 'GET',
-        headers: { ...BROWSER_HEADERS },
-        timeoutMs: Math.max(this.timeoutMs - elapsed, 3_000),
-      });
-      get.dispose();
-      return describe(url, get);
-    } catch (err) {
-      return failure(url, err);
-    }
-  }
-}
-
-function describe(url: string, fetched: SafeFetchResult): ProbeResult {
-  return {
-    url,
-    status: fetched.response.status,
-    ok: fetched.response.ok,
-    redirected: fetched.redirected,
-    finalUrl: fetched.finalUrl,
-    contentLength: parseContentLength(fetched.response.headers.get('content-length')),
-    contentType: fetched.response.headers.get('content-type'),
-  };
-}
-
-/**
- * `Number('')` vaut 0 et `Number('abc')` vaut NaN : les deux se propageraient
- * dans les comparaisons de poids d'image, la première en annonçant une image
- * de zéro octet, la seconde en rendant toute comparaison fausse sans erreur.
- */
-function parseContentLength(raw: string | null): number | null {
-  if (!raw) return null;
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
-/**
- * Message d'échec choisi PAR TYPE, jamais recopié de l'exception.
- *
- * Un rapport est relu par des comptes qui n'ont pas à connaître les hôtes
- * internes ni l'arborescence du serveur, et une erreur réseau d'undici en dit
- * beaucoup plus que nécessaire.
- */
-function failure(url: string, err: unknown): ProbeResult {
-  const blocked = err instanceof SsrfBlockedError;
-  const timedOut =
-    err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-
-  return {
-    url,
-    status: null,
-    ok: false,
-    redirected: false,
-    finalUrl: url,
-    contentLength: null,
-    contentType: null,
-    blocked,
-    error: blocked
-      ? 'Adresse refusée par la politique de sécurité'
-      : timedOut
-        ? 'Délai dépassé'
-        : 'Hôte injoignable',
-  };
 }
 
 function exhausted(url: string): ProbeResult {
@@ -281,38 +282,7 @@ function exhausted(url: string): ProbeResult {
     finalUrl: url,
     contentLength: null,
     contentType: null,
-    error: 'Quota de vérifications atteint pour cette analyse',
+    exhausted: true,
+    error: 'Quota de vérifications atteint pour ce critère',
   };
-}
-
-function cacheGet(url: string): ProbeResult | null {
-  const hit = sharedCache.get(url);
-  if (!hit) return null;
-  if (Date.now() - hit.ts > CACHE_TTL_MS) {
-    sharedCache.delete(url);
-    return null;
-  }
-  return hit.result;
-}
-
-function cacheSet(url: string, result: ProbeResult): void {
-  // Un quota épuisé n'est pas une propriété de l'URL : le mémoriser ferait
-  // échouer la même URL lors de l'analyse suivante, qui a son propre quota.
-  if (result.error?.startsWith('Quota')) return;
-
-  sharedCache.set(url, { result, ts: Date.now() });
-  if (sharedCache.size <= CACHE_MAX_ENTRIES) return;
-
-  const now = Date.now();
-  for (const [key, entry] of sharedCache) {
-    if (now - entry.ts > CACHE_TTL_MS) sharedCache.delete(key);
-  }
-  // Toujours au-dessus du plafond : on retire les plus anciennes, l'ordre
-  // d'insertion d'une Map étant celui de leur arrivée.
-  let excess = sharedCache.size - CACHE_MAX_ENTRIES;
-  if (excess <= 0) return;
-  for (const key of sharedCache.keys()) {
-    if (excess-- <= 0) break;
-    sharedCache.delete(key);
-  }
 }
