@@ -38,11 +38,11 @@ export type NonEmptyAddresses = [ResolvedAddress, ...ResolvedAddress[]];
 /**
  * Ce dont la politique SSRF a besoin de la configuration — et rien de plus.
  *
- * Le type est étroit pour une raison précise : un thread Piscina n'a pas de
- * conteneur Nest, donc pas d'`AppConfigService`. Il reçoit ces deux valeurs par
- * la tâche, sérialisées, et construit la politique lui-même. Dépendre de
- * l'objet de configuration complet obligerait à le reconstruire — c'est-à-dire
- * à relire et revalider l'environnement dans chaque thread.
+ * Le type reste étroit par principe : la politique n'a aucune raison de voir
+ * la configuration entière, et une dépendance minimale se remplace par un objet
+ * littéral dans un test plutôt que par un conteneur monté pour l'occasion.
+ * (Les threads d'analyse, eux, ne construisent plus de politique : ils
+ * demandent leurs requêtes au processus principal — voir `probe-rpc.ts`.)
  */
 export interface OutboundConfig {
   readonly fetchTimeoutMs: number;

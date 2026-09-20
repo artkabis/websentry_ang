@@ -6,10 +6,11 @@ import { availableParallelism } from 'node:os';
 import { Piscina } from 'piscina';
 import type { AnalysisReport, CheckResult } from '@websentry/shared';
 import { AppConfigService } from '../config/app-config.service.js';
-import { SsrfService, type OutboundConfig } from '../security/ssrf.service.js';
+import { SsrfService } from '../security/ssrf.service.js';
 import type { EffectiveSettings } from './effective-settings.js';
 import { AnalysisProbe } from './network-probe.js';
 import { SsrfProbeEngine } from './probe-engine.js';
+import { serveProbeRequests } from './probe-rpc.js';
 import { rehydratePage } from './page-fetcher.service.js';
 import { runAnalysis, type ProgressCallback } from './orchestrator.js';
 import type { SerializablePage } from './page.model.js';
@@ -32,6 +33,7 @@ export class AnalysisRunnerService implements OnModuleDestroy {
   private readonly logger = new Logger(AnalysisRunnerService.name);
   private pool: Piscina<AnalysisTask, AnalysisReport> | null = null;
   private poolFailed = false;
+  private engine: SsrfProbeEngine | null = null;
 
   constructor(
     private readonly config: AppConfigService,
@@ -39,17 +41,27 @@ export class AnalysisRunnerService implements OnModuleDestroy {
   ) {}
 
   /**
-   * Valeurs de sortie réseau transmises au thread.
+   * Moteur de sortie réseau — UN seul pour tout le processus.
    *
-   * Extraites du service de configuration parce qu'un thread ne peut pas le
-   * recevoir : il n'a pas de conteneur Nest, et reconstruire la configuration
-   * complète reviendrait à relire l'environnement dans chaque thread.
+   * C'est ce qui fait qu'un lien de navigation, présent sur chaque page d'un
+   * site, n'est vérifié qu'une fois pour tout un scan : un moteur par thread
+   * rendrait le cache aussi fragmenté que le pool.
    */
-  private outbound(): OutboundConfig {
-    return {
-      fetchTimeoutMs: this.config.fetchTimeoutMs,
-      fetchUserAgent: this.config.fetchUserAgent,
-    };
+  private probeEngine(): SsrfProbeEngine {
+    this.engine ??= new SsrfProbeEngine(this.ssrf, { timeoutMs: this.config.fetchTimeoutMs });
+    return this.engine;
+  }
+
+  /**
+   * Canal de sortie réseau d'une tâche.
+   *
+   * Le thread ne sort pas lui-même : il demande, le processus principal
+   * exécute, et tous les threads profitent donc du même cache.
+   */
+  private openProbeChannel(): MessageChannel {
+    const channel = new MessageChannel();
+    serveProbeRequests(channel.port1, this.probeEngine());
+    return channel;
   }
 
   /** Analyse une page, dans le pool si disponible. */
@@ -61,14 +73,17 @@ export class AnalysisRunnerService implements OnModuleDestroy {
     const pool = this.acquirePool();
     if (!pool) return this.runInline(page, settings, analyzeId);
 
+    const probe = this.openProbeChannel();
     try {
-      const task: AnalysisTask = { page, settings, analyzeId, outbound: this.outbound() };
-      return await pool.run(task);
+      const task: AnalysisTask = { page, settings, analyzeId, probePort: probe.port2 };
+      return await pool.run(task, { transferList: [probe.port2] });
     } catch (err) {
       // Une défaillance du pool ne doit pas se voir comme une analyse
       // impossible : on retombe en ligne et on trace, une fois.
       this.reportPoolFailure(err);
       return this.runInline(page, settings, analyzeId);
+    } finally {
+      probe.port1.close();
     }
   }
 
@@ -96,20 +111,22 @@ export class AnalysisRunnerService implements OnModuleDestroy {
       },
     );
 
+    const probe = this.openProbeChannel();
     try {
       const task: AnalysisTask = {
         page,
         settings,
         analyzeId,
         progressPort: channel.port2,
-        outbound: this.outbound(),
+        probePort: probe.port2,
       };
-      return await pool.run(task, { transferList: [channel.port2] });
+      return await pool.run(task, { transferList: [channel.port2, probe.port2] });
     } catch (err) {
       this.reportPoolFailure(err);
       return this.runInline(page, settings, analyzeId, onProgress);
     } finally {
       channel.port1.close();
+      probe.port1.close();
     }
   }
 
@@ -123,11 +140,9 @@ export class AnalysisRunnerService implements OnModuleDestroy {
     return runAnalysis(rehydratePage(page), settings, {
       analyzeId,
       onProgress,
-      // En ligne, la politique SSRF est celle du conteneur : c'est la MÊME que
-      // dans le worker, injectée au lieu d'être reconstruite.
-      net: new AnalysisProbe(
-        new SsrfProbeEngine(this.ssrf, { timeoutMs: this.config.fetchTimeoutMs }),
-      ),
+      // Même moteur que pour les threads : le cache et le portail de
+      // concurrence sont partagés, quel que soit le chemin d'exécution.
+      net: new AnalysisProbe(this.probeEngine()),
     });
   }
 

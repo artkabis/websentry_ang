@@ -258,20 +258,40 @@ Les **29 critères de la v1 sont portés**, en trois natures :
 
 #### La sonde réseau, porte de sortie unique
 
-Un analyseur ne connaît pas `fetch` : il reçoit une `NetworkProbe`, seule à
-émettre depuis le worker, et construite sur la politique SSRF reconstituée dans
-le thread (un worker n'a pas de conteneur Nest : la configuration sortante lui
-est passée sérialisée dans la tâche). La sonde **ne lève jamais** — un lien
-injoignable est un résultat d'analyse, pas une panne d'analyse — et porte trois
-garde-fous :
+Un analyseur ne connaît pas `fetch` : il reçoit une `NetworkProbe`. Elle **ne
+lève jamais** — un lien injoignable est un résultat d'analyse, pas une panne
+d'analyse — et se lit en deux couches.
 
-- un **budget de requêtes par analyse**, décrémenté AVANT l'appel : une page
-  hostile qui déclare dix mille images ne transforme pas WebSentry en
-  amplificateur ;
-- une **concurrence bornée**, pour ne pas faire passer un audit pour une
-  attaque aux yeux du site mesuré ;
-- un **cache TTL/LRU partagé** sur l'analyse : une même URL citée cent fois
-  n'est vérifiée qu'une.
+**Le moteur** (`probe-engine.ts`) sait joindre une URL, et ne fait jamais deux
+fois le même travail :
+
+- **cache par URL partagé par le processus**, avec un TTL court pour les échecs
+  (un hôte qui expire une fois n'est pas mort pour dix minutes) ;
+- **partage des requêtes en vol** : le cache n'étant écrit qu'au retour, deux
+  demandes simultanées sur la même URL partageraient sinon rien ;
+- **portail de concurrence global**, et non par appel : quatre critères réseau
+  travaillant de front ouvriraient sans lui quatre fois plus de connexions que
+  prévu sur le site audité.
+
+Il vit dans le **processus principal**, et les threads lui parlent par un canal
+(`probe-rpc.ts`). Un moteur par thread fragmenterait le cache exactement comme
+le pool : le menu et le pied de page d'un site, présents sur toutes ses pages,
+seraient revérifiés une fois par thread. La politique SSRF s'applique donc au
+même endroit pour tous les chemins d'exécution — thread, repli en ligne, ou
+appel direct.
+
+**La couche de budget** (`network-probe.ts`) décide qui a le droit de sortir :
+
+- un **quota par critère** (`CHECK_QUOTAS`), attribué d'avance. L'orchestrateur
+  donne à chaque analyseur la vue de son critère, si bien qu'un rapport ne
+  dépend plus de l'ordre dans lequel les analyseurs se réveillent ;
+- un **plafond absolu par analyse** : une page hostile qui déclare dix mille
+  images ne transforme pas WebSentry en amplificateur ;
+- une **facturation au réel** : une réponse servie par le cache ou par une
+  requête en vol est remboursée. Un lien déjà vu ne coûte rien.
+
+Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
+les critères l'annoncent en note d'information, hors décompte et hors barème.
 
 #### Le contraste sans navigateur
 
@@ -455,7 +475,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1529   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1562   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 387    | 80 %                            |

@@ -603,3 +603,70 @@ régressions — il faut pouvoir le dire à l'équipe qualité, d'où cet arbitr
 Et un **coût de relecture** : chaque divergence est portée par un commentaire
 qui dit ce que faisait la v1 et pourquoi la v2 fait autrement, sans quoi la
 prochaine lecture du code prendrait la correction pour une erreur de portage.
+
+---
+
+## 26. Le budget réseau est réparti à l'avance, critère par critère
+
+**Décision** — Les requêtes sortantes d'une analyse ne sont plus une enveloppe
+commune servie au premier qui la demande : chaque critère reçoit un quota fixé
+d'avance (`CHECK_QUOTAS`), et l'orchestrateur lui donne une vue de sonde qui ne
+dépasse pas ce quota. Le plafond global subsiste, mais comme garde-fou, pas
+comme mode de répartition. Un dépassement produit un état distinct
+(`exhausted`), que les quatre critères réseau annoncent en note d'information
+sans le compter comme un défaut du site.
+
+**Raison** — Les analyseurs partent ensemble, et la somme de ce qu'ils veulent
+vérifier dépasse le plafond d'une analyse. Avec une enveloppe commune, le
+partage se décidait donc par l'ordonnancement : deux analyses de la même page
+pouvaient rendre deux rapports différents, l'une ayant pesé les images, l'autre
+vérifié les liens. **Un audit qui bouge d'une exécution à l'autre n'est pas un
+audit** — c'est un défaut de correction, pas une question de performance.
+
+Quant au dépassement, le confondre avec un échec revenait à reprocher au site
+une limite que nous nous imposons : un lien jamais interrogé était rapporté
+« injoignable », et la note du critère baissait.
+
+**Aucune régression** — Les seuils par critère sont au-dessus de ce qu'une page
+ordinaire demande, et une réponse déjà connue ne consomme rien : sur un lot, la
+deuxième page et les suivantes retrouvent leur quota intact pour ce qu'elles
+ont de propre.
+
+**Coût assumé** — Deux coûts. D'abord une **table à tenir** : ajouter un critère
+réseau sans lui donner de quota lui laisse le minimum, et la somme des quotas
+doit rester sous le plafond — c'est une contrainte de plus à la revue. Ensuite,
+sur une page très fournie, un critère peut atteindre son quota alors que le
+plafond global n'est pas épuisé : le rapport annonce alors des liens non
+vérifiés là où une enveloppe commune en aurait vérifié davantage — mais sans
+garantir lesquels d'une exécution à l'autre.
+
+---
+
+## 27. Une ressource déjà vue ne se revérifie pas
+
+**Décision** — Le moteur de sortie réseau vit dans le **processus principal**,
+et les threads d'analyse lui adressent leurs demandes par un canal. Il
+mémorise chaque URL, partage les requêtes déjà en vol, dédoublonne les listes
+qu'on lui donne, et borne la concurrence pour le processus entier.
+
+**Raison** — Le menu et le pied de page d'un site sont les mêmes sur toutes ses
+pages : sur un scan de sitemap de deux cents pages, les vérifier page par page
+multiplie par deux cents une information qui n'a pas changé. Le cache existait
+déjà, mais il était **dans le thread** : un pool de huit threads le fragmentait
+en huit, et le même lien repartait huit fois. C'est du réseau dépensé pour
+rien, et surtout une charge infligée au site audité que l'audit n'exige pas.
+
+**Aucune régression** — La politique SSRF n'est ni contournée ni assouplie :
+elle s'applique désormais au même endroit pour tous les chemins d'exécution,
+là où elle était reconstruite dans chaque thread. Un échec de canal rend un
+résultat « sortie réseau indisponible », non facturé et non confondu avec un
+quota atteint.
+
+**Coût assumé** — Trois coûts. Les requêtes sortantes reviennent sur la **boucle
+d'événements principale** : c'est de l'attente réseau et non du calcul — ce que
+le thread isole, le parse du DOM, y reste — mais la lecture d'un corps borné
+(512 Ko) s'y décode désormais. Ensuite, un **canal de plus par tâche**, donc un
+cycle de vie à tenir : un thread arrêté en pleine requête doit voir ses attentes
+dénouées, sans quoi l'analyse resterait suspendue. Enfin, un résultat mémorisé
+**vieillit** : dix minutes pour un succès, une pour un échec — un lien réparé
+pendant un scan peut donc être encore rapporté cassé jusqu'à la fin du scan.

@@ -6,6 +6,7 @@ import type { AppConfigService } from '../config/app-config.service.js';
 import type { SsrfService } from '../security/ssrf.service.js';
 import { AnalysisRunnerService } from './analysis-runner.service.js';
 import type { SerializablePage } from './page.model.js';
+import { clearProbeCache } from './probe-engine.js';
 
 const PAGE: SerializablePage = {
   url: 'https://exemple.fr/',
@@ -33,7 +34,56 @@ function build(workersEnabled: boolean) {
   return new AnalysisRunnerService(config, ssrf);
 }
 
+/** Page portant un lien externe — de quoi faire sortir le critère des liens. */
+function pageLinking(url: string, to: string): SerializablePage {
+  return {
+    ...PAGE,
+    url,
+    html: `<html lang="fr"><head><title>T</title></head><body><h1>A</h1><a href="${to}">Menu</a></body></html>`,
+  };
+}
+
 describe('AnalysisRunnerService', () => {
+  describe('sortie réseau partagée', () => {
+    it('ne vérifie qu’UNE FOIS un lien commun à deux pages', async () => {
+      // Le menu et le pied de page sont les mêmes sur tout un site : les
+      // revérifier à chaque page d'un lot dépense du réseau pour rien, et
+      // inflige au site audité une charge que l'audit n'exige pas.
+      clearProbeCache();
+      const config = {
+        analysis: { workersEnabled: false, maxWorkers: 1, batchConcurrency: 4 },
+        fetchTimeoutMs: 5_000,
+        fetchUserAgent: 'WebSentry/2.0 (tests)',
+      } as unknown as AppConfigService;
+      const safeFetch = vi.fn().mockResolvedValue({
+        response: { status: 200, ok: true, headers: { get: () => null } },
+        finalUrl: 'https://ailleurs.fr/commun',
+        redirectChain: [],
+        redirected: false,
+        dispose: () => undefined,
+      });
+      const runner = new AnalysisRunnerService(config, {
+        safeFetch,
+        readTextCapped: vi.fn().mockResolvedValue(''),
+      } as unknown as SsrfService);
+
+      const settings = defaultAnalysisSettings();
+      await runner.run(
+        pageLinking('https://exemple.fr/a', 'https://ailleurs.fr/commun'),
+        settings,
+        ANALYZE_ID,
+      );
+      await runner.run(
+        pageLinking('https://exemple.fr/b', 'https://ailleurs.fr/commun'),
+        settings,
+        ANALYZE_ID,
+      );
+
+      const visited = safeFetch.mock.calls.filter(([url]) => url === 'https://ailleurs.fr/commun');
+      expect(visited).toHaveLength(1);
+    });
+  });
+
   describe('repli en ligne', () => {
     it('analyse sur le thread courant quand le pool est désactivé', async () => {
       // Le repli n'est pas une commodité de test : sur un hébergement sans

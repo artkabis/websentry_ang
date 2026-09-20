@@ -1,9 +1,8 @@
 import type { MessagePort } from 'node:worker_threads';
 import type { AnalysisReport } from '@websentry/shared';
-import { SsrfService, type OutboundConfig } from '../security/ssrf.service.js';
 import type { EffectiveSettings } from './effective-settings.js';
 import { AnalysisProbe } from './network-probe.js';
-import { SsrfProbeEngine } from './probe-engine.js';
+import { RemoteProbeEngine } from './probe-rpc.js';
 import { rehydratePage } from './page-fetcher.service.js';
 import { runAnalysis } from './orchestrator.js';
 import type { SerializablePage } from './page.model.js';
@@ -32,53 +31,25 @@ export interface AnalysisTask {
    */
   progressPort?: MessagePort;
   /**
-   * Configuration de sortie réseau — sérialisable, donc transmise par valeur.
+   * Canal de sortie réseau, transmis via `transferList`.
    *
-   * Les analyseurs qui vérifient des ressources distantes ont besoin de la
-   * politique SSRF, et un thread n'a pas de conteneur Nest pour la leur
-   * injecter. Il la reconstruit donc ici, à l'identique : la politique n'est
-   * JAMAIS contournée sous prétexte qu'on est dans un worker.
+   * Le thread ne sort pas lui-même : il demande au processus principal, qui
+   * applique la politique SSRF et sert un cache COMMUN à tous les threads. Un
+   * moteur par thread revérifierait le menu et le pied de page d'un site
+   * autant de fois qu'il y a de threads.
    */
-  outbound?: OutboundConfig;
-}
-
-/**
- * Politique SSRF du thread, construite une seule fois.
- *
- * Elle porte un cache DNS et un cache d'agents épinglés : la recréer à chaque
- * tâche les jetterait, et chaque page d'un lot re-résoudrait les mêmes hôtes.
- */
-let policy: { config: OutboundConfig; ssrf: SsrfService } | null = null;
-
-function ssrfFor(config: OutboundConfig): SsrfService {
-  // La configuration ne change pas en cours de vie du processus ; on compare
-  // malgré tout, pour qu'un thread recyclé par un autre appelant ne serve pas
-  // une politique construite avec d'autres valeurs.
-  if (
-    policy &&
-    policy.config.fetchTimeoutMs === config.fetchTimeoutMs &&
-    policy.config.fetchUserAgent === config.fetchUserAgent
-  ) {
-    return policy.ssrf;
-  }
-  policy = { config, ssrf: new SsrfService(config) };
-  return policy.ssrf;
+  probePort?: MessagePort;
 }
 
 export default async function analyzeInWorker(task: AnalysisTask): Promise<AnalysisReport> {
   const page = rehydratePage(task.page);
   const port = task.progressPort;
+  const probePort = task.probePort;
 
   try {
     return await runAnalysis(page, task.settings, {
       analyzeId: task.analyzeId,
-      net: task.outbound
-        ? new AnalysisProbe(
-            new SsrfProbeEngine(ssrfFor(task.outbound), {
-              timeoutMs: task.outbound.fetchTimeoutMs,
-            }),
-          )
-        : undefined,
+      net: probePort ? new AnalysisProbe(new RemoteProbeEngine(probePort)) : undefined,
       onProgress: port
         ? (result, completed, total) => {
             // `postMessage` peut échouer si le client s'est déconnecté et que le
@@ -94,5 +65,6 @@ export default async function analyzeInWorker(task: AnalysisTask): Promise<Analy
     });
   } finally {
     port?.close();
+    probePort?.close();
   }
 }
