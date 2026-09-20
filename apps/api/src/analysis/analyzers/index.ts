@@ -1,5 +1,6 @@
 import type { BaseAnalyzer } from '../base.analyzer.js';
 import { AccessibilityAnalyzer } from './accessibility.analyzer.js';
+import { AnchorTextAnalyzer } from './anchor-text.analyzer.js';
 import { BrokenLinksAnalyzer } from './broken-links.analyzer.js';
 import { BoldAnalyzer } from './bold.analyzer.js';
 import { CanonicalAnalyzer } from './canonical.analyzer.js';
@@ -52,6 +53,7 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new RobotsMetaAnalyzer(),
     new SplitLinksAnalyzer(),
     new LinksAnalyzer(),
+    new AnchorTextAnalyzer(),
     new BrokenLinksAnalyzer(),
     new TrackingAnalyzer(),
     new StructuredDataAnalyzer(),
