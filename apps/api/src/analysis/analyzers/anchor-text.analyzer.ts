@@ -24,6 +24,7 @@ import { BaseAnalyzer } from '../base.analyzer.js';
 import type { EffectiveSettings } from '../effective-settings.js';
 import { locateFromText, truncateSource } from '../locate.js';
 import type { CheerioAPI } from 'cheerio';
+import { elementOf, firstElementOf, selfAndAncestors } from '../dom-walk.js';
 import type { DomElement, HtmlPage, Selection } from '../page.model.js';
 
 /**
@@ -560,7 +561,7 @@ function zoneSignalOf(element: DomElement): AnchorZone | null {
 }
 
 function zoneOf(node: Selection): AnchorZone {
-  const element = elementOf(node.get(0));
+  const element = firstElementOf(node);
   if (!element) return 'content';
 
   // Le menu l'emporte sur l'en-tête, qui l'emporte sur le pied de page, QUELLE
@@ -607,20 +608,6 @@ function isExcluded(element: unknown, excluded: ReadonlySet<unknown>): boolean {
     if (excluded.has(current)) return true;
   }
   return false;
-}
-
-/** Élément du document, quand c'en est un. */
-function elementOf(node: unknown): DomElement | null {
-  return node && typeof node === 'object' && 'attribs' in node ? (node as DomElement) : null;
-}
-
-/** L'élément puis ses ancêtres, du plus proche au plus lointain. */
-function* selfAndAncestors(element: DomElement): Generator<DomElement> {
-  let current: DomElement | null = element;
-  while (current) {
-    yield current;
-    current = elementOf(current.parent);
-  }
 }
 
 /**

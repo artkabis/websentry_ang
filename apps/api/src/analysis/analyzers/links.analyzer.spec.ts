@@ -123,6 +123,52 @@ describe('LinksAnalyzer', () => {
       expect(result.contentLinks).toEqual(['https://exemple.fr/article']);
     });
 
+    it.each([
+      ['balise nav', '<nav>', '</nav>'],
+      ['balise header', '<header>', '</header>'],
+      ['balise footer', '<footer>', '</footer>'],
+      ['rôle banner', '<div role="banner">', '</div>'],
+      ['rôle contentinfo', '<div role="contentinfo">', '</div>'],
+      ['classe dmNav', '<div class="dmNav">', '</div>'],
+      ['classe dmRespNav', '<div class="p_dmRespNav">', '</div>'],
+      ['classe dmHeader', '<div class="dmHeaderX">', '</div>'],
+      ['classe dmFooter', '<div class="dmFooterX">', '</div>'],
+      ['classe dmfooter minuscule', '<div class="x-dmfooter">', '</div>'],
+      ['classe hfcontainer', '<div class="p_hfcontainer">', '</div>'],
+      ['classe u_nav', '<div class="u_nav">', '</div>'],
+      ['classe u_header', '<div class="u_header">', '</div>'],
+      ['classe u_footer', '<div class="u_footer">', '</div>'],
+      ['classe slimNav', '<div class="slimNav">', '</div>'],
+      ['classe StickyNav', '<div class="StickyNav">', '</div>'],
+      ['identifiant hcontainer', '<div id="hcontainer">', '</div>'],
+      ['identifiant flex-header', '<div id="flex-header">', '</div>'],
+      ['data-ux, casse indifférente', '<div data-ux="MenuNAVbar">', '</div>'],
+      ['aria-label breadcrumb, casse indifférente', '<div aria-label="Fil BREADCRUMB">', '</div>'],
+    ])(
+      'ne compte pas comme contenu un lien dans un conteneur à %s',
+      async (_nom, ouvrant, fermant) => {
+        // Ces règles étaient un sélecteur de vingt clauses, recompilé pour chaque
+        // lien interne de la page ; elles se lisent désormais sur les attributs.
+        const result = await analyzer.analyze(
+          page(
+            `${ouvrant}<a href="/rubrique">Rubrique</a>${fermant}<main><a href="/article">Article</a></main>`,
+          ),
+          settings,
+        );
+
+        expect(result.contentLinks).toEqual(['https://exemple.fr/article']);
+      },
+    );
+
+    it('compte comme contenu un lien dont le conteneur ne porte aucun signal', async () => {
+      const result = await analyzer.analyze(
+        page('<div class="colonne"><a href="/rubrique">Rubrique</a></div>'),
+        settings,
+      );
+
+      expect(result.contentLinks).toEqual(['https://exemple.fr/rubrique']);
+    });
+
     it('écarte les liens de boutique', async () => {
       const result = await analyzer.analyze(
         page('<main><div class="ec-store"><a href="/produit">Produit</a></div></main>'),

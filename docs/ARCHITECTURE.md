@@ -293,6 +293,17 @@ appel direct.
 Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
 les critères l'annoncent en note d'information, hors décompte et hors barème.
 
+#### Un seul parcours du document
+
+`dom-walk.ts` porte ce que tous les critères faisaient chacun de leur côté :
+remonter les ancêtres d'un élément, lire ses classes, trouver la première image
+qu'il contient. Cheerio sait le faire — `parents`, `closest`, `is`, `find` —
+mais chacun de ces appels reparse et recompile son sélecteur, ce qui en faisait
+le poste le plus coûteux du moteur sur une page riche en liens. Les résultats
+sont mémorisés par élément, dans des tables faibles qui disparaissent avec la
+page : un conteneur de navigation est classé une fois, pas une fois par lien
+qu'il porte.
+
 #### Deux vocabulaires de zone, assumés
 
 `link-zone.ts` classe un lien pour `LINKS` et `BROKEN_LINKS` ; `ANCHOR_TEXT`
@@ -491,7 +502,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1646   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1682   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |

@@ -704,6 +704,12 @@ une table qui couvre chaque règle et les pièges documentés — dont le jeton
 `dmContent`, qui ne doit PAS attraper les `dmContentSlot` que l'éditeur place
 dans l'en-tête et le pied de page.
 
+**Portée** — La règle vaut pour tout le moteur, pas pour la seule lecture de
+zone : conteneurs de navigation du maillage, zones de la concordance d'ancres,
+sélecteurs d'exclusion d'un profil (appliqués une fois à la page plutôt que lien
+par lien), recherche d'image dans un lien. Le parcours commun vit dans
+`dom-walk.ts`.
+
 **Coût assumé** — Les règles ne sont plus lisibles d'un seul coup d'œil sous
 forme de sélecteur : ajouter une convention de classe demande de toucher un
 prédicat plutôt qu'une chaîne. Le test différentiel rend cette modification sûre,
