@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as cheerio from 'cheerio';
 import type { SitemapEntry, SitemapParseResponse } from '@websentry/shared';
-import { MAX_RESPONSE_BYTES, SsrfService } from '../security/ssrf.service.js';
+import { MAX_RESPONSE_BYTES, SsrfBlockedError, SsrfService } from '../security/ssrf.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
 
 /** Emplacements conventionnels d'un sitemap, dans l'ordre d'essai. */
@@ -147,6 +147,11 @@ export class SitemapService {
    * L'absence d'un sitemap est un cas NOMINAL — beaucoup de sites n'en ont
    * pas —, pas une erreur à propager : la faire remonter transformerait une
    * découverte infructueuse en échec de l'analyse.
+   *
+   * Un refus de la politique SSRF, lui, n'est PAS une absence de sitemap : le
+   * taire rendrait « aucune URL trouvée » pour une adresse interne, c'est-à-dire
+   * une réponse rassurante à une demande irrecevable. Il remonte donc, et
+   * l'appelant reçoit le refus.
    */
   private async fetchText(url: string): Promise<string | null> {
     try {
@@ -161,6 +166,7 @@ export class SitemapService {
         result.dispose();
       }
     } catch (err) {
+      if (err instanceof SsrfBlockedError) throw err;
       this.logger.debug(
         `Lecture impossible de ${url} : ${err instanceof Error ? err.message : 'cause inconnue'}`,
       );

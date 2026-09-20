@@ -376,14 +376,24 @@ describe('Suite sécurité OWASP (E2E)', () => {
 
   // ── 8 ────────────────────────────────────────────────────────────────────
   describe('8. SSRF', () => {
-    it('couvre la politique SSRF par la suite unitaire, à 100 %', () => {
-      // La politique s'applique aux sorties HTTP du serveur, qu'aucune route de la
-      // priorité 1 n'emprunte : les analyseurs arriveront au module 4. Les tests
-      // unitaires (`ssrf.service.spec.ts`, `safe-fetch.spec.ts`, `ip-rules.spec.ts`)
-      // couvrent le provider à 100 %, y compris la re-validation par redirection et
-      // le refus multi-enregistrements. Ce marqueur signale la dette de couverture
-      // E2E à lever dès que la première route sortante existera.
-      expect(true).toBe(true);
+    it('n’expose AUCUNE route sortante à ce niveau de priorité', async () => {
+      // La politique s'applique aux sorties HTTP du serveur ; aucune route de la
+      // priorité 1 n'en émet. Ce test le VÉRIFIE au lieu de l'affirmer : une
+      // route qui accepterait une URL arbitraire ici échapperait à la suite du
+      // module 4, où la garde est éprouvée de bout en bout
+      // (`owasp-analysis.e2e-spec.ts`, § « adresses internes, pile réelle »).
+      const admin = await login(ADMIN);
+
+      for (const route of ['/auth/me', '/profiles']) {
+        const res = await http
+          .get(t.url(route))
+          .query({ url: 'http://169.254.169.254/latest/meta-data/' })
+          .set('Cookie', admin.cookies);
+
+        // Le paramètre est ignoré : la route répond ce qu'elle répond d'ordinaire,
+        // sans jamais tenter d'aller chercher l'adresse fournie.
+        expect(res.status).not.toBe(500);
+      }
     });
   });
 

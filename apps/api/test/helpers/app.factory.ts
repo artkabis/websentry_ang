@@ -140,7 +140,29 @@ async function fastHash(password: string): Promise<string> {
   return `test:${createHash('sha256').update(password).digest('hex')}`;
 }
 
-export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
+/** Options de montage — voir `realPageFetcher`. */
+export interface TestAppOptions {
+  /**
+   * Monte la VRAIE récupération de page, donc la vraie politique SSRF.
+   *
+   * Par défaut, un double sert du HTML en mémoire : la suite teste les
+   * décisions de l'API sans jamais sortir sur le réseau. Mais ce double
+   * court-circuite la garde SSRF, qui n'était donc exercée par AUCUN test
+   * passant par HTTP.
+   *
+   * Avec cette option, seules des adresses refusées AVANT toute connexion
+   * doivent être visées — plages privées, boucle locale, protocoles
+   * interdits : la garde tranche sur l'adresse, sans ouvrir de socket. Viser
+   * un hôte public ferait sortir la suite sur Internet, ce qu'aucun test ne
+   * doit faire.
+   */
+  realPageFetcher?: boolean;
+}
+
+export async function createTestApp(
+  seed: SeedUser[] = [],
+  options: TestAppOptions = {},
+): Promise<TestApp> {
   const db = new FakeDb();
 
   const userRepo = {
@@ -647,7 +669,7 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     }),
   };
 
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  const builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DatabaseService)
     .useValue(databaseStub)
     .overrideProvider(UserRepository)
@@ -663,10 +685,13 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     .overrideProvider(ScanRepository)
     .useValue(scanRepo)
     .overrideProvider(ScanRetentionRepository)
-    .useValue(scanRetentionRepo)
-    .overrideProvider(PageFetcherService)
-    .useValue(pageFetcher)
-    .compile();
+    .useValue(scanRetentionRepo);
+
+  if (!options.realPageFetcher) {
+    builder.overrideProvider(PageFetcherService).useValue(pageFetcher);
+  }
+
+  const moduleRef = await builder.compile();
 
   const { FastifyAdapter } = await import('@nestjs/platform-fastify');
   const app = moduleRef.createNestApplication<NestFastifyApplication>(

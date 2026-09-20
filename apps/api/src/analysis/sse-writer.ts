@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SseAnalyzeEventSchema, type SseAnalyzeEvent } from '@websentry/shared';
-import { SsrfBlockedError } from '../security/ssrf.service.js';
+import { SSRF_PUBLIC_MESSAGE, SsrfBlockedError } from '../security/ssrf.service.js';
 
 /**
  * Émission d'événements Server-Sent Events.
@@ -94,12 +94,7 @@ export class SseWriter {
  * passerait inaperçue, le flux SSE échappant au filtre global.
  */
 export function publicMessageOf(err: unknown): string {
-  if (err instanceof SsrfBlockedError) {
-    // Le motif SSRF est dit franchement : l'utilisateur doit comprendre que
-    // l'URL est refusée par politique, non que le site est en panne. Le message
-    // du service ne cite ni IP résolue ni plage bloquée.
-    return 'Cette URL ne peut pas être analysée : elle cible une adresse non publique.';
-  }
+  if (err instanceof SsrfBlockedError) return SSRF_PUBLIC_MESSAGE;
   if (err instanceof Error && err.name === 'TimeoutError') {
     return 'Le site analysé n’a pas répondu dans le délai imparti.';
   }

@@ -742,3 +742,35 @@ l'échelle 0–5 du rapport.
 l'analyseur : sur un critère au barème très resserré, un déplacement de deux
 points peut saturer la note à 5 ou à 0. C'est un arrondi assumé, et il reste
 très préférable à la perte complète du barème.
+
+---
+
+## 30. Une URL refusée par la politique SSRF est une demande irrecevable, pas une panne
+
+**Décision** — Un refus de la garde SSRF rend **422 Unprocessable Entity** et le
+motif en clair : « cette URL ne peut pas être analysée : elle cible une adresse
+non publique ». La phrase vit à côté de l'erreur, et les quatre chemins — page,
+lot, flux, sitemap — l'emploient telle quelle. La lecture d'un sitemap ne
+répond plus « aucune URL trouvée » à une adresse interne : le refus remonte.
+
+**Raison** — Le refus sortait en **500**, avec « une erreur interne est
+survenue ». Deux dégâts : l'appelant croyait à une avarie passagère et
+réessayait, et chaque refus s'inscrivait au journal des incidents serveur, où
+il masquait les vraies pannes. Le flux SSE, lui, disait déjà le motif
+franchement — la même cause s'expliquait donc de deux façons selon la route.
+
+Ces défauts vivaient derrière un angle mort de la couverture : la suite E2E
+remplaçait la récupération de page par un double, si bien que la garde SSRF
+n'était éprouvée par AUCUN test passant par HTTP. Seul le refus de protocole
+l'était, et il tient au schéma, avant toute connexion.
+
+**Aucune régression** — La politique n'est ni assouplie ni contournée : ce sont
+le statut et le libellé qui changent. Le message ne cite toujours ni l'adresse
+résolue ni la plage bloquée — les connaître aiderait à cartographier le réseau
+interne, et un test le vérifie.
+
+**Coût assumé** — Les suites E2E peuvent désormais monter la VRAIE récupération
+de page (`realPageFetcher`). C'est une porte vers un test qui sortirait sur
+Internet : elle est réservée aux adresses refusées avant toute connexion, et
+l'option le dit à l'endroit où on la lit. Un test qui viserait un hôte public
+ferait sortir la suite — la contrainte est documentée, pas mécanique.

@@ -9,6 +9,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { AppConfigService } from '../../config/app-config.service.js';
+import { SSRF_PUBLIC_MESSAGE, SsrfBlockedError } from '../../security/ssrf.service.js';
 
 /**
  * Filtre d'exception global — forme d'erreur unique pour toute l'API.
@@ -93,6 +94,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error: typeof body.error === 'string' ? body.error : this.labelFor(status),
         message,
         extra: body,
+      };
+    }
+
+    // URL refusée par la politique SSRF : c'est la DEMANDE qui est irrecevable,
+    // pas le serveur qui est en panne. La traiter en 500 ferait deux dégâts :
+    // l'appelant croirait à une avarie passagère et réessaierait, et chaque
+    // refus polluerait le journal des incidents serveur, où il masquerait les
+    // vraies pannes. Le motif est dit, sans jamais citer l'adresse résolue.
+    if (exception instanceof SsrfBlockedError) {
+      return {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+        error: 'Unprocessable Entity',
+        message: SSRF_PUBLIC_MESSAGE,
       };
     }
 

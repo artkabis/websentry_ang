@@ -102,6 +102,116 @@ describe('Suite sécurité OWASP — module 4 (E2E)', () => {
     });
   });
 
+  /**
+   * Ces cas montent la VRAIE pile : la garde SSRF, et non le double qui sert du
+   * HTML en mémoire. C'est la seule façon d'éprouver par HTTP ce que la
+   * politique décide — jusqu'ici, seul le refus de protocole était couvert de
+   * bout en bout, et il tient au schéma, avant toute connexion.
+   *
+   * Toutes les adresses visées sont refusées AVANT d'ouvrir un socket : aucune
+   * de ces requêtes ne sort de la machine.
+   */
+  describe('8. SSRF — adresses internes, pile réelle', () => {
+    let reel: TestApp;
+    let reelHttp: ReturnType<typeof request>;
+
+    beforeEach(async () => {
+      reel = await createTestApp([ADMIN], { realPageFetcher: true });
+      reelHttp = request(reel.app.getHttpServer());
+    });
+
+    afterEach(async () => {
+      await reel.close();
+    });
+
+    async function adminSession() {
+      const res = await reelHttp
+        .post(reel.url('/auth/login'))
+        .send({ username: ADMIN.username, password: ADMIN.password })
+        .expect(200);
+      const cookies = res.headers['set-cookie'] as unknown as string[];
+      return { cookies, csrf: cookieValue(cookies, COOKIES.CSRF)! };
+    }
+
+    function postReel(path: string, auth: { cookies: string[]; csrf: string }) {
+      return reelHttp
+        .post(reel.url(path))
+        .set('Cookie', auth.cookies)
+        .set('X-CSRF-Token', auth.csrf);
+    }
+
+    const internes = [
+      ['http://127.0.0.1/', 'boucle locale'],
+      ['http://10.0.0.1/', 'plage privée A'],
+      ['http://192.168.1.1/', 'plage privée C'],
+      ['http://169.254.169.254/latest/meta-data/', 'métadonnées d’instance'],
+      ['http://[::1]/', 'boucle locale IPv6'],
+      ['http://0.0.0.0/', 'adresse indéterminée'],
+      ['http://2130706433/', 'boucle locale en décimal'],
+      ['http://0x7f000001/', 'boucle locale en hexadécimal'],
+      ['http://localhost/', 'nom résolvant en boucle locale'],
+    ] as const;
+
+    it.each(internes)('REFUSE %s (%s)', async (url, _pourquoi) => {
+      const admin = await adminSession();
+
+      const res = await postReel('/analyze', admin).send({ url }).expect(422);
+
+      expect(res.body.message).toContain('adresse non publique');
+    });
+
+    it('NE TRAITE PAS un refus comme une panne du serveur', async () => {
+      // En 500, l'appelant croit à une avarie et réessaie, et chaque refus
+      // pollue le journal des incidents où il masque les vraies pannes.
+      const admin = await adminSession();
+
+      const res = await postReel('/analyze', admin).send({ url: 'http://127.0.0.1/' });
+
+      expect(res.status).toBe(422);
+      expect(res.body.message).not.toContain('interne');
+    });
+
+    it('ne divulgue NI l’adresse résolue NI la plage bloquée', async () => {
+      // Les connaître aiderait à cartographier le réseau interne.
+      const admin = await adminSession();
+
+      const res = await postReel('/analyze', admin).send({ url: 'http://localhost/' });
+
+      const corps = JSON.stringify(res.body);
+      expect(corps).not.toContain('127.0.0.1');
+      expect(corps).not.toMatch(/\b10\.|\b192\.168\./);
+    });
+
+    it('refuse aussi dans un LOT, sans faire échouer la requête entière', async () => {
+      // Un lot rend un verdict par URL : l'URL refusée est marquée en échec,
+      // les autres restent analysables.
+      const admin = await adminSession();
+
+      const res = await postReel('/analyze/batch', admin)
+        .send({ urls: ['http://127.0.0.1/'] })
+        .expect(200);
+
+      expect(res.body.failed).toBe(1);
+      expect(res.body.results[0].error).toContain('adresse non publique');
+    });
+
+    it('refuse sur le FLUX, en le disant dans le flux', async () => {
+      const admin = await adminSession();
+
+      const res = await postReel('/analyze/stream', admin).send({ url: 'http://10.0.0.1/' });
+
+      expect(res.text).toContain('adresse non publique');
+    });
+
+    it('refuse une lecture de sitemap vers une adresse interne', async () => {
+      const admin = await adminSession();
+
+      await postReel('/sitemap/parse', admin)
+        .send({ url: 'http://169.254.169.254/sitemap.xml' })
+        .expect(422);
+    });
+  });
+
   // ── 5 ──────────────────────────────────────────────────────────────────────
 
   describe('5. Contrôle d’accès défaillant', () => {

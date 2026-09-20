@@ -512,7 +512,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1696   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 230    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
@@ -555,10 +555,6 @@ Dettes identifiées sur le périmètre déjà livré :
 - **Édition des listes longues** — l'éditeur couvre les seuils numériques et les
   critères actifs ; les mots exclus, domaines exclus, règles par page et
   pondérations sont CONSERVÉS mais pas encore éditables dans l'interface.
-- **Couverture E2E du SSRF** — la politique est couverte à 100 % en unitaire,
-  mais aucune route de la priorité 1 n'émet de requête sortante. À lever dès la
-  première route sortante (module 4). Un marqueur explicite le rappelle dans la
-  suite OWASP, §8.
 - **Journal d'audit append-only en base** — l'absence de méthode `UPDATE`/`DELETE`
   est garantie côté applicatif et testée ; la verrouiller aussi par des droits
   MariaDB (`GRANT INSERT, SELECT` uniquement) serait plus robuste.

@@ -11,6 +11,7 @@ import {
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { ScansService } from '../scans/scans.service.js';
 import { AppConfigService } from '../config/app-config.service.js';
+import { SSRF_PUBLIC_MESSAGE, SsrfBlockedError } from '../security/ssrf.service.js';
 import { AnalysisRunnerService } from './analysis-runner.service.js';
 import { PageFetcherService } from './page-fetcher.service.js';
 import type { EffectiveSettings } from './effective-settings.js';
@@ -160,7 +161,14 @@ export class AnalysisService {
       const report = await this.runner.run(page, settings, randomUUID());
       return { entry: { url, ok: true, report, error: null }, report, gamme };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Analyse impossible';
+      // Le refus SSRF est dit avec les MÊMES mots que sur les autres routes :
+      // une même cause ne doit pas s'expliquer autrement selon le chemin.
+      const message =
+        err instanceof SsrfBlockedError
+          ? SSRF_PUBLIC_MESSAGE
+          : err instanceof Error
+            ? err.message
+            : 'Analyse impossible';
       this.logger.warn(`Analyse en échec pour ${url} : ${message}`);
       return {
         entry: { url, ok: false, report: null, error: message.slice(0, 500) },

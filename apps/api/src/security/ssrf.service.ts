@@ -73,6 +73,21 @@ export class SsrfBlockedError extends Error {
   }
 }
 
+/**
+ * Ce qu'un refus SSRF dit à l'appelant.
+ *
+ * Le motif est annoncé FRANCHEMENT : l'utilisateur doit comprendre que son URL
+ * est refusée par politique, non que le site visé est en panne. Le message ne
+ * cite ni l'adresse résolue ni la plage bloquée — les connaître aiderait à
+ * cartographier le réseau interne.
+ *
+ * Il vit ici, à côté de l'erreur, parce que TOUS les chemins doivent le dire de
+ * la même façon : le flux SSE le disait, la réponse REST parlait d'« erreur
+ * interne ».
+ */
+export const SSRF_PUBLIC_MESSAGE =
+  'Cette URL ne peut pas être analysée : elle cible une adresse non publique.';
+
 interface ValidatedTarget {
   parsed: URL;
   /** Adresses publiques validées, ou null si l'hôte est une IP littérale déjà vérifiée. */
