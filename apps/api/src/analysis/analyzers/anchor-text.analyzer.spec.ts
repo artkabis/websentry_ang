@@ -164,6 +164,128 @@ describe('AnchorTextAnalyzer', () => {
       expect(result.items[0]?.key).toBe('ANCHOR_TEXT.no_links');
     });
 
+    describe('reconnaissance des zones', () => {
+      /** Lien de contenu, placé dans le conteneur à éprouver. */
+      const inside = (container: string, closing: string) =>
+        makePage(
+          `<html><body>${container}<a href="/nos-services-plomberie">Nos services de plomberie</a>${closing}</body></html>`,
+        );
+
+      it.each([
+        ['balise nav', '<nav>', '</nav>'],
+        ['rôle navigation', '<div role="navigation">', '</div>'],
+        ['classe nav', '<div class="nav">', '</div>'],
+        ['classe menu', '<div class="menu">', '</div>'],
+        ['classe dmNav', '<div class="dmNav">', '</div>'],
+        ['type d’élément menu', '<div data-element-type="menu">', '</div>'],
+        ['balise header', '<header>', '</header>'],
+        ['rôle banner', '<div role="banner">', '</div>'],
+        ['classe header', '<div class="header">', '</div>'],
+        ['classe dmHeaderContainer', '<div class="dmHeaderContainer">', '</div>'],
+        ['classe flex_hfcontainer', '<div class="flex_hfcontainer">', '</div>'],
+        ['balise footer', '<footer>', '</footer>'],
+        ['rôle contentinfo', '<div role="contentinfo">', '</div>'],
+        ['classe footer', '<div class="footer">', '</div>'],
+        ['classe dmFooterContainer', '<div class="dmFooterContainer">', '</div>'],
+      ])('ignore un lien placé dans un conteneur à %s', async (_nom, ouvrant, fermant) => {
+        const result = await analyzer.analyze(inside(ouvrant, fermant), settings);
+
+        expect(result.items[0]?.key).toBe('ANCHOR_TEXT.no_links');
+      });
+
+      it('juge un lien dont le conteneur ne porte aucun signal', async () => {
+        const result = await analyzer.analyze(
+          inside('<div class="quelconque">', '</div>'),
+          settings,
+        );
+
+        expect(levelOf(result.items)).toBe('ANCHOR_TEXT.concordant');
+      });
+
+      it('ne prend PAS une classe approchante pour un signal', async () => {
+        // `.nav` est un jeton de classe entier : `navigateur` n'en est pas un.
+        const result = await analyzer.analyze(
+          inside('<div class="navigateur">', '</div>'),
+          settings,
+        );
+
+        expect(levelOf(result.items)).toBe('ANCHOR_TEXT.concordant');
+      });
+
+      it('fait primer le MENU même quand le pied de page est PLUS PROCHE', async () => {
+        // Les trois familles étaient éprouvées l'une après l'autre sur toute la
+        // chaîne d'ascendance : le menu l'emporte donc sur un signal de pied de
+        // page plus proche du lien. C'est le piège de la traduction, un
+        // parcours unique rendrait sinon le signal le plus proche.
+        const piedDansMenu = makePage(
+          '<html><body><div class="dmNav"><div class="footer"><a href="/nos-services-plomberie">Nos services de plomberie</a></div></div></body></html>',
+        );
+
+        const ignoreMenu = await analyzer.analyze(
+          piedDansMenu,
+          makeSettings({ anchorText: { ignoreZones: ['nav'] } }),
+        );
+        const ignorePied = await analyzer.analyze(
+          piedDansMenu,
+          makeSettings({ anchorText: { ignoreZones: ['footer'] } }),
+        );
+
+        expect(ignoreMenu.items[0]?.key).toBe('ANCHOR_TEXT.no_links');
+        expect(levelOf(ignorePied.items)).toBe('ANCHOR_TEXT.concordant');
+      });
+
+      it('fait primer l’EN-TÊTE sur un pied de page plus proche', async () => {
+        const piedDansEntete = makePage(
+          '<html><body><header><div class="footer"><a href="/nos-services-plomberie">Nos services de plomberie</a></div></header></body></html>',
+        );
+
+        const ignoreEntete = await analyzer.analyze(
+          piedDansEntete,
+          makeSettings({ anchorText: { ignoreZones: ['header'] } }),
+        );
+        const ignorePied = await analyzer.analyze(
+          piedDansEntete,
+          makeSettings({ anchorText: { ignoreZones: ['footer'] } }),
+        );
+
+        expect(ignoreEntete.items[0]?.key).toBe('ANCHOR_TEXT.no_links');
+        expect(levelOf(ignorePied.items)).toBe('ANCHOR_TEXT.concordant');
+      });
+
+      it('fait primer le MENU sur le pied de page, quelle que soit la distance', async () => {
+        // Les trois familles étaient testées l'une après l'autre sur toute la
+        // chaîne d'ascendance : le menu l'emporte donc même s'il est plus
+        // lointain que le pied de page.
+        const dansPiedDeMenu = makePage(
+          '<html><body><footer><nav><a href="/nos-services-plomberie">Nos services de plomberie</a></nav></footer></body></html>',
+        );
+
+        const ignoreMenu = await analyzer.analyze(
+          dansPiedDeMenu,
+          makeSettings({ anchorText: { ignoreZones: ['nav'] } }),
+        );
+        const ignorePied = await analyzer.analyze(
+          dansPiedDeMenu,
+          makeSettings({ anchorText: { ignoreZones: ['footer'] } }),
+        );
+
+        expect(ignoreMenu.items[0]?.key).toBe('ANCHOR_TEXT.no_links');
+        expect(levelOf(ignorePied.items)).toBe('ANCHOR_TEXT.concordant');
+      });
+    });
+
+    it('exclut aussi un lien dont un ANCÊTRE est visé par le sélecteur', async () => {
+      // Le sélecteur du profil désigne un bloc entier, pas seulement le lien.
+      const result = await analyzer.analyze(
+        page(
+          '<div class="bandeau"><span><a href="/recrutement">Nos chantiers de toiture</a></span></div>',
+        ),
+        makeSettings({ anchorText: { excludeSelectors: ['.bandeau'] } }),
+      );
+
+      expect(result.items[0]?.key).toBe('ANCHOR_TEXT.no_links');
+    });
+
     it('honore un sélecteur d’exclusion du profil', async () => {
       const result = await analyzer.analyze(
         page('<a href="/recrutement-apprentissage" class="logo">Nos chantiers de toiture</a>'),

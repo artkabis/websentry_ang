@@ -293,6 +293,15 @@ appel direct.
 Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
 les critères l'annoncent en note d'information, hors décompte et hors barème.
 
+#### Deux vocabulaires de zone, assumés
+
+`link-zone.ts` classe un lien pour `LINKS` et `BROKEN_LINKS` ; `ANCHOR_TEXT`
+garde le sien, qui reconnaît moins de conventions et les ordonne autrement — le
+menu y prime sur le pied de page, alors que l'autre tranche d'abord le pied de
+page. Les unifier changerait les zones ignorées, donc des verdicts : c'est un
+arbitrage à instruire, pas un nettoyage à glisser dans une optimisation. Les
+deux lectures se font sur les attributs, sans sélecteur CSS.
+
 #### Le contraste sans navigateur
 
 `CONTRAST_V2` ne peut pas se lire dans le HTML : il faut résoudre la cascade.
@@ -482,7 +491,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1625   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1646   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
