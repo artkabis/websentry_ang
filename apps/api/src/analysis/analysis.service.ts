@@ -84,6 +84,11 @@ export class AnalysisService {
    * la sortie réseau et déclencherait la limitation de débit des sites
    * analysés — qui répondraient alors 429, et le rapport conclurait à tort que
    * le site est en panne.
+   *
+   * Les URL répétées ne sont analysées QU'UNE FOIS : un sitemap qui cite deux
+   * fois la même page ne décrit qu'une page, et la re-télécharger pour
+   * réappliquer vingt-neuf critères au même contenu ne produirait qu'un second
+   * exemplaire du même rapport.
    */
   async analyzeBatch(
     urls: readonly string[],
@@ -98,7 +103,8 @@ export class AnalysisService {
     let gamme: string | null = null;
     let completed = 0;
 
-    const queue = [...urls];
+    const distinct = [...new Set(urls)];
+    const queue = [...distinct];
     const workers = Array.from(
       { length: Math.min(this.config.analysis.batchConcurrency, queue.length) },
       async () => {
@@ -113,7 +119,7 @@ export class AnalysisService {
           }
           results.push(item.entry);
           completed += 1;
-          onPage?.(item.entry, completed, urls.length);
+          onPage?.(item.entry, completed, distinct.length);
         }
       },
     );
@@ -124,14 +130,16 @@ export class AnalysisService {
     const succeeded = results.filter(item => item.ok).length;
     return {
       batchId,
-      total: urls.length,
+      // Le total porte sur les pages RÉELLEMENT distinctes : annoncer les
+      // doublons gonflerait le compte d'un travail qui n'a pas eu lieu.
+      total: distinct.length,
       succeeded,
       failed: results.length - succeeded,
       durationMs: Date.now() - startedAt,
       // L'ordre d'arrivée dépend de la concurrence : on rétablit celui demandé,
       // sans quoi deux lancements identiques rendraient deux rapports
       // différemment ordonnés.
-      results: orderByRequest(results, urls),
+      results: orderByRequest(results, distinct),
     };
   }
 

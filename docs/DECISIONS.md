@@ -662,6 +662,12 @@ là où elle était reconstruite dans chaque thread. Un échec de canal rend un
 résultat « sortie réseau indisponible », non facturé et non confondu avec un
 quota atteint.
 
+**Corollaire** — La même règle vaut un cran plus haut : un lot n'analyse
+qu'une fois une URL répétée. Un sitemap qui cite deux fois la même page ne
+décrit qu'une page, et le total annoncé porte donc sur les pages réellement
+distinctes — gonfler le compte d'un travail qui n'a pas eu lieu serait un
+mensonge par arrondi.
+
 **Coût assumé** — Trois coûts. Les requêtes sortantes reviennent sur la **boucle
 d'événements principale** : c'est de l'attente réseau et non du calcul — ce que
 le thread isole, le parse du DOM, y reste — mais la lecture d'un corps borné

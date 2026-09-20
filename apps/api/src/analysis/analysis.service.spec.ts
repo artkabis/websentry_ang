@@ -180,6 +180,20 @@ describe('AnalysisService', () => {
       expect(result.failed).toBe(0);
     });
 
+    it('n’analyse QU’UNE FOIS une URL répétée', async () => {
+      // Un sitemap qui cite deux fois la même page ne décrit qu'une page : la
+      // retélécharger pour lui réappliquer vingt-neuf critères ne produirait
+      // qu'un second exemplaire du même rapport.
+      const result = await t.service.analyzeBatch(
+        ['https://a.fr/', 'https://b.fr/', 'https://a.fr/'],
+        ACTOR,
+      );
+
+      expect(t.fetcher.fetchPage).toHaveBeenCalledTimes(2);
+      expect(result.total).toBe(2);
+      expect(result.results).toHaveLength(2);
+    });
+
     it('RÉTABLIT l’ordre demandé', async () => {
       // Les résultats arrivent dans l'ordre d'achèvement : sans remise en
       // ordre, deux lancements identiques rendraient deux rapports
