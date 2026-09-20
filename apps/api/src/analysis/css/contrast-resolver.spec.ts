@@ -223,56 +223,104 @@ describe('fonds en dégradé', () => {
 
 describe('audit d’une page', () => {
   it('rend un résultat par élément textuel', async () => {
-    const results = await auditPageContrast(
+    const { elements } = await auditPageContrast(
       page('p { color: #000; background: #fff; }', '<p>Un</p><p>Deux</p>'),
     );
 
-    expect(results).toHaveLength(2);
-    expect(results[0]?.tag).toBe('p');
+    expect(elements).toHaveLength(2);
+    expect(elements[0]?.tag).toBe('p');
   });
 
   it('IGNORE les éléments sans texte', async () => {
-    const results = await auditPageContrast(page('', '<p></p><div></div><p>Du texte</p>'));
+    const { elements } = await auditPageContrast(page('', '<p></p><div></div><p>Du texte</p>'));
 
-    expect(results).toHaveLength(1);
+    expect(elements).toHaveLength(1);
   });
 
   it('expose l’identifiant et les classes pour retrouver l’élément', async () => {
-    const results = await auditPageContrast(page('', '<p id="intro" class="lead grand">Texte</p>'));
+    const { elements } = await auditPageContrast(
+      page('', '<p id="intro" class="lead grand">Texte</p>'),
+    );
 
-    expect(results[0]?.id).toBe('intro');
-    expect(results[0]?.classes).toContain('lead');
+    expect(elements[0]?.id).toBe('intro');
+    expect(elements[0]?.classes).toContain('lead');
   });
 
-  it('BORNE le nombre d’éléments audités', async () => {
+  it('BORNE le nombre d’éléments audités, et le DIT', async () => {
     // Une page de documentation peut porter des milliers de paragraphes :
-    // sans plafond, l'analyse d'une seule page bloquerait le worker.
+    // sans plafond, l'analyse d'une seule page bloquerait le worker. Mais un
+    // plafond tu laisserait conclure « conforme » sur ce qui n'a pas été vu.
     const body = Array.from({ length: 30 }, (_, i) => `<p>Paragraphe ${i}</p>`).join('');
-    const results = await auditPageContrast(page('', body), { maxElements: 5 });
+    const result = await auditPageContrast(page('', body), { maxElements: 5 });
 
-    expect(results).toHaveLength(5);
+    expect(result.elements).toHaveLength(5);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('ne se déclare pas tronqué quand il a tout vu', async () => {
+    const result = await auditPageContrast(page('', '<p>Un</p><p>Deux</p>'), { maxElements: 5 });
+
+    expect(result.truncated).toBe(false);
   });
 
   it('honore un sélecteur d’audit fourni', async () => {
-    const results = await auditPageContrast(page('', '<p>Un</p><h1>Titre</h1>'), {
+    const { elements } = await auditPageContrast(page('', '<p>Un</p><h1>Titre</h1>'), {
       selector: 'h1',
     });
 
-    expect(results).toHaveLength(1);
-    expect(results[0]?.tag).toBe('h1');
+    expect(elements).toHaveLength(1);
+    expect(elements[0]?.tag).toBe('h1');
   });
 
-  it('bascule sur fond NOIR quand la page déclare un thème sombre', async () => {
-    // Sans cette détection, un texte clair sur thème sombre serait mesuré
-    // contre du blanc et rapporté illisible alors qu'il ne l'est pas.
-    const dark = await auditPageContrast(
-      '<html><head><meta name="color-scheme" content="dark"><style>p{color:#eee}</style></head><body><p>Texte clair</p></body></html>',
-    );
+  it('accepte un document DÉJÀ analysé', async () => {
+    // L'analyseur passe la page parsée par l'orchestrateur : un second
+    // `cheerio.load` est le poste le plus cher du critère sur une grande page.
+    const $ = buildCSSOM(page('p { color: #000; background: #fff; }', '<p>Texte</p>')).$;
 
-    expect(dark[0]?.AA).toBe(true);
+    const { elements } = await auditPageContrast($);
+
+    expect(elements).toHaveLength(1);
+    expect(elements[0]?.AA).toBe(true);
+  });
+
+  describe('thème sombre', () => {
+    it('bascule sur fond NOIR quand la page le déclare', async () => {
+      // Sans cette détection, un texte clair sur thème sombre serait mesuré
+      // contre du blanc et rapporté illisible alors qu'il ne l'est pas.
+      const { elements } = await auditPageContrast(
+        '<html><head><meta name="color-scheme" content="dark"><style>p{color:#eee}</style></head><body><p>Texte clair</p></body></html>',
+      );
+
+      expect(elements[0]?.AA).toBe(true);
+    });
+
+    it('le lit aussi dans une feuille embarquée', async () => {
+      const { elements } = await auditPageContrast(
+        page(':root { color-scheme: dark; } p { color: #eee; }', '<p>Texte clair</p>'),
+      );
+
+      expect(elements[0]?.AA).toBe(true);
+    });
+
+    it('NE LE LIT PAS dans le texte de la page', async () => {
+      // Chercher « color-scheme : dark » dans la source entière trouve aussi
+      // ces mots dans un article qui PARLE de thèmes sombres : la page
+      // basculerait alors sur fond noir sans rien avoir déclaré.
+      const { elements } = await auditPageContrast(
+        page(
+          'p { color: #eee; }',
+          '<p>Pour activer le mode sombre, écrivez color-scheme: dark</p>',
+        ),
+      );
+
+      expect(elements[0]?.AA).toBe(false);
+    });
   });
 
   it('rend une liste vide pour une page sans texte', async () => {
-    expect(await auditPageContrast('<html><body><img src="/a.png"></body></html>')).toEqual([]);
+    const result = await auditPageContrast('<html><body><img src="/a.png"></body></html>');
+
+    expect(result.elements).toEqual([]);
+    expect(result.truncated).toBe(false);
   });
 });

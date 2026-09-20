@@ -46,6 +46,22 @@ const CONTENT_SELECTOR = 'main, [role="main"], .dmContent, #dmContentContainer';
 const LEGAL_TITLE_PATTERN =
   /mentions?\s*l[ée]gal|l[ée]gales|confidentialit|vie\s*priv|privacy|\brgpd\b|\bgdpr\b|\bcgv\b|\bcgu\b|cookies?|impressum/i;
 
+/**
+ * Mémoire par élément du document.
+ *
+ * La zone d'un ancêtre ne dépend pas du lien qui le traverse, et les liens
+ * d'une page partagent massivement leurs ancêtres : le conteneur de navigation
+ * est l'ancêtre des quarante liens du menu. Sans mémoire, il est réinterrogé
+ * quarante fois, et chaque interrogation coûte huit sélecteurs d'attributs —
+ * puis tout recommence pour le critère suivant, qui repart du même DOM.
+ *
+ * Les clés sont les nœuds du document analysé et les tables sont FAIBLES :
+ * elles disparaissent avec lui, sans rien à purger.
+ */
+const zoneByElement = new WeakMap<object, LinkZone | null>();
+const linkZoneByElement = new WeakMap<object, LinkZone>();
+const footerByElement = new WeakMap<object, boolean>();
+
 /** Libellé court d'une zone, pour l'affichage. */
 export const ZONE_LABEL: Record<LinkZone, string> = {
   nav: 'menu',
@@ -68,15 +84,39 @@ export const ZONE_LABEL: Record<LinkZone, string> = {
  * page.
  */
 export function detectLinkZone(node: Selection): LinkZone {
+  const element = node.get(0);
+  if (!element) return computeLinkZone(node);
+
+  const known = linkZoneByElement.get(element);
+  if (known) return known;
+
+  const zone = computeLinkZone(node);
+  linkZoneByElement.set(element, zone);
+  return zone;
+}
+
+function computeLinkZone(node: Selection): LinkZone {
   const parents = node.parents();
   for (let index = 0; index < parents.length; index += 1) {
-    const zone = zoneOf(parents.eq(index));
+    const zone = zoneOf(parents.eq(index), parents.get(index));
     if (zone) return zone;
   }
   return node.is(CTA_SELECTOR) ? 'cta' : 'content';
 }
 
-function zoneOf(node: Selection): LinkZone | null {
+function zoneOf(node: Selection, element: object | undefined): LinkZone | null {
+  if (!element) return classify(node);
+
+  const known = zoneByElement.get(element);
+  // `undefined` = jamais classé ; `null` = classé « aucun signal ».
+  if (known !== undefined) return known;
+
+  const zone = classify(node);
+  zoneByElement.set(element, zone);
+  return zone;
+}
+
+function classify(node: Selection): LinkZone | null {
   if (node.is(SHOP_SELECTOR)) return 'shop';
   if (node.is(FOOTER_SELECTOR)) return 'footer';
   if (node.is(NAV_SELECTOR)) return 'nav';
@@ -96,7 +136,15 @@ function zoneOf(node: Selection): LinkZone | null {
  * qui masque le conteneur de pied de page plus lointain.
  */
 export function isInFooterZone(node: Selection): boolean {
-  return node.closest(FOOTER_SELECTOR).length > 0;
+  const element = node.get(0);
+  if (!element) return node.closest(FOOTER_SELECTOR).length > 0;
+
+  const known = footerByElement.get(element);
+  if (known !== undefined) return known;
+
+  const inFooter = node.closest(FOOTER_SELECTOR).length > 0;
+  footerByElement.set(element, inFooter);
+  return inFooter;
 }
 
 /** Le lien est-il dans un conteneur dont le `data-title` annonce un bloc légal ? */

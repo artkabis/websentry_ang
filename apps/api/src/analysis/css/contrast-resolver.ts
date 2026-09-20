@@ -5,6 +5,7 @@
  * calculé avec héritage, cascade, et custom properties résolues.
  */
 
+import type { CheerioAPI } from 'cheerio';
 import { buildCSSOM, fetchExternalCss } from './micro-cssom.js';
 import type { CSSOMInstance } from './micro-cssom.js';
 import {
@@ -87,6 +88,18 @@ export interface AuditPageOptions {
    * Guard performance sur les pages très longues (e-commerce, doc…).
    */
   maxElements?: number;
+}
+
+/** Ce que l'audit d'une page rend : ses éléments, et s'il s'est arrêté avant la fin. */
+export interface AuditPageResult {
+  elements: AuditElementResult[];
+  /**
+   * Vrai quand le plafond d'éléments a été atteint.
+   *
+   * Sans cette information, un rapport tairait qu'il n'a vu qu'une partie de la
+   * page — et conclurait « conforme » sur ce qu'il n'a pas regardé.
+   */
+  truncated: boolean;
 }
 
 export interface ResolveBackgroundOptions {
@@ -398,43 +411,48 @@ export function evaluateElementContrast(
 const DEFAULT_SELECTOR = 'p,a,span,li,h1,h2,h3,h4,h5,h6,button,label,td,th';
 
 /**
- * Analyse une page complète et renvoie un rapport de contraste par élément texte.
+ * Analyse une page complète et rend un résultat de contraste par élément texte.
  *
- * @param html       HTML brut de la page
+ * `source` accepte un document déjà analysé : l'analyseur passe la page parsée
+ * par l'orchestrateur plutôt que son HTML, ce qui évite un second parse complet.
+ *
  * @param opts.fetchExternal  Défaut : false — ne pas appeler d'URLs externes (SSRF)
  */
 export async function auditPageContrast(
-  html: string,
+  source: string | CheerioAPI,
   opts: AuditPageOptions = {},
-): Promise<AuditElementResult[]> {
+): Promise<AuditPageResult> {
   const { baseUrl, fetchExternal = false, selector = DEFAULT_SELECTOR, maxElements = 400 } = opts;
 
-  // Axe 6 : détection color-scheme:dark → fond de page noir par défaut.
-  // Couvre <meta name="color-scheme" content="dark"> et color-scheme:dark en CSS.
-  const hasDarkScheme =
-    /<meta[^>]+name=["']color-scheme["'][^>]+content=["'][^"']*dark/i.test(html) ||
-    /<meta[^>]+content=["'][^"']*dark[^"']*["'][^>]+name=["']color-scheme["']/i.test(html) ||
-    /color-scheme\s*:\s*(?:[^;{]*\s)?dark\b/i.test(html);
-  const defaultBg: RgbaColor = hasDarkScheme
+  const externalCss = fetchExternal ? await fetchExternalCss(source, { baseUrl }) : {};
+
+  const cssom = buildCSSOM(source, { externalCss });
+
+  // Axe 6 : un thème sombre déclaré bascule le fond par défaut sur le noir,
+  // sans quoi un texte clair parfaitement lisible serait rapporté illisible.
+  // La détection se fait sur le DOM et non sur le HTML brut : chercher
+  // « color-scheme : dark » dans la source entière trouverait aussi ces mots
+  // dans le TEXTE d'une page qui parle de thèmes sombres.
+  const defaultBg: RgbaColor = hasDarkScheme(cssom.$)
     ? { r: 0, g: 0, b: 0, a: 1 }
     : { r: 255, g: 255, b: 255, a: 1 };
-
-  const externalCss = fetchExternal ? await fetchExternalCss(html, { baseUrl }) : {};
-
-  const cssom = buildCSSOM(html, { externalCss });
 
   // Cache des fonds effectifs partagé sur tout l'audit : les éléments frères
   // partagent leur chaîne d'ascendance, dont la résolution n'est faite qu'une fois.
   const bgCache: BgCache = new Map();
 
   const results: AuditElementResult[] = [];
+  let truncated = false;
 
   // Cheerio lit `false` comme un « casser la boucle » et toute autre valeur
   // comme un « passer au suivant » : le rappel rend donc TOUJOURS un booléen,
   // pour que l'intention de chaque sortie se lise sur la ligne même.
   cssom.$(selector).each((_i: number, el: unknown): boolean => {
     // Axe 5 : plafond d'éléments.
-    if (results.length >= maxElements) return false;
+    if (results.length >= maxElements) {
+      truncated = true;
+      return false;
+    }
 
     const $el = cssom.$(el as Parameters<typeof cssom.$>[0]);
     if ($el.text().trim().length === 0) return true;
@@ -477,5 +495,26 @@ export async function auditPageContrast(
     return true;
   });
 
-  return results;
+  return { elements: results, truncated };
+}
+
+/**
+ * La page déclare-t-elle un thème sombre ?
+ *
+ * Trois sources, dans l'ordre où un navigateur les lit : la balise `meta`, les
+ * feuilles embarquées, puis les styles en ligne.
+ */
+function hasDarkScheme($: CheerioAPI): boolean {
+  const declared = $('meta[name="color-scheme"]').attr('content');
+  if (declared && /\bdark\b/i.test(declared)) return true;
+
+  const pattern = /color-scheme\s*:\s*(?:[^;{]*\s)?dark\b/i;
+  return (
+    $('style')
+      .toArray()
+      .some(node => pattern.test($(node).text())) ||
+    $('[style]')
+      .toArray()
+      .some(node => pattern.test($(node).attr('style') ?? ''))
+  );
 }

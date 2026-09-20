@@ -9,7 +9,7 @@ import {
 } from '@websentry/shared';
 import type { BaseAnalyzer } from './base.analyzer.js';
 import { createAnalyzers } from './analyzers/index.js';
-import { parseDudaParameters } from './duda-parameters.js';
+import { dudaParametersOf } from './duda-parameters.js';
 import type { EffectiveSettings } from './effective-settings.js';
 import type { NetworkProbe } from './network-probe.js';
 import type { HtmlPage } from './page.model.js';
@@ -189,7 +189,7 @@ function buildReport(
     htmlSize: Buffer.byteLength(page.html, 'utf8'),
     httpHeaders: pickReportedHeaders(page.headers),
     // `null` dit « pas un site Duda » — le cas de la majorité des pages.
-    dudaParams: parseDudaParameters(page.html),
+    dudaParams: dudaParametersOf(page),
     checks,
   };
 }

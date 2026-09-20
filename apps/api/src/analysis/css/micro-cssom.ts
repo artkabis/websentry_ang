@@ -790,9 +790,17 @@ const DEFAULT_VIEWPORT: Viewport = {
   },
 };
 
-export function buildCSSOM(html: string, opts: BuildOptions = {}): CSSOMInstance {
+/**
+ * Construit le CSSOM d'un document.
+ *
+ * `source` accepte un document DÉJÀ analysé : l'analyseur de contraste reçoit
+ * la page parsée par l'orchestrateur, et la reparser coûterait un second
+ * `cheerio.load` complet — le poste le plus cher du critère sur une grande
+ * page. Le moteur ne modifie rien du document, le partager est sans risque.
+ */
+export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {}): CSSOMInstance {
   const { externalCss = {}, useUaStylesheet = true, viewport = DEFAULT_VIEWPORT } = opts;
-  const $ = cheerio.load(html);
+  const $ = typeof source === 'string' ? cheerio.load(source) : source;
 
   /* 1. Feuilles dans l'ordre du document */
   const sheets: string[] = [];
@@ -1007,7 +1015,7 @@ export function buildCSSOM(html: string, opts: BuildOptions = {}): CSSOMInstance
 type CssFetchImpl = (url: string) => Promise<{ ok: boolean; text: () => Promise<string> }>;
 
 export async function fetchExternalCss(
-  html: string,
+  source: string | CheerioAPI,
   {
     baseUrl,
     // Aucun repli : sans fonction fournie, le moteur ne sort pas.
@@ -1015,7 +1023,7 @@ export async function fetchExternalCss(
   }: { baseUrl?: string; fetchImpl?: CssFetchImpl } = {},
 ): Promise<Record<string, string>> {
   if (!fetchImpl) return {};
-  const $ = cheerio.load(html);
+  const $ = typeof source === 'string' ? cheerio.load(source) : source;
   const map: Record<string, string> = {};
   await Promise.all(
     $('link[rel~="stylesheet"][href]')

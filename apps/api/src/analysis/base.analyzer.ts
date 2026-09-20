@@ -82,13 +82,21 @@ export abstract class BaseAnalyzer {
    * zéro ferait chuter la moyenne d'un site simplement parce qu'il n'a pas de
    * boutique, ou qu'un critère est désactivé pour lui.
    */
-  protected na(summary = 'Non applicable'): CheckResult {
+  /**
+   * Critère non applicable.
+   *
+   * Des éléments peuvent l'accompagner : « non applicable » ne veut pas dire
+   * « rien à montrer ». Un contraste non mesurable, par exemple, a tout de même
+   * une liste de textes à vérifier à l'œil, et la taire perdrait le seul
+   * renseignement que l'analyse ait produit.
+   */
+  protected na(summary = 'Non applicable', items: CheckItem[] = []): CheckResult {
     return {
       checkId: this.id,
       checkTitle: this.title,
       globalScore: 5,
       status: 'na',
-      items: [],
+      items,
       summary,
       recommendations: [],
     };
