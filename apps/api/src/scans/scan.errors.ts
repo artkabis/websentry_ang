@@ -1,4 +1,5 @@
 import { BadRequestException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import type { ScanPage } from '@websentry/shared';
 
 export class ScanPageNotFoundError extends NotFoundException {
   constructor() {
@@ -22,9 +23,16 @@ export class ScanSessionNotFoundError extends NotFoundException {
  * l'utilisateur chercher une donnée qu'il croit égarée, et le support avec lui ;
  * un 410 dit que la donnée a existé, qu'elle a été supprimée volontairement, et
  * depuis quand. La v1 répondait 404 faute de savoir distinguer les deux cas.
+ *
+ * Le RÉSUMÉ accompagne le refus. Le message promet qu'il reste consultable :
+ * l'obliger à être retrouvé ailleurs rendrait cette promesse fausse dès qu'on
+ * ouvre le lien directement — depuis un signet, ou reçu d'un collègue.
  */
 export class ScanReportPurgedError extends HttpException {
-  constructor(readonly purgedAt: string | null) {
+  constructor(
+    readonly purgedAt: string | null,
+    scan?: ScanPage,
+  ) {
     super(
       {
         statusCode: HttpStatus.GONE,
@@ -34,7 +42,7 @@ export class ScanReportPurgedError extends HttpException {
             'Le résumé des critères reste consultable.'
           : 'Le rapport complet a été purgé par la politique de rétention. ' +
             'Le résumé des critères reste consultable.',
-        details: { purgedAt },
+        details: scan ? { purgedAt, scan } : { purgedAt },
       },
       HttpStatus.GONE,
     );

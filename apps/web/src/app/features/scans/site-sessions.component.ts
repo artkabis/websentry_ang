@@ -135,6 +135,13 @@ const COMPARE_ARITY = 2;
                 {{ score(session.avgScore) }}
               </span>
               <span class="sr-only">sur 5, {{ scoreLabel(session.avgScore) }}</span>
+              <a
+                [routerLink]="['/historique/audit', session.sessionId]"
+                class="text-xs font-medium text-brand-700 hover:underline"
+                [attr.aria-label]="'Voir les pages de l’audit du ' + session.analyzedAt"
+              >
+                Voir les pages
+              </a>
             </li>
           }
         </ul>

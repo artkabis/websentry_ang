@@ -35,6 +35,45 @@ describe('ScanReportPurgedError', () => {
     expect(new ScanReportPurgedError('2026-01-15T03:00:00.000Z').getStatus()).toBe(HttpStatus.GONE);
   });
 
+  it('EMPORTE le résumé promis par son message', async () => {
+    // « Le résumé des critères reste consultable » : si la réponse ne le porte
+    // pas, un lien ouvert directement — signet, message d'un collègue — n'a
+    // rien à afficher, et la promesse devient fausse.
+    const { ScanPageSchema } = await import('@websentry/shared');
+    const scan = ScanPageSchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      url: 'https://exemple.fr/',
+      domain: 'exemple.fr',
+      gamme: 'premium',
+      epj: null,
+      platform: 'generic',
+      globalScore: 4.2,
+      statusCode: 200,
+      analyzedAt: '2026-01-10T09:00:00.000Z',
+      durationMs: 1200,
+      checkSummary: { METAS: 'pass' },
+      metadata: null,
+      launchedBy: null,
+      reportState: 'purged',
+    });
+
+    const body = new ScanReportPurgedError('2026-01-15T03:00:00.000Z', scan).getResponse() as {
+      details: { scan?: { globalScore: number | null; checkSummary: Record<string, string> } };
+    };
+
+    expect(body.details.scan?.globalScore).toBe(4.2);
+    expect(body.details.scan?.checkSummary).toEqual({ METAS: 'pass' });
+  });
+
+  it('se passe du résumé quand il n’est pas fourni', () => {
+    const body = new ScanReportPurgedError(null).getResponse() as {
+      details: Record<string, unknown>;
+    };
+
+    expect('scan' in body.details).toBe(false);
+  });
+
   it('dit QUAND la purge a eu lieu', () => {
     const body = new ScanReportPurgedError('2026-01-15T03:00:00.000Z').getResponse() as {
       message: string;

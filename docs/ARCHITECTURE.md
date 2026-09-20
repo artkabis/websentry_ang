@@ -293,6 +293,19 @@ appel direct.
 Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
 les critères l'annoncent en note d'information, hors décompte et hors barème.
 
+#### L'historique se parcourt jusqu'au rapport
+
+Site → audits → pages → rapport. Le dernier maillon manquait : l'API servait le
+rapport d'une page, aucun écran n'y menait. Les deux écrans ajoutés montent le
+**même composant de rapport** que l'analyse en direct (`ws-report-view`) — un
+rapport relu six mois plus tard se lit comme au jour de sa production, et deux
+rendus séparés divergeraient au premier changement.
+
+Le rapport purgé a son propre état, et non un message d'erreur : la rétention
+l'a effacé, ce n'est pas une panne. Le résumé par critère voyage AVEC le refus
+410, si bien qu'un lien ouvert directement — signet, message d'un collègue —
+reste informatif.
+
 #### Un seul parcours du document
 
 `dom-walk.ts` porte ce que tous les critères faisaient chacun de leur côté :
@@ -510,10 +523,10 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1696   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1698   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 230    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 414    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
@@ -563,11 +576,6 @@ Dettes identifiées sur le périmètre déjà livré :
   et export. Le module 3 livre les suppressions **sans** ce filet. La table
   existe et n'est pas touchée ; le module qui la réexpose reste à faire, et
   d'ici là une suppression est définitive — ce que l'interface annonce.
-- **Détail d'une page dans l'interface** — l'API sert le rapport complet d'une
-  page (`GET /scans/:id`), avec le 410 des rapports purgés. Le blocage est levé
-  depuis que le module 4 livre le rendu d'un rapport : il reste à brancher
-  l'historique sur ces mêmes composants, et à traiter le 410 par un état dédié
-  plutôt que par une erreur générique.
 - **Thème sombre** — le cap UX (`CLAUDE.md` §2) le demande dès la conception.
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de

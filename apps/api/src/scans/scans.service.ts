@@ -169,7 +169,11 @@ export class ScansService {
     if (!row) throw new ScanPageNotFoundError();
 
     const report = await this.readReport(row);
-    if (report === null) throw new ScanReportPurgedError(toIso(row.report_purged_at));
+    // Le résumé part AVEC le refus : c'est ce que le message promet, et un lien
+    // ouvert directement n'a rien d'autre sous la main.
+    if (report === null) {
+      throw new ScanReportPurgedError(toIso(row.report_purged_at), this.toScanPage(row));
+    }
 
     return { scan: this.toScanPage(row), report };
   }

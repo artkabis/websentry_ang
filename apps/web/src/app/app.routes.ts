@@ -57,6 +57,23 @@ export const routes: Routes = [
       import('./features/scans/site-sessions.component').then(m => m.SiteSessionsComponent),
   },
   {
+    // Un audit et ses pages. L'identifiant est celui de la session côté API :
+    // c'est lui qui circule dans les liens de comparaison et d'historique.
+    path: 'historique/audit/:sessionId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/scans/session-pages.component').then(m => m.SessionPagesComponent),
+  },
+  {
+    // Le rapport archivé d'une page, rendu par le MÊME composant que l'analyse
+    // en direct : un rapport relu six mois plus tard se lit comme au jour de sa
+    // production.
+    path: 'historique/page/:pageId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/scans/scan-detail.component').then(m => m.ScanDetailComponent),
+  },
+  {
     path: 'acces-refuse',
     loadComponent: () => import('./features/forbidden.component').then(m => m.ForbiddenComponent),
   },

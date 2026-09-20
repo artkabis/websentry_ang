@@ -2,12 +2,16 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
+  AnalysisReportSchema,
   ScanPageListSchema,
+  ScanPageSchema,
   ScanStatsSchema,
   SessionComparisonSchema,
   SessionReportSchema,
   SiteListSchema,
   SiteSessionListSchema,
+  type AnalysisReport,
+  type ScanPage,
   type ScanPageList,
   type ScanSearchQuery,
   type ScanStats,
@@ -26,7 +30,11 @@ import { API_BASE_URL } from '../api/api.config';
  * qui laisserait croire à une panne.
  */
 export class ScanReportPurgedError extends Error {
-  constructor(readonly purgedAt: string | null) {
+  constructor(
+    readonly purgedAt: string | null,
+    /** Résumé du scan, que la réponse 410 emporte : l'écran a de quoi montrer. */
+    readonly scan: ScanPage | null = null,
+  ) {
     super(
       purgedAt
         ? `Le rapport complet a été purgé le ${purgedAt.slice(0, 10)}. ` +
@@ -113,12 +121,24 @@ export class ScansApi {
     return ScanStatsSchema.parse(raw);
   }
 
-  async pageReport(pageId: string): Promise<unknown> {
+  /**
+   * Rapport complet d'une page, avec le scan qui le porte.
+   *
+   * Le rapport est VALIDÉ comme les autres réponses : le rendre `unknown`
+   * ferait porter au composant la charge de deviner sa forme, et une dérive de
+   * l'API ne se verrait que trois écrans plus loin.
+   */
+  async pageReport(pageId: string): Promise<{ scan: ScanPage; report: AnalysisReport }> {
     try {
       const raw = await firstValueFrom(
-        this.http.get<{ report: unknown }>(`${this.baseUrl}/scans/${encodeURIComponent(pageId)}`),
+        this.http.get<{ scan: unknown; report: unknown }>(
+          `${this.baseUrl}/scans/${encodeURIComponent(pageId)}`,
+        ),
       );
-      return raw.report;
+      return {
+        scan: ScanPageSchema.parse(raw.scan),
+        report: AnalysisReportSchema.parse(raw.report),
+      };
     } catch (err) {
       throw this.asPurged(err);
     }
@@ -161,8 +181,11 @@ export class ScansApi {
   private asPurged(err: unknown): unknown {
     if (!(err instanceof HttpErrorResponse) || err.status !== 410) return err;
 
-    const details = (err.error as { details?: { purgedAt?: unknown } })?.details;
+    const details = (err.error as { details?: { purgedAt?: unknown; scan?: unknown } })?.details;
     const purgedAt = typeof details?.purgedAt === 'string' ? details.purgedAt : null;
-    return new ScanReportPurgedError(purgedAt);
+    // Le résumé est facultatif : une réponse d'une version antérieure de l'API
+    // n'en porte pas, et l'écran doit rester utilisable sans lui.
+    const scan = ScanPageSchema.safeParse(details?.scan);
+    return new ScanReportPurgedError(purgedAt, scan.success ? scan.data : null);
   }
 }

@@ -11,6 +11,28 @@ const SESSION_B = '22222222-2222-4222-8222-222222222222';
 const PAGE = '33333333-3333-4333-8333-333333333333';
 const SITE = '44444444-4444-4444-8444-444444444444';
 
+/** Rapport minimal conforme au schéma partagé. */
+function analysisReport(over: Record<string, unknown> = {}) {
+  return {
+    analyzeId: '33333333-3333-4333-8333-333333333333',
+    url: 'https://exemple.fr/',
+    title: 'Accueil',
+    analyzedAt: '2026-06-04T10:00:00.000Z',
+    durationMs: 1200,
+    globalScore: 4,
+    platform: 'generic',
+    renderMode: 'static',
+    statusCode: 200,
+    ttfb: 100,
+    redirectChain: [],
+    htmlSize: 1000,
+    httpHeaders: {},
+    dudaParams: null,
+    checks: {},
+    ...over,
+  };
+}
+
 function scanPage(over: Record<string, unknown> = {}) {
   return {
     id: PAGE,
@@ -185,11 +207,47 @@ describe('ScansApi', () => {
   });
 
   describe('rapport d’une page', () => {
-    it('extrait le rapport de l’enveloppe', async () => {
+    it('rend le rapport ET le scan qui le porte', async () => {
+      const promise = api.pageReport(PAGE);
+      http.expectOne(`${BASE}/scans/${PAGE}`).flush({ scan: scanPage(), report: analysisReport() });
+
+      const { scan, report } = await promise;
+      expect(scan.url).toBe('https://exemple.fr/');
+      expect(report.analyzeId).toBe('33333333-3333-4333-8333-333333333333');
+    });
+
+    it('REFUSE un rapport qui ne respecte pas le contrat partagé', async () => {
+      // Une API qui dérive doit être détectée à la frontière, pas trois écrans
+      // plus loin sous la forme d'un champ manquant.
       const promise = api.pageReport(PAGE);
       http.expectOne(`${BASE}/scans/${PAGE}`).flush({ scan: scanPage(), report: { checks: {} } });
 
-      await expect(promise).resolves.toEqual({ checks: {} });
+      await expect(promise).rejects.toThrow();
+    });
+
+    it('EMPORTE le résumé quand le 410 le fournit', async () => {
+      // Un lien ouvert directement — signet, message d'un collègue — n'a rien
+      // d'autre sous la main pour montrer ce que le scan valait.
+      const promise = api.pageReport(PAGE);
+      http.expectOne(`${BASE}/scans/${PAGE}`).flush(
+        {
+          details: { purgedAt: '2026-01-15T03:00:00.000Z', scan: scanPage({ globalScore: 3.5 }) },
+        },
+        { status: 410, statusText: 'Gone' },
+      );
+
+      const error = (await promise.catch((e: unknown) => e)) as ScanReportPurgedError;
+      expect(error.scan?.globalScore).toBe(3.5);
+    });
+
+    it('reste utilisable quand le 410 n’emporte PAS de résumé', async () => {
+      const promise = api.pageReport(PAGE);
+      http
+        .expectOne(`${BASE}/scans/${PAGE}`)
+        .flush({ details: { purgedAt: null } }, { status: 410, statusText: 'Gone' });
+
+      const error = (await promise.catch((e: unknown) => e)) as ScanReportPurgedError;
+      expect(error.scan).toBeNull();
     });
 
     it('TRADUIT un 410 en erreur typée, avec sa date', async () => {
