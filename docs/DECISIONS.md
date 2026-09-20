@@ -485,6 +485,12 @@ jamais un masquage implicite.
    prioritaires » n'existent pas en v1 ; une équipe habituée à l'ancien écran
    doit relier les deux vues. Les libellés de critères, eux, sont inchangés.
 
+**Corollaire — l'écran est partageable.** L'adresse analysée et le filtre sont
+portés par l'URL. Un rapport s'envoie donc par lien et survit à un
+rafraîchissement, et le filtre choisi voyage avec : montrer « tout » à un
+collègue ne demande pas de lui expliquer où cliquer. L'écriture remplace
+l'entrée d'historique au lieu d'en empiler une par clic.
+
 **Corollaire technique** — Le flux passe par `fetch` + `ReadableStream` plutôt
 que par `EventSource`, qui ne sait faire que du GET et exposerait l'URL auditée
 dans une barre d'adresse et dans les journaux des proxys. Coût : la reconnexion

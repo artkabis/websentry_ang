@@ -1,5 +1,8 @@
+import { Location } from '@angular/common';
 import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { render, screen, within } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
 import type { AnalysisReport, CheckResult, CheckStatus, SseAnalyzeEvent } from '@websentry/shared';
@@ -82,9 +85,87 @@ async function launch(t: ReturnType<typeof setup>, url = 'https://exemple.fr/') 
   await tick();
 }
 
+/**
+ * Rend l'écran DERRIÈRE le vrai routeur, à une adresse donnée.
+ *
+ * Testing Library monte le composant hors routage : ses paramètres d'adresse
+ * seraient vides, et c'est précisément ce que ces tests interrogent.
+ */
+async function renderAt(path: string, stream = streamOf([])) {
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      provideRouter([{ path: 'analyse', component: AnalysisComponent }]),
+      { provide: AnalysisApi, useValue: { stream } },
+    ],
+  });
+
+  await RouterTestingHarness.create(path);
+  await tick();
+  await tick();
+  return { stream, location: TestBed.inject(Location) };
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe('AnalysisComponent', () => {
+  describe('état porté par l’adresse', () => {
+    it('ÉCRIT l’adresse analysée dans la barre du navigateur', async () => {
+      // Sans cela, « regarde cette analyse » envoie un formulaire vide, et un
+      // rafraîchissement perd le travail en cours.
+      const t = setup();
+      await launch(t, 'https://exemple.fr/');
+
+      expect(decodeURIComponent(TestBed.inject(Location).path(true))).toContain(
+        'url=https://exemple.fr/',
+      );
+    });
+
+    it('RELANCE l’analyse d’un lien partagé', async () => {
+      const t = await renderAt(`/analyse?url=${encodeURIComponent('https://exemple.fr/')}`);
+
+      expect(t.stream).toHaveBeenCalledWith({ url: 'https://exemple.fr/' }, expect.anything());
+    });
+
+    it('n’analyse rien quand l’adresse est absente', async () => {
+      const t = await renderAt('/analyse');
+
+      expect(t.stream).not.toHaveBeenCalled();
+    });
+
+    it('ROUVRE le rapport complet quand le lien le demande', async () => {
+      // Le filtre vient du lien : le remettre à « à traiter » trahirait ce que
+      // l'expéditeur voulait montrer.
+      const checks = [check('METAS', 'pass'), check('LANG', 'fail')];
+      await renderAt(
+        `/analyse?url=${encodeURIComponent('https://exemple.fr/')}&filtre=tous`,
+        streamOf([{ type: 'complete', analyzeId: ANALYZE_ID, report: report(checks) }]),
+      );
+
+      expect(screen.getByRole('button', { name: /^Tout/ }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+    });
+
+    it('écrit le filtre choisi, et RIEN pour celui par défaut', async () => {
+      // Une adresse ne porte que ce qui s'écarte du défaut : un lien encombré
+      // se partage moins bien.
+      const t = setup(
+        streamOf([
+          { type: 'complete', analyzeId: ANALYZE_ID, report: report([check('METAS', 'pass')]) },
+        ]),
+      );
+      await launch(t, 'https://exemple.fr/');
+      const location = TestBed.inject(Location);
+
+      expect(location.path(true)).not.toContain('filtre=');
+      await userEvent.click(screen.getByRole('button', { name: /^Tout/ }));
+      expect(location.path(true)).toContain('filtre=tous');
+      await userEvent.click(screen.getByRole('button', { name: /^À traiter/ }));
+      expect(location.path(true)).not.toContain('filtre=');
+    });
+  });
+
   describe('lancement', () => {
     it('n’active le bouton qu’avec une adresse', async () => {
       const t = setup();

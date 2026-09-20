@@ -335,6 +335,13 @@ critères masqués reste affiché**, globalement et non par groupe : un groupe
 entièrement conforme disparaît de la liste, et son compte disparaîtrait avec
 lui s'il était rendu à l'intérieur.
 
+**L'état de l'écran vit dans l'adresse.** L'URL analysée et le filtre y sont
+écrits (`?url=…&filtre=tous`), en REMPLAÇANT l'entrée d'historique plutôt qu'en
+empilant : l'écran est un plan de travail, et un retour arrière doit ramener à
+l'écran précédent, pas défaire un changement de filtre. Ouvrir un tel lien
+relance l'analyse et rouvre la vue telle que l'expéditeur la voyait. Le filtre
+par défaut ne s'écrit pas — une adresse ne porte que ce qui s'écarte du défaut.
+
 Le flux passe par `fetch` + `ReadableStream`, pas par `EventSource` : celui-ci
 ne sait faire que du GET, ce qui exposerait l'URL auditée dans une barre
 d'adresse et dans les journaux des proxys. Corollaire assumé : la reconnexion
@@ -475,10 +482,10 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1563   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1571   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 387    | 80 %                            |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
