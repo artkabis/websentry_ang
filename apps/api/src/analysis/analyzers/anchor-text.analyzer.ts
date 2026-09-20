@@ -23,7 +23,9 @@ import {
 import { BaseAnalyzer } from '../base.analyzer.js';
 import type { EffectiveSettings } from '../effective-settings.js';
 import { locateFromText, truncateSource } from '../locate.js';
-import type { HtmlPage, Selection } from '../page.model.js';
+import type { CheerioAPI } from 'cheerio';
+import { elementOf, firstElementOf, selfAndAncestors } from '../dom-walk.js';
+import type { DomElement, HtmlPage, Selection } from '../page.model.js';
 
 /**
  * Concordance entre le texte d'un lien et l'URL qu'il vise.
@@ -139,18 +141,26 @@ export class AnchorTextAnalyzer extends BaseAnalyzer {
     const { $ } = page;
     const verdicts: LinkVerdict[] = [];
     const host = hostnameOf(page.url);
+    // Les sélecteurs d'exclusion du profil sont appliqués UNE FOIS à la page :
+    // les interroger lien par lien recompilait chaque sélecteur autant de fois
+    // qu'il y a d'ancres.
+    const excluded = excludedElements($, thresholds.excludeSelectors);
 
     $('a[href]').each((_, element) => {
       const node = $(element);
-      if (isExcluded(node, thresholds.excludeSelectors)) return;
-      if (thresholds.ignoredZones.has(zoneOf(node))) return;
 
+      // Les filtres BON MARCHÉ d'abord : sur une page ordinaire, la plupart des
+      // ancres sont écartées ici, et n'ont donc jamais à être situées dans la
+      // page ni confrontées aux sélecteurs d'exclusion.
       const href = node.attr('href') ?? '';
       if (!isAnalysableTarget(href, page.url, host)) return;
 
       const anchor = node.text().trim();
       // Un lien dont le seul contenu est une image relève du critère LOGO.
       if (!anchor || anchor.length > MAX_ANCHOR_LENGTH) return;
+
+      if (isExcluded(element, excluded)) return;
+      if (thresholds.ignoredZones.has(zoneOf(node))) return;
 
       const verdict = this.judge(anchor, href, page, thresholds, truncateSource($.html(element)));
       if (verdict) verdicts.push(verdict);
@@ -491,32 +501,113 @@ function isGenericAnchor(anchor: string): boolean {
   return significant.length > 0 && significant.every(word => STOPWORDS.has(word));
 }
 
-function zoneOf(node: Selection): string {
+/**
+ * Zone d'une ancre — vocabulaire PROPRE à ce critère.
+ *
+ * Ces règles ne sont pas celles de `link-zone.ts` : elles reconnaissent moins
+ * de conventions et les ordonnent autrement (le menu l'emporte ici sur le pied
+ * de page). Les unifier changerait les zones ignorées, donc les verdicts : cela
+ * se décide et se documente, cela ne se glisse pas dans une optimisation.
+ *
+ * La reconnaissance se fait sur les attributs et non par `closest()`, qui
+ * reparse et recompile son sélecteur à chaque ancre — trois fois par ancre, sur
+ * des pages qui en comptent des centaines.
+ */
+type AnchorZone = 'nav' | 'header' | 'footer' | 'content';
+
+/** Classement d'un ancêtre, mémorisé : il est partagé par toutes ses ancres. */
+const zoneSignalByElement = new WeakMap<object, AnchorZone | null>();
+
+function zoneSignalOf(element: DomElement): AnchorZone | null {
+  const known = zoneSignalByElement.get(element);
+  // `undefined` = jamais classé ; `null` = classé « aucun signal ».
+  if (known !== undefined) return known;
+
+  const attribs = element.attribs ?? {};
+  const tag = element.name ?? '';
+  const role = attribs['role'] ?? '';
+  const classes = (attribs['class'] ?? '').split(/\s+/);
+  const has = (token: string): boolean => classes.includes(token);
+
+  let signal: AnchorZone | null = null;
   if (
-    node.closest('nav, [role="navigation"], .nav, .menu, .dmNav, [data-element-type="menu"]').length
+    tag === 'nav' ||
+    role === 'navigation' ||
+    has('nav') ||
+    has('menu') ||
+    has('dmNav') ||
+    attribs['data-element-type'] === 'menu'
   ) {
-    return 'nav';
-  }
-  if (
-    node.closest('header, [role="banner"], .header, .dmHeaderContainer, .flex_hfcontainer').length
+    signal = 'nav';
+  } else if (
+    tag === 'header' ||
+    role === 'banner' ||
+    has('header') ||
+    has('dmHeaderContainer') ||
+    has('flex_hfcontainer')
   ) {
-    return 'header';
+    signal = 'header';
+  } else if (
+    tag === 'footer' ||
+    role === 'contentinfo' ||
+    has('footer') ||
+    has('dmFooterContainer')
+  ) {
+    signal = 'footer';
   }
-  if (node.closest('footer, [role="contentinfo"], .footer, .dmFooterContainer').length) {
-    return 'footer';
-  }
-  return 'content';
+
+  zoneSignalByElement.set(element, signal);
+  return signal;
 }
 
-/** Sélecteurs d'exclusion du profil — un sélecteur invalide n'exclut rien. */
-function isExcluded(node: Selection, selectors: readonly string[]): boolean {
-  return selectors.some(selector => {
+function zoneOf(node: Selection): AnchorZone {
+  const element = firstElementOf(node);
+  if (!element) return 'content';
+
+  // Le menu l'emporte sur l'en-tête, qui l'emporte sur le pied de page, QUELLE
+  // QUE SOIT leur distance : c'est l'ordre des trois `closest()` d'origine,
+  // dont chacun balayait toute la chaîne d'ascendance avant le suivant.
+  let found: AnchorZone | null = null;
+  for (const current of selfAndAncestors(element)) {
+    const signal = zoneSignalOf(current);
+    if (signal === 'nav') return 'nav';
+    if (signal && (found === null || (found === 'footer' && signal === 'header'))) found = signal;
+  }
+  return found ?? 'content';
+}
+
+/**
+ * Éléments visés par les sélecteurs d'exclusion du profil.
+ *
+ * Appliqués UNE FOIS à la page : une ancre est exclue si elle-même ou l'un de
+ * ses ancêtres figure dans cet ensemble. Un sélecteur invalide n'exclut rien.
+ */
+function excludedElements($: CheerioAPI, selectors: readonly string[]): Set<unknown> {
+  const matched = new Set<unknown>();
+
+  for (const selector of selectors) {
     try {
-      return node.is(selector) || node.closest(selector).length > 0;
+      $(selector).each((_, element) => {
+        matched.add(element);
+      });
     } catch {
-      return false;
+      /* sélecteur invalide : il n'exclut rien */
     }
-  });
+  }
+
+  return matched;
+}
+
+function isExcluded(element: unknown, excluded: ReadonlySet<unknown>): boolean {
+  if (excluded.size === 0) return false;
+
+  const start = elementOf(element);
+  if (!start) return false;
+
+  for (const current of selfAndAncestors(start)) {
+    if (excluded.has(current)) return true;
+  }
+  return false;
 }
 
 /**

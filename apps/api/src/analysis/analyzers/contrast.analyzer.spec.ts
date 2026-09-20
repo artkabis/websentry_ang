@@ -103,18 +103,66 @@ describe('ContrastAnalyzer', () => {
     expect(normal.items.find(item => item.key === 'CONTRAST_V2.ok')?.label).toContain('AA');
   });
 
-  it('NE TRANCHE PAS sur un fond en image', async () => {
-    // Le contraste n'y est pas calculable : conclure accuserait au hasard.
-    const result = await analyzer.analyze(
+  describe('textes non mesurables', () => {
+    const surPhoto = () =>
       styled(
         '.banniere { background-image: url(/fond.jpg); } p { color: #888; }',
         '<div class="banniere"><p>Texte sur une photo</p></div>',
-      ),
-      settings,
-    );
+      );
 
-    expect(result.items.some(item => item.key === 'CONTRAST_V2.review')).toBe(true);
-    expect(result.status).toBe('pass');
+    it('NE TRANCHE PAS sur un fond en image', async () => {
+      // Le contraste n'y est pas calculable : conclure accuserait au hasard.
+      const result = await analyzer.analyze(surPhoto(), settings);
+
+      expect(result.items.some(item => item.key === 'CONTRAST_V2.review')).toBe(true);
+    });
+
+    it('les signale en INFO, pas en conforme', async () => {
+      // Le filtre par défaut de l'écran masque les critères conformes : classer
+      // ces textes « pass » ferait disparaître ce qui réclame justement un œil.
+      const result = await analyzer.analyze(surPhoto(), settings);
+
+      expect(result.items.find(item => item.key === 'CONTRAST_V2.review')?.status).toBe('info');
+    });
+
+    it('NE DÉCERNE AUCUNE NOTE quand rien n’a pu être mesuré', async () => {
+      // Une page dont tous les textes sont posés sur des images sortait avec
+      // 5 sur 5 : une note parfaite décernée sans une seule mesure.
+      const result = await analyzer.analyze(surPhoto(), settings);
+
+      expect(result.status).toBe('na');
+      expect(result.summary).toContain('non mesurable');
+    });
+
+    it('mais note normalement dès qu’un texte est mesurable', async () => {
+      const result = await analyzer.analyze(
+        styled(
+          '.banniere { background-image: url(/fond.jpg); } p { color: #000; background: #fff; }',
+          '<div class="banniere"><span>Texte sur une photo</span></div><p>Texte lisible</p>',
+        ),
+        settings,
+      );
+
+      expect(result.status).toBe('pass');
+      expect(result.globalScore).toBe(5);
+    });
+
+    it('ANNONCE qu’il s’est arrêté avant la fin d’une page très longue', async () => {
+      // Taire le plafond laisserait conclure « conforme » sur des textes qui
+      // n'ont jamais été regardés.
+      const paragraphes = Array.from(
+        { length: 450 },
+        (_, index) => `<p>Paragraphe lisible numéro ${index}</p>`,
+      ).join('');
+      const result = await analyzer.analyze(
+        styled('p { color: #000; background: #fff; }', paragraphes),
+        settings,
+      );
+
+      const notice = result.items.find(item => item.label.includes('trop longue'));
+      expect(notice?.status).toBe('info');
+      expect(notice?.key).toBeUndefined();
+    });
   });
 
   it('GROUPE les occurrences d’une même paire de couleurs', async () => {

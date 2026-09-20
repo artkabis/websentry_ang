@@ -118,3 +118,22 @@ function hasStorePages(storePagesUrls: string | null): boolean {
 }
 
 export { real as realValue };
+
+/**
+ * Paramètres d'une page, lus UNE FOIS.
+ *
+ * La lecture passe une quinzaine d'expressions régulières sur le document
+ * entier. Le critère `DUDA_PARAMS` et l'enveloppe du rapport les demandent
+ * tous les deux : sans mémoire, une page Duda paie deux fois la même analyse.
+ * La table est faible, elle disparaît avec la page.
+ */
+const paramsByPage = new WeakMap<object, DudaParams | null>();
+
+export function dudaParametersOf(page: { readonly html: string }): DudaParams | null {
+  const known = paramsByPage.get(page);
+  if (known !== undefined) return known;
+
+  const params = parseDudaParameters(page.html);
+  paramsByPage.set(page, params);
+  return params;
+}

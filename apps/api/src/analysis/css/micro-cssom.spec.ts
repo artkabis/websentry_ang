@@ -348,6 +348,110 @@ describe('mot-clé currentcolor', () => {
   });
 });
 
+describe('résolution des sélecteurs', () => {
+  // Les règles d'une feuille ne sont plus cherchées dans tout le document :
+  // elles passent par un index des classes, identifiants et balises présents.
+  // Chaque forme de sélecteur doit continuer à désigner exactement les mêmes
+  // éléments — une règle perdue, c'est une couleur fausse, donc un verdict faux.
+
+  it('applique une règle de CLASSE seule', () => {
+    expect(styleOf(page('.promo { color: red; }', '<p class="promo">x</p>'), 'p').color).toBe(
+      'red',
+    );
+  });
+
+  it('applique une règle d’IDENTIFIANT seul', () => {
+    expect(styleOf(page('#intro { color: red; }', '<p id="intro">x</p>'), 'p').color).toBe('red');
+  });
+
+  it('applique une règle de BALISE seule', () => {
+    expect(styleOf(page('p { color: red; }', '<p>x</p>'), 'p').color).toBe('red');
+  });
+
+  it('applique un sélecteur COMPOSÉ', () => {
+    const html = page('p.promo { color: red; }', '<p class="promo">x</p><p>y</p>');
+
+    expect(styleOf(html, 'p.promo').color).toBe('red');
+    expect(styleOf(html, 'p:not(.promo)').color).not.toBe('red');
+  });
+
+  it('applique un sélecteur DESCENDANT', () => {
+    const html = page('.cadre p { color: red; }', '<div class="cadre"><span><p>x</p></span></div>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('n’applique PAS un descendant dont l’ancêtre manque', () => {
+    const html = page('.absent p { color: red; }', '<div class="cadre"><p>x</p></div>');
+
+    expect(styleOf(html, 'p').color).not.toBe('red');
+  });
+
+  it('applique un sélecteur d’ENFANT direct', () => {
+    const html = page(
+      '.cadre > p { color: red; }',
+      '<div class="cadre"><p>direct</p><span><p>indirect</p></span></div>',
+    );
+
+    expect(styleOf(html, 'p').color).toBe('red');
+    expect(styleOf(html, 'span p').color).not.toBe('red');
+  });
+
+  it('applique un sélecteur d’ATTRIBUT', () => {
+    const html = page('[data-ton="sombre"] { color: red; }', '<p data-ton="sombre">x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('applique un sélecteur UNIVERSEL', () => {
+    expect(styleOf(page('* { color: red; }', '<p>x</p>'), 'p').color).toBe('red');
+  });
+
+  it('applique une pseudo-classe FONCTIONNELLE', () => {
+    const html = page(':is(.a, .b) { color: red; }', '<p class="b">x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('applique une classe ÉCHAPPÉE', () => {
+    // `md\:flex`, `w-1\/2` : les utilitaires modernes en produisent en masse.
+    // Lire la clé naïvement donnerait « md », classe absente du document, et la
+    // règle serait écartée à tort.
+    const html = page('.md\\:flex { color: red; }', '<p class="md:flex">x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('n’applique rien quand la classe visée est absente', () => {
+    const html = page('.absente { color: red; } p { color: green; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+
+  it('PRÉSERVE l’ordre de cascade malgré les règles écartées', () => {
+    // Une règle qui ne vise personne n'est plus cherchée, mais elle compte
+    // toujours dans la numérotation : à spécificité égale, c'est la DERNIÈRE
+    // déclarée qui gagne, et décaler les numéros ferait gagner l'autre.
+    const html = page(
+      '.promo { color: red; } .absente { color: blue; } .promo { color: green; }',
+      '<p class="promo">x</p>',
+    );
+
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+
+  it('applique une règle à TOUS les éléments visés, pas au premier', () => {
+    const html = page('.promo { color: red; }', '<p class="promo">un</p><p class="promo">deux</p>');
+    const cssom = buildCSSOM(html);
+    const couleurs = cssom
+      .$('p')
+      .toArray()
+      .map(element => cssom.getComputedStyle(element).color);
+
+    expect(couleurs).toEqual(['red', 'red']);
+  });
+});
+
 describe('robustesse', () => {
   it('ignore une règle syntaxiquement invalide sans perdre les suivantes', () => {
     const html = page('p { color: ; } p { color: red; }', '<p>x</p>');

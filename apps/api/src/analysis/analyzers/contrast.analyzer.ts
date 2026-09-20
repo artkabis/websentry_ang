@@ -40,19 +40,22 @@ export class ContrastAnalyzer extends BaseAnalyzer {
   async analyze(page: HtmlPage, settings: EffectiveSettings): Promise<CheckResult> {
     if (!this.isEnabled(settings)) return this.na();
 
+    // Le document DÉJÀ analysé est passé au moteur : le reparser coûterait un
+    // second `cheerio.load` complet, le poste le plus cher de ce critère.
+    //
     // `fetchExternal` reste FAUX : le moteur n'a pas de porte de sortie, et les
     // feuilles externes passeraient hors de la sonde SSRF. Le contraste est
     // donc évalué sur les styles embarqués et en ligne.
-    const evaluations = await auditPageContrast(page.html, {
+    const { elements, truncated } = await auditPageContrast(page.$, {
       baseUrl: page.url,
       fetchExternal: false,
     });
 
-    if (evaluations.length === 0) {
+    if (elements.length === 0) {
       return this.na('Aucun élément textuel analysable sur cette page.');
     }
 
-    const { passing, failing, review } = groupByColors(evaluations);
+    const { passing, failing, review } = groupByColors(elements);
     const items: CheckItem[] = [];
 
     // Les échecs d'abord : c'est ce qui demande une action.
@@ -64,9 +67,31 @@ export class ContrastAnalyzer extends BaseAnalyzer {
     const passingCount = countOf(passing);
     const scored = failingCount + passingCount;
 
+    if (truncated) {
+      // Sans clé, donc hors décompte : une limite de l'analyse n'est pas un
+      // point de contrôle. La taire laisserait conclure « conforme » sur ce
+      // qui n'a pas été regardé.
+      items.push({
+        label: 'Page trop longue : seuls les premiers textes ont été mesurés',
+        status: 'info',
+      });
+    }
+
+    if (scored === 0) {
+      // Aucun texte mesurable : tous sont posés sur une image ou un empilement
+      // de couches. Rendre 5 sur 5 décernerait une note à une page dont rien
+      // n'a été mesuré — c'est une absence de verdict, pas un verdict. Les
+      // textes à vérifier à l'œil restent montrés : c'est tout ce que
+      // l'analyse a produit.
+      return this.na(
+        `Contraste non mesurable : ${review.length} texte(s) sur fond non uniforme, aucun texte sur fond calculable.`,
+        items,
+      );
+    }
+
     // La note est la PROPORTION de textes conformes : un défaut isolé sur cent
     // textes ne vaut pas le même reproche qu'une page entière illisible.
-    const globalScore = scored === 0 ? 5 : Math.round((passingCount / scored) * 50) / 10;
+    const globalScore = Math.round((passingCount / scored) * 50) / 10;
     const summary =
       `${passingCount} texte(s) conforme(s), ${failingCount} insuffisant(s)` +
       (review.length > 0 ? `, ${review.length} à vérifier à l'œil` : '');
@@ -163,9 +188,10 @@ function reviewItem(element: AuditElementResult): CheckItem {
   return {
     key: 'CONTRAST_V2.review',
     label: `À vérifier à l'œil : <${element.tag}> « ${element.text} »${locationOf(element)}`,
-    // `pass` et non `warning` : un fond en image n'est pas un défaut constaté,
-    // seulement un cas que la mesure automatique ne tranche pas.
-    status: 'pass',
+    // `info` : ni un défaut constaté — un fond en image n'en est pas un — ni un
+    // succès. Le donner pour conforme le ferait disparaître du filtre « à
+    // traiter », alors que c'est précisément ce qui réclame un œil humain.
+    status: 'info',
     detail: 'Fond non uniforme (image, dégradé ou surimpression) — contraste non calculable.',
     locator: locateFromText(element.text),
   };

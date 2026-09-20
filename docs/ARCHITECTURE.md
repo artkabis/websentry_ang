@@ -293,7 +293,35 @@ appel direct.
 Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
 les critères l'annoncent en note d'information, hors décompte et hors barème.
 
+#### Un seul parcours du document
+
+`dom-walk.ts` porte ce que tous les critères faisaient chacun de leur côté :
+remonter les ancêtres d'un élément, lire ses classes, trouver la première image
+qu'il contient. Cheerio sait le faire — `parents`, `closest`, `is`, `find` —
+mais chacun de ces appels reparse et recompile son sélecteur, ce qui en faisait
+le poste le plus coûteux du moteur sur une page riche en liens. Les résultats
+sont mémorisés par élément, dans des tables faibles qui disparaissent avec la
+page : un conteneur de navigation est classé une fois, pas une fois par lien
+qu'il porte.
+
+#### Deux vocabulaires de zone, assumés
+
+`link-zone.ts` classe un lien pour `LINKS` et `BROKEN_LINKS` ; `ANCHOR_TEXT`
+garde le sien, qui reconnaît moins de conventions et les ordonne autrement — le
+menu y prime sur le pied de page, alors que l'autre tranche d'abord le pied de
+page. Les unifier changerait les zones ignorées, donc des verdicts : c'est un
+arbitrage à instruire, pas un nettoyage à glisser dans une optimisation. Les
+deux lectures se font sur les attributs, sans sélecteur CSS.
+
 #### Le contraste sans navigateur
+
+Les règles d'une feuille ne sont pas cherchées dans tout le document : un index
+des classes, identifiants et balises réellement présents est construit en un
+parcours, et chaque règle y puise ses candidats. Une règle qui ne peut viser
+personne n'est jamais cherchée ; une règle réduite à sa clé (`.promo`, `#entete`,
+`p`) est servie par l'index seul. L'extraction de clé est CONSERVATRICE : devant
+une pseudo-classe fonctionnelle ou une classe échappée — `.md\:flex` — elle
+renonce et la requête normale reprend la main.
 
 `CONTRAST_V2` ne peut pas se lire dans le HTML : il faut résoudre la cascade.
 Un micro-moteur CSS embarqué (`analysis/css/`) calcule les styles — spécificité,
@@ -334,6 +362,13 @@ Le filtre par défaut masque les critères conformes, mais **le nombre de
 critères masqués reste affiché**, globalement et non par groupe : un groupe
 entièrement conforme disparaît de la liste, et son compte disparaîtrait avec
 lui s'il était rendu à l'intérieur.
+
+**L'état de l'écran vit dans l'adresse.** L'URL analysée et le filtre y sont
+écrits (`?url=…&filtre=tous`), en REMPLAÇANT l'entrée d'historique plutôt qu'en
+empilant : l'écran est un plan de travail, et un retour arrière doit ramener à
+l'écran précédent, pas défaire un changement de filtre. Ouvrir un tel lien
+relance l'analyse et rouvre la vue telle que l'expéditeur la voyait. Le filtre
+par défaut ne s'écrit pas — une adresse ne porte que ce qui s'écarte du défaut.
 
 Le flux passe par `fetch` + `ReadableStream`, pas par `EventSource` : celui-ci
 ne sait faire que du GET, ce qui exposerait l'URL auditée dans une barre
@@ -475,10 +510,10 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1563   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1696   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 387    | 80 %                            |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,

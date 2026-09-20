@@ -289,15 +289,79 @@ describe('applyPolarity', () => {
     expect(inverted.items[1]).toEqual({ label: 'note libre', status: 'info' });
   });
 
-  it('RECALCULE la note après inversion', () => {
-    const inverted = applyPolarity(
-      result([
-        { key: 'A.un', label: 'a', status: 'pass' },
-        { key: 'A.deux', label: 'b', status: 'pass' },
-      ]),
-      { 'A.un': 'absent', 'A.deux': 'absent' },
-    );
-    // Deux échecs après inversion : la note doit avoir chuté.
-    expect(inverted.globalScore).toBeLessThan(5);
+  describe('note après inversion', () => {
+    it('la fait CHUTER quand l’inversion crée des échecs', () => {
+      const inverted = applyPolarity(
+        result([
+          { key: 'A.un', label: 'a', status: 'pass' },
+          { key: 'A.deux', label: 'b', status: 'pass' },
+        ]),
+        { 'A.un': 'absent', 'A.deux': 'absent' },
+      );
+
+      expect(inverted.globalScore).toBeLessThan(5);
+    });
+
+    it('la fait MONTER quand l’inversion lève un échec', () => {
+      const inverted = applyPolarity(
+        { ...result([{ key: 'A.un', label: 'a', status: 'fail' }]), globalScore: 2 },
+        { 'A.un': 'absent' },
+      );
+
+      expect(inverted.globalScore).toBeGreaterThan(2);
+    });
+
+    it('PRÉSERVE le barème propre du critère', () => {
+      // Chaque analyseur a son échelle — le contraste note une proportion de
+      // textes conformes, d'autres comptent des manques par palier. Remplacer
+      // la note par une échelle générique parce qu'UN sous-critère est inversé
+      // jetterait ce barème et rendrait deux gammes incomparables. On déplace
+      // donc la note de l'écart constaté, au lieu de la réécrire.
+      const original = {
+        ...result([
+          { key: 'A.un', label: 'a', status: 'fail' },
+          { key: 'A.deux', label: 'b', status: 'pass' },
+        ]),
+        globalScore: 3.7,
+      };
+
+      const inverted = applyPolarity(original, { 'A.un': 'absent' });
+
+      // Un échec en moins vaut, sur l'échelle commune, deux points de plus.
+      expect(inverted.globalScore).toBe(5);
+      expect(
+        applyPolarity({ ...original, globalScore: 1.4 }, { 'A.un': 'absent' }).globalScore,
+      ).toBe(3.4);
+    });
+
+    it('NE DÉPLACE PAS la note quand aucun jugement ne change', () => {
+      // Inverser un avertissement le rend « info » : rien ne s'aggrave ni ne
+      // s'améliore vraiment, et la note de l'analyseur doit rester la sienne.
+      const original = {
+        ...result([{ key: 'A.un', label: 'a', status: 'warning' }]),
+        globalScore: 4.2,
+      };
+
+      // L'avertissement disparaît : la note remonte de l'écart correspondant,
+      // sans jamais dépasser le plafond de l'échelle.
+      expect(applyPolarity(original, { 'A.un': 'absent' }).globalScore).toBe(5);
+      expect(
+        applyPolarity({ ...original, globalScore: 2.5 }, { 'A.un': 'absent' }).globalScore,
+      ).toBe(3.5);
+    });
+
+    it('garde la note DANS l’échelle du rapport', () => {
+      const haute = applyPolarity(
+        { ...result([{ key: 'A.un', label: 'a', status: 'fail' }]), globalScore: 4.8 },
+        { 'A.un': 'absent' },
+      );
+      const basse = applyPolarity(
+        { ...result([{ key: 'A.un', label: 'a', status: 'pass' }]), globalScore: 0.5 },
+        { 'A.un': 'absent' },
+      );
+
+      expect(haute.globalScore).toBe(5);
+      expect(basse.globalScore).toBe(0);
+    });
   });
 });

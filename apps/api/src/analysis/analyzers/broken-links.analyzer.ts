@@ -1,7 +1,8 @@
 import type { CheckItem, CheckResult, LinkZone } from '@websentry/shared';
 import { BaseAnalyzer } from '../base.analyzer.js';
 import type { EffectiveSettings } from '../effective-settings.js';
-import { CTA_SELECTOR, ZONE_LABEL, detectLinkZone } from '../link-zone.js';
+import { firstElementOf, firstImageIn } from '../dom-walk.js';
+import { ZONE_LABEL, detectLinkZone, isButtonLink } from '../link-zone.js';
 import { locateFromText, truncateSource } from '../locate.js';
 import type { NetworkProbe, ProbeResult } from '../network-probe.js';
 import type { HtmlPage, Selection } from '../page.model.js';
@@ -369,12 +370,14 @@ function collectLinks(page: HtmlPage, settings: EffectiveSettings): LinkElement[
 }
 
 function kindOf(node: Selection): LinkKind {
-  const hasImage = node.find('img').length > 0;
+  // Parcours direct plutôt que `find('img')`, qui compile son sélecteur et
+  // collecte TOUTES les images là où la première suffit.
+  const hasImage = firstImageIn(firstElementOf(node)) !== null;
   const hasText = node.text().trim().length > 0;
 
   if (hasImage && hasText) return 'mixed';
   if (hasImage) return 'image';
-  if (node.is(CTA_SELECTOR) || node.parents(CTA_SELECTOR).length > 0) return 'button';
+  if (isButtonLink(node)) return 'button';
   return 'text';
 }
 

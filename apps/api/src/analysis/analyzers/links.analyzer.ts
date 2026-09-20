@@ -9,9 +9,20 @@ import type {
 import { BaseAnalyzer } from '../base.analyzer.js';
 import { extractDudaNavPages } from '../duda-nav.js';
 import type { EffectiveSettings } from '../effective-settings.js';
-import { detectLinkZone, isInFooterZone, isInLegalTitledContainer } from '../link-zone.js';
+import {
+  detectLinkZone,
+  isInFooterZone,
+  isInLegalTitledContainer,
+  isInShopZone,
+} from '../link-zone.js';
+import {
+  classIncludesAny,
+  firstElementOf,
+  firstImageIn,
+  hasAncestorMatching,
+} from '../dom-walk.js';
 import { locateFromText, truncateSource } from '../locate.js';
-import type { HtmlPage, Selection } from '../page.model.js';
+import type { DomElement, HtmlPage, Selection } from '../page.model.js';
 
 /**
  * Cartographie des liens.
@@ -50,32 +61,53 @@ const GENERIC_ANCHORS: ReadonlySet<string> = new Set([
 /** Zones de navigation — un lien y vers la page courante est légitime. */
 const NAVIGATION_ZONES: ReadonlySet<LinkZone> = new Set(['nav', 'header', 'footer', 'sidebar']);
 
-/** Conteneurs de navigation, pour distinguer le maillage de contenu du reste. */
-const NAV_CONTAINERS = [
-  'nav',
-  'header',
-  'footer',
-  '[role="banner"]',
-  '[role="contentinfo"]',
-  '[class*="dmNav"]',
-  '[class*="dmRespNav"]',
-  '[class*="dmHeader"]',
-  '[class*="dmFooter"]',
-  '[class*="dmfooter"]',
-  '[class*="hfcontainer"]',
-  '[class*="u_nav"]',
-  '[class*="u_header"]',
-  '[class*="u_footer"]',
-  '[class*="slimNav"]',
-  '[class*="StickyNav"]',
-  '[data-ux*="Nav" i]',
-  '#hcontainer',
-  '#flex-header',
-  '[aria-label*="Breadcrumb" i]',
-].join(', ');
+/**
+ * Conteneurs de navigation, pour distinguer le maillage de contenu du reste.
+ *
+ * Lus sur les attributs, et non par un sélecteur : `parents('…')` recompilait
+ * cette liste de vingt clauses pour CHAQUE lien interne de la page.
+ */
+const NAV_TAGS: ReadonlySet<string> = new Set(['nav', 'header', 'footer']);
+const NAV_ROLES: ReadonlySet<string> = new Set(['banner', 'contentinfo']);
+const NAV_CLASS_PARTS = [
+  'dmNav',
+  'dmRespNav',
+  'dmHeader',
+  'dmFooter',
+  'dmfooter',
+  'hfcontainer',
+  'u_nav',
+  'u_header',
+  'u_footer',
+  'slimNav',
+  'StickyNav',
+];
+const NAV_IDS: ReadonlySet<string> = new Set(['hcontainer', 'flex-header']);
 
-const SHOP_CONTAINERS = '.ec-store, [class*="ec-store"], [class*="ecwid"]';
-const BUTTON_CLASSES = '[class*="btn"], [class*="button"], [class*="cta"]';
+/** Mémoire par élément — un conteneur de navigation porte des dizaines de liens. */
+const navigationByElement = new WeakMap<object, boolean>();
+
+function isNavigationContainer(element: DomElement): boolean {
+  const attribs = element.attribs ?? {};
+  return (
+    NAV_TAGS.has(element.name) ||
+    NAV_ROLES.has(attribs['role'] ?? '') ||
+    classIncludesAny(element, NAV_CLASS_PARTS) ||
+    NAV_IDS.has(attribs['id'] ?? '') ||
+    // Ces deux clauses étaient marquées `i` dans le sélecteur d'origine : la
+    // comparaison reste donc insensible à la casse.
+    (attribs['data-ux'] ?? '').toLowerCase().includes('nav') ||
+    (attribs['aria-label'] ?? '').toLowerCase().includes('breadcrumb')
+  );
+}
+
+function isInNavigationContainer(node: Selection): boolean {
+  return hasAncestorMatching(node, navigationByElement, isNavigationContainer, {
+    includeSelf: false,
+  });
+}
+
+const BUTTON_CLASS_PARTS = ['btn', 'button', 'cta'];
 
 /**
  * Au-delà de ce recouvrement, une navigation de pied de page n'est qu'un ÉCHO
@@ -198,7 +230,10 @@ export class LinksAnalyzer extends BaseAnalyzer {
     }
 
     const zone = detectLinkZone(node);
-    const imageAlt = node.find('img').first().attr('alt')?.trim() ?? '';
+    // UNE seule descente à la recherche d'une image : elle servait deux fois,
+    // pour l'ancre de repli et pour le type du lien.
+    const image = firstImageIn(firstElementOf(node));
+    const imageAlt = image?.attribs?.['alt']?.trim() ?? '';
     const anchor = text || imageAlt || href;
     const targetIsAnchor = href.startsWith('#');
     const type = linkTypeOf(node, {
@@ -206,6 +241,7 @@ export class LinksAnalyzer extends BaseAnalyzer {
       isMail,
       targetIsAnchor,
       hasText: Boolean(text),
+      hasImage: image !== null,
       zone,
     });
     const resolved = isPhone || isMail || targetIsAnchor ? href : absolute(href, page.url);
@@ -300,8 +336,8 @@ export class LinksAnalyzer extends BaseAnalyzer {
     state: Collected,
   ): void {
     const normalized = normalizeUrl(resolved);
-    const inNavigation = node.parents(NAV_CONTAINERS).length > 0;
-    const inShop = node.parents(SHOP_CONTAINERS).length > 0;
+    const inNavigation = isInNavigationContainer(node);
+    const inShop = isInShopZone(node);
 
     if (isInLegalTitledContainer(node)) state.legalLinks.add(normalized);
 
@@ -386,7 +422,7 @@ export class LinksAnalyzer extends BaseAnalyzer {
       if (!resolved.startsWith('http')) return;
       if (isExcludedDomain(resolved, settings.links.excludedDomains)) return;
       if (!sameHost(resolved, page.url)) return;
-      if (node.parents(SHOP_CONTAINERS).length > 0) return;
+      if (isInShopZone(node)) return;
 
       const normalized = normalizeUrl(resolved);
       if (state.containerLinks.has(normalized)) return;
@@ -490,6 +526,7 @@ function linkTypeOf(
     isMail: boolean;
     targetIsAnchor: boolean;
     hasText: boolean;
+    hasImage: boolean;
     zone: LinkZone;
   },
 ): LinkType {
@@ -497,10 +534,12 @@ function linkTypeOf(
   if (context.isMail) return 'ctm';
   if (context.targetIsAnchor) return 'text';
 
-  const hasImage = node.find('img').length > 0;
-  if (hasImage && context.hasText) return 'mixed';
-  if (hasImage) return 'image';
-  if (node.is(BUTTON_CLASSES) || context.zone === 'cta') return 'button';
+  if (context.hasImage && context.hasText) return 'mixed';
+  if (context.hasImage) return 'image';
+
+  const element = firstElementOf(node);
+  const isButton = element !== null && classIncludesAny(element, BUTTON_CLASS_PARTS);
+  if (isButton || context.zone === 'cta') return 'button';
   return 'text';
 }
 

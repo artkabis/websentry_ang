@@ -7,7 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import type { AnalysisReport, CheckResult, SseAnalyzeEvent } from '@websentry/shared';
 import { AnalysisApi } from '../../core/analysis/analysis.api';
 import { CheckCardComponent } from './check-card.component';
@@ -43,6 +43,12 @@ type Phase = 'idle' | 'running' | 'done' | 'error';
  * vingt-neuf lignes dont vingt-cinq vertes se survole, et on rate les quatre
  * rouges avec. Ce qui est masqué reste compté à l'écran, jamais implicite.
  */
+/** Paramètres d'adresse — en français, comme les routes de l'application. */
+const URL_PARAM = 'url';
+const FILTER_PARAM = 'filtre';
+/** Seule valeur écrite : le filtre par défaut n'encombre pas l'adresse. */
+const FILTER_ALL_VALUE = 'tous';
+
 @Component({
   selector: 'ws-analysis',
   standalone: true,
@@ -189,7 +195,7 @@ type Phase = 'idle' | 'running' | 'done' | 'error';
             >
               <button
                 type="button"
-                (click)="filter.set('attention')"
+                (click)="setFilter('attention')"
                 [attr.aria-pressed]="filter() === 'attention'"
                 [class]="filterClass('attention')"
               >
@@ -197,7 +203,7 @@ type Phase = 'idle' | 'running' | 'done' | 'error';
               </button>
               <button
                 type="button"
-                (click)="filter.set('all')"
+                (click)="setFilter('all')"
                 [attr.aria-pressed]="filter() === 'all'"
                 [class]="filterClass('all')"
               >
@@ -218,7 +224,7 @@ type Phase = 'idle' | 'running' | 'done' | 'error';
               <p class="text-sm text-slate-600">Aucun critère ne demande d'action.</p>
               <button
                 type="button"
-                (click)="filter.set('all')"
+                (click)="setFilter('all')"
                 class="mt-3 text-sm font-medium text-brand-700 hover:underline"
               >
                 Afficher les {{ totalChecks() }} critères évalués
@@ -258,6 +264,8 @@ type Phase = 'idle' | 'running' | 'done' | 'error';
 export class AnalysisComponent {
   private readonly api = inject(AnalysisApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly url = signal('');
   readonly phase = signal<Phase>('idle');
@@ -276,6 +284,54 @@ export class AnalysisComponent {
     // Une analyse en cours quand l'écran disparaît n'a plus de destinataire :
     // l'interrompre libère aussi la connexion sortante côté serveur.
     this.destroyRef.onDestroy(() => this.controller?.abort());
+
+    this.restoreFromUrl();
+  }
+
+  /**
+   * L'écran reprend son état depuis l'adresse.
+   *
+   * Un rapport se partage et se recharge : sans cela, envoyer « regarde cette
+   * analyse » à un collègue revient à lui envoyer un formulaire vide, et un
+   * rafraîchissement perd le travail en cours.
+   */
+  private restoreFromUrl(): void {
+    const params = this.route.snapshot.queryParamMap;
+
+    const filter = params.get(FILTER_PARAM);
+    if (filter === FILTER_ALL_VALUE) this.filter.set('all');
+
+    const url = params.get(URL_PARAM)?.trim();
+    if (!url) return;
+
+    this.url.set(url);
+    // Le filtre vient du lien : une nouvelle analyse le remettrait à sa valeur
+    // par défaut et trahirait ce que l'expéditeur voulait montrer.
+    void this.start({ resetFilter: false });
+  }
+
+  /**
+   * Écrit l'état dans l'adresse, SANS empiler d'entrée d'historique.
+   *
+   * L'écran est un plan de travail, pas une suite de pages : un retour arrière
+   * doit ramener à l'écran précédent, pas défaire un changement de filtre.
+   */
+  private writeToUrl(): void {
+    const url = this.url().trim();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        [URL_PARAM]: url || null,
+        // Le filtre par défaut n'encombre pas l'adresse.
+        [FILTER_PARAM]: this.filter() === 'all' ? FILTER_ALL_VALUE : null,
+      },
+      replaceUrl: true,
+    });
+  }
+
+  setFilter(value: ReportFilter): void {
+    this.filter.set(value);
+    this.writeToUrl();
   }
 
   readonly canStart = computed(() => this.url().trim().length > 0 && this.phase() !== 'running');
@@ -344,7 +400,7 @@ export class AnalysisComponent {
       .filter(group => group.visible.length > 0);
   });
 
-  async start(): Promise<void> {
+  async start(options: { resetFilter?: boolean } = {}): Promise<void> {
     const url = this.url().trim();
     if (!url) return;
 
@@ -357,7 +413,8 @@ export class AnalysisComponent {
     this.liveChecks.set([]);
     this.completed.set(0);
     this.total.set(0);
-    this.filter.set(DEFAULT_FILTER);
+    if (options.resetFilter !== false) this.filter.set(DEFAULT_FILTER);
+    this.writeToUrl();
 
     try {
       for await (const event of this.api.stream({ url }, this.controller.signal)) {

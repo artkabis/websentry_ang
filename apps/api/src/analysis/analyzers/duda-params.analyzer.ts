@@ -1,6 +1,6 @@
 import type { CheckItem, CheckResult, DudaParams } from '@websentry/shared';
 import { BaseAnalyzer } from '../base.analyzer.js';
-import { isEcommerceActive, parseDudaParameters, realValue } from '../duda-parameters.js';
+import { dudaParametersOf, isEcommerceActive, realValue } from '../duda-parameters.js';
 import type { EffectiveSettings } from '../effective-settings.js';
 import type { HtmlPage } from '../page.model.js';
 
@@ -30,7 +30,7 @@ export class DudaParamsAnalyzer extends BaseAnalyzer {
   // commune aux analyseurs, et le paramètre nommé dit que l'oubli n'en est pas
   // un — ce critère ne se désactive pas.
   analyze(page: HtmlPage, _settings?: EffectiveSettings): Promise<CheckResult> {
-    const params = parseDudaParameters(page.html);
+    const params = dudaParametersOf(page);
     if (!params) {
       return Promise.resolve(
         this.na('Aucun window.Parameters trouvé — site non Duda ou page non reconnue.'),
