@@ -9,7 +9,12 @@ import type {
 import { BaseAnalyzer } from '../base.analyzer.js';
 import { extractDudaNavPages } from '../duda-nav.js';
 import type { EffectiveSettings } from '../effective-settings.js';
-import { detectLinkZone, isInFooterZone, isInLegalTitledContainer } from '../link-zone.js';
+import {
+  detectLinkZone,
+  isInFooterZone,
+  isInLegalTitledContainer,
+  isInShopZone,
+} from '../link-zone.js';
 import { locateFromText, truncateSource } from '../locate.js';
 import type { HtmlPage, Selection } from '../page.model.js';
 
@@ -74,7 +79,6 @@ const NAV_CONTAINERS = [
   '[aria-label*="Breadcrumb" i]',
 ].join(', ');
 
-const SHOP_CONTAINERS = '.ec-store, [class*="ec-store"], [class*="ecwid"]';
 const BUTTON_CLASSES = '[class*="btn"], [class*="button"], [class*="cta"]';
 
 /**
@@ -301,7 +305,7 @@ export class LinksAnalyzer extends BaseAnalyzer {
   ): void {
     const normalized = normalizeUrl(resolved);
     const inNavigation = node.parents(NAV_CONTAINERS).length > 0;
-    const inShop = node.parents(SHOP_CONTAINERS).length > 0;
+    const inShop = isInShopZone(node);
 
     if (isInLegalTitledContainer(node)) state.legalLinks.add(normalized);
 
@@ -386,7 +390,7 @@ export class LinksAnalyzer extends BaseAnalyzer {
       if (!resolved.startsWith('http')) return;
       if (isExcludedDomain(resolved, settings.links.excludedDomains)) return;
       if (!sameHost(resolved, page.url)) return;
-      if (node.parents(SHOP_CONTAINERS).length > 0) return;
+      if (isInShopZone(node)) return;
 
       const normalized = normalizeUrl(resolved);
       if (state.containerLinks.has(normalized)) return;

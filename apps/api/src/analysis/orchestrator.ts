@@ -131,9 +131,36 @@ export function applyPolarity(
   return {
     ...result,
     items,
-    globalScore: polarityScore(failures, warnings),
+    globalScore: shiftedScore(result, items),
     status: failures > 0 ? 'fail' : warnings > 0 ? 'warning' : 'pass',
   };
+}
+
+/**
+ * Note du critère après inversion — par DÉPLACEMENT, non par remplacement.
+ *
+ * Chaque analyseur a son propre barème : le contraste note une proportion de
+ * textes conformes, d'autres comptent des manques par palier. Recalculer la
+ * note sur une échelle générique parce qu'un seul sous-critère est inversé
+ * jetterait ce barème et rendrait deux gammes incomparables.
+ *
+ * On mesure donc seulement l'ÉCART que l'inversion provoque sur une échelle
+ * commune, et on l'applique à la note de l'analyseur. Inverser un échec en
+ * conformité fait monter la note ; l'inverse la fait descendre ; n'inverser
+ * aucun jugement ne la déplace pas.
+ */
+function shiftedScore(result: CheckResult, inverted: readonly CheckItem[]): number {
+  const before = polarityScore(countOf(result.items, 'fail'), countOf(result.items, 'warning'));
+  const after = polarityScore(countOf(inverted, 'fail'), countOf(inverted, 'warning'));
+  const shifted = result.globalScore + (after - before);
+
+  // La note reste dans l'échelle du rapport, et sur une décimale : un score
+  // qui sortirait de 0–5 ne voudrait plus rien dire à l'affichage.
+  return Math.round(Math.min(5, Math.max(0, shifted)) * 10) / 10;
+}
+
+function countOf(items: readonly CheckItem[], status: CheckItem['status']): number {
+  return items.filter(item => item.status === status).length;
 }
 
 /**

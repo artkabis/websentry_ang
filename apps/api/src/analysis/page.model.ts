@@ -23,6 +23,20 @@ export interface HtmlPage extends SerializablePage {
  */
 export type Selection = ReturnType<CheerioAPI>;
 
+/**
+ * Élément du document, réduit à ce que les analyseurs lisent.
+ *
+ * Même raison que pour `Selection` : dépendre directement de `domhandler`,
+ * dépendance TRANSITIVE de cheerio, casserait à la première montée de version.
+ * `parent` reste `unknown` parce qu'un parent peut être le document lui-même,
+ * qui n'est pas un élément — le code qui remonte les ancêtres doit le vérifier.
+ */
+export interface DomElement {
+  readonly name: string;
+  readonly attribs: Record<string, string>;
+  readonly parent: unknown;
+}
+
 /** Portion transférable d'une page — ce qui franchit la frontière du worker. */
 export interface SerializablePage {
   /** URL FINALE, redirections suivies. */

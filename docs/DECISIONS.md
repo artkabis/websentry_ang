@@ -682,3 +682,57 @@ cycle de vie à tenir : un thread arrêté en pleine requête doit voir ses atte
 dénouées, sans quoi l'analyse resterait suspendue. Enfin, un résultat mémorisé
 **vieillit** : dix minutes pour un succès, une pour un échec — un lien réparé
 pendant un scan peut donc être encore rapporté cassé jusqu'à la fin du scan.
+
+---
+
+## 28. La reconnaissance de zone se fait sur les attributs, pas par sélecteurs
+
+**Décision** — Le module qui décide de la zone d'un lien (menu, pied de page,
+contenu, CTA, boutique…) n'utilise plus de sélecteurs CSS. Les mêmes règles sont
+exprimées en tests d'attributs : balise, `role`, sous-chaîne de `class`, jeton de
+`class` exact, `id`.
+
+**Raison** — Un `node.is('…')` reparse et recompile sa chaîne à CHAQUE appel.
+Le profilage du critère des liens sur une page de 185 liens montrait un quart du
+temps passé dans l'analyseur de sélecteurs de Cheerio — pour reconnaître huit
+familles de conteneurs dont les règles tiennent en quelques comparaisons de
+chaînes. C'est du travail refait des milliers de fois par page.
+
+**Aucune régression** — Un test DIFFÉRENTIEL garde les sélecteurs d'origine
+comme implémentation de référence et compare les deux verdicts cas par cas, sur
+une table qui couvre chaque règle et les pièges documentés — dont le jeton
+`dmContent`, qui ne doit PAS attraper les `dmContentSlot` que l'éditeur place
+dans l'en-tête et le pied de page.
+
+**Coût assumé** — Les règles ne sont plus lisibles d'un seul coup d'œil sous
+forme de sélecteur : ajouter une convention de classe demande de toucher un
+prédicat plutôt qu'une chaîne. Le test différentiel rend cette modification sûre,
+mais il faut penser à y ajouter le cas. En contrepartie, la sémantique est
+désormais explicite là où un `[class*="…"]` cachait une correspondance par
+sous-chaîne que personne ne lisait comme telle.
+
+---
+
+## 29. L'inversion de polarité DÉPLACE la note, elle ne la remplace plus
+
+**Décision** — Quand un sous-critère est inversé pour une gamme (la présence
+d'un formulaire est souhaitable ici, indésirable là), la note du critère n'est
+plus recalculée sur une échelle générique : on mesure l'écart que l'inversion
+provoque sur cette échelle commune, et on l'applique à la note rendue par
+l'analyseur.
+
+**Raison** — Chaque analyseur a son barème : le contraste note une PROPORTION de
+textes conformes, d'autres comptent des manques par palier. Remplacer cette note
+par une échelle générique parce qu'un seul sous-critère est inversé jetait le
+travail du barème et rendait deux gammes incomparables — la même page, auditée
+sous deux profils, ne différait plus seulement sur le sous-critère inversé mais
+sur toute la note du critère.
+
+**Aucune régression** — Le sens de l'inversion est conservé : créer un échec
+fait chuter la note, en lever un la fait monter, et la note reste bornée à
+l'échelle 0–5 du rapport.
+
+**Coût assumé** — L'écart est mesuré sur une échelle qui n'est pas celle de
+l'analyseur : sur un critère au barème très resserré, un déplacement de deux
+points peut saturer la note à 5 ou à 0. C'est un arrondi assumé, et il reste
+très préférable à la perte complète du barème.

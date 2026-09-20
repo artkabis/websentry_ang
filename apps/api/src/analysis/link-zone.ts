@@ -1,5 +1,5 @@
 import type { LinkZone } from '@websentry/shared';
-import type { Selection } from './page.model.js';
+import type { DomElement, Selection } from './page.model.js';
 
 /**
  * Zone d'un lien dans la page — fonctions PURES, partagées par LINKS et
@@ -8,13 +8,19 @@ import type { Selection } from './page.model.js';
  * La zone change le sens d'un lien : un lien répété dans le pied de page est
  * normal, le même répété dans le contenu ne l'est pas. Un seul module la
  * décide, sans quoi deux critères classeraient le même lien différemment.
+ *
+ * La reconnaissance se fait sur les ATTRIBUTS, pas par sélecteurs CSS. Un
+ * `node.is('…')` reparse et recompile sa chaîne à chaque appel : sur une page
+ * de deux cents liens, la lecture des zones passait un quart de son temps dans
+ * l'analyseur de sélecteurs de Cheerio. Les règles reproduites ici sont
+ * exactement celles des sélecteurs d'origine — un test différentiel les
+ * compare, cas par cas, à une implémentation de référence qui les utilise.
  */
 
 /** Boutons et appels à l'action, par convention de classe. */
-const CTA_SELECTOR =
-  '[class*="btn"], [class*="button"], [class*="cta"], [class*="dm-cta"], [class*="dmButton"], [class*="u_btn"]';
+const CTA_CLASSES = ['btn', 'button', 'cta', 'dm-cta', 'dmButton', 'u_btn'];
 
-const SHOP_SELECTOR = '.ec-store, [class*="ec-store"], [class*="ecwid"]';
+const SHOP_CLASSES = ['ec-store', 'ecwid'];
 
 /**
  * Le pied de page est testé AVANT l'en-tête.
@@ -23,24 +29,20 @@ const SHOP_SELECTOR = '.ec-store, [class*="ec-store"], [class*="ecwid"]';
  * tester l'en-tête d'abord classerait tout le pied de page en en-tête. On
  * tranche donc sur les signaux propres au pied de page.
  */
-const FOOTER_SELECTOR =
-  'footer, [role="contentinfo"], [class*="dmFooter"], [class*="dmfooter"], [class*="u_footer"], [class*="u_fcontainer"], [class*="f_hcontainer"], [id*="dmFooter"], #fcontainer';
+const FOOTER_CLASSES = [
+  'dmFooter',
+  'dmfooter',
+  'u_footer',
+  'u_fcontainer',
+  'f_hcontainer',
+] as const;
 
-const NAV_SELECTOR = 'nav, [class*="dmNav"], [class*="dmRespNav"], [class*="u_nav"]';
+const NAV_CLASSES = ['dmNav', 'dmRespNav', 'u_nav'];
 
-const HEADER_SELECTOR =
-  'header, [role="banner"], [class*="dmHeader"], [class*="u_header"], [class*="u_hcontainer"], [class*="hfcontainer"], [id*="dmHeader"], #hcontainer, #flex-header';
+const HEADER_CLASSES = ['dmHeader', 'u_header', 'u_hcontainer', 'hfcontainer'];
 
-const SIDEBAR_SELECTOR = 'aside, [class*="sidebar"]';
-const HERO_SELECTOR = '[class*="hero"], [class*="banner"], [class*="slider"]';
-
-/**
- * Contenu principal — jeton EXACT `.dmContent`.
- *
- * `[class*="dmContent"]` attraperait les `dmContentSlot` et `dmContentBox` que
- * l'éditeur place AUSSI dans l'en-tête et le pied de page.
- */
-const CONTENT_SELECTOR = 'main, [role="main"], .dmContent, #dmContentContainer';
+const SIDEBAR_CLASSES = ['sidebar'];
+const HERO_CLASSES = ['hero', 'banner', 'slider'];
 
 /** Conteneurs dont le `data-title` annonce un bloc légal. */
 const LEGAL_TITLE_PATTERN =
@@ -52,8 +54,8 @@ const LEGAL_TITLE_PATTERN =
  * La zone d'un ancêtre ne dépend pas du lien qui le traverse, et les liens
  * d'une page partagent massivement leurs ancêtres : le conteneur de navigation
  * est l'ancêtre des quarante liens du menu. Sans mémoire, il est réinterrogé
- * quarante fois, et chaque interrogation coûte huit sélecteurs d'attributs —
- * puis tout recommence pour le critère suivant, qui repart du même DOM.
+ * quarante fois — puis tout recommence pour le critère suivant, qui repart du
+ * même DOM.
  *
  * Les clés sont les nœuds du document analysé et les tables sont FAIBLES :
  * elles disparaissent avec lui, sans rien à purger.
@@ -61,6 +63,7 @@ const LEGAL_TITLE_PATTERN =
 const zoneByElement = new WeakMap<object, LinkZone | null>();
 const linkZoneByElement = new WeakMap<object, LinkZone>();
 const footerByElement = new WeakMap<object, boolean>();
+const shopByElement = new WeakMap<object, boolean>();
 
 /** Libellé court d'une zone, pour l'affichage. */
 export const ZONE_LABEL: Record<LinkZone, string> = {
@@ -75,6 +78,130 @@ export const ZONE_LABEL: Record<LinkZone, string> = {
   unknown: '',
 };
 
+/** Attributs lus pour classer un élément — tout ce dont les règles ont besoin. */
+interface Signals {
+  tag: string;
+  id: string;
+  classes: string;
+  role: string;
+}
+
+function signalsOf(element: DomElement): Signals {
+  const attribs = element.attribs ?? {};
+  return {
+    tag: element.name ?? '',
+    id: attribs['id'] ?? '',
+    classes: attribs['class'] ?? '',
+    role: attribs['role'] ?? '',
+  };
+}
+
+/** `[class*="x"]` — sous-chaîne de l'attribut, comme le sélecteur d'origine. */
+function hasClassPart(signals: Signals, parts: readonly string[]): boolean {
+  return parts.some(part => signals.classes.includes(part));
+}
+
+/** `.jeton` — jeton de classe ENTIER, et non une sous-chaîne. */
+function hasClassToken(signals: Signals, token: string): boolean {
+  return signals.classes.split(/\s+/).includes(token);
+}
+
+function isShop(signals: Signals): boolean {
+  return hasClassPart(signals, SHOP_CLASSES);
+}
+
+function isFooter(signals: Signals): boolean {
+  return (
+    signals.tag === 'footer' ||
+    signals.role === 'contentinfo' ||
+    hasClassPart(signals, FOOTER_CLASSES) ||
+    signals.id.includes('dmFooter') ||
+    signals.id === 'fcontainer'
+  );
+}
+
+function isNav(signals: Signals): boolean {
+  return signals.tag === 'nav' || hasClassPart(signals, NAV_CLASSES);
+}
+
+function isHeader(signals: Signals): boolean {
+  return (
+    signals.tag === 'header' ||
+    signals.role === 'banner' ||
+    hasClassPart(signals, HEADER_CLASSES) ||
+    signals.id.includes('dmHeader') ||
+    signals.id === 'hcontainer' ||
+    signals.id === 'flex-header'
+  );
+}
+
+function isSidebar(signals: Signals): boolean {
+  return signals.tag === 'aside' || hasClassPart(signals, SIDEBAR_CLASSES);
+}
+
+function isHero(signals: Signals): boolean {
+  return hasClassPart(signals, HERO_CLASSES);
+}
+
+function isCta(signals: Signals): boolean {
+  return hasClassPart(signals, CTA_CLASSES);
+}
+
+/**
+ * Contenu principal — jeton EXACT `dmContent`.
+ *
+ * Une sous-chaîne attraperait les `dmContentSlot` et `dmContentBox` que
+ * l'éditeur place AUSSI dans l'en-tête et le pied de page.
+ */
+function isContent(signals: Signals): boolean {
+  return (
+    signals.tag === 'main' ||
+    signals.role === 'main' ||
+    hasClassToken(signals, 'dmContent') ||
+    signals.id === 'dmContentContainer'
+  );
+}
+
+function classify(element: DomElement): LinkZone | null {
+  const signals = signalsOf(element);
+  if (isShop(signals)) return 'shop';
+  if (isFooter(signals)) return 'footer';
+  if (isNav(signals)) return 'nav';
+  if (isHeader(signals)) return 'header';
+  if (isSidebar(signals)) return 'sidebar';
+  if (isHero(signals)) return 'hero';
+  if (isCta(signals)) return 'cta';
+  if (isContent(signals)) return 'content';
+  return null;
+}
+
+/** Élément d'une sélection, quand elle en porte un. */
+function elementOf(node: Selection): DomElement | null {
+  const element = node.get(0);
+  return element && typeof element === 'object' && 'attribs' in element ? element : null;
+}
+
+/** Ancêtres d'un élément, du plus proche au plus lointain. */
+function* ancestorsOf(element: DomElement): Generator<DomElement> {
+  let current: unknown = element.parent;
+  while (current && typeof current === 'object' && 'attribs' in current) {
+    const ancestor = current as DomElement;
+    yield ancestor;
+    current = ancestor.parent;
+  }
+}
+
+/** Zone d'un ancêtre, mémorisée : il est partagé par tous les liens qu'il porte. */
+function zoneOfAncestor(element: DomElement): LinkZone | null {
+  const known = zoneByElement.get(element);
+  // `undefined` = jamais classé ; `null` = classé « aucun signal ».
+  if (known !== undefined) return known;
+
+  const zone = classify(element);
+  zoneByElement.set(element, zone);
+  return zone;
+}
+
 /**
  * Zone d'un lien, d'après ses ancêtres.
  *
@@ -84,48 +211,23 @@ export const ZONE_LABEL: Record<LinkZone, string> = {
  * page.
  */
 export function detectLinkZone(node: Selection): LinkZone {
-  const element = node.get(0);
-  if (!element) return computeLinkZone(node);
+  const element = elementOf(node);
+  if (!element) return 'content';
 
   const known = linkZoneByElement.get(element);
   if (known) return known;
 
-  const zone = computeLinkZone(node);
+  let zone: LinkZone = isCta(signalsOf(element)) ? 'cta' : 'content';
+  for (const ancestor of ancestorsOf(element)) {
+    const found = zoneOfAncestor(ancestor);
+    if (found) {
+      zone = found;
+      break;
+    }
+  }
+
   linkZoneByElement.set(element, zone);
   return zone;
-}
-
-function computeLinkZone(node: Selection): LinkZone {
-  const parents = node.parents();
-  for (let index = 0; index < parents.length; index += 1) {
-    const zone = zoneOf(parents.eq(index), parents.get(index));
-    if (zone) return zone;
-  }
-  return node.is(CTA_SELECTOR) ? 'cta' : 'content';
-}
-
-function zoneOf(node: Selection, element: object | undefined): LinkZone | null {
-  if (!element) return classify(node);
-
-  const known = zoneByElement.get(element);
-  // `undefined` = jamais classé ; `null` = classé « aucun signal ».
-  if (known !== undefined) return known;
-
-  const zone = classify(node);
-  zoneByElement.set(element, zone);
-  return zone;
-}
-
-function classify(node: Selection): LinkZone | null {
-  if (node.is(SHOP_SELECTOR)) return 'shop';
-  if (node.is(FOOTER_SELECTOR)) return 'footer';
-  if (node.is(NAV_SELECTOR)) return 'nav';
-  if (node.is(HEADER_SELECTOR)) return 'header';
-  if (node.is(SIDEBAR_SELECTOR)) return 'sidebar';
-  if (node.is(HERO_SELECTOR)) return 'hero';
-  if (node.is(CTA_SELECTOR)) return 'cta';
-  if (node.is(CONTENT_SELECTOR)) return 'content';
-  return null;
 }
 
 /**
@@ -136,23 +238,65 @@ function classify(node: Selection): LinkZone | null {
  * qui masque le conteneur de pied de page plus lointain.
  */
 export function isInFooterZone(node: Selection): boolean {
-  const element = node.get(0);
-  if (!element) return node.closest(FOOTER_SELECTOR).length > 0;
+  return hasAncestorMatching(node, footerByElement, signals => isFooter(signals), true);
+}
 
-  const known = footerByElement.get(element);
+/** Le lien est-il dans un conteneur de boutique ? */
+export function isInShopZone(node: Selection): boolean {
+  return hasAncestorMatching(node, shopByElement, signals => isShop(signals), false);
+}
+
+/**
+ * Un ancêtre — ou l'élément lui-même quand `includeSelf` — porte-t-il le signal ?
+ *
+ * Le résultat est mémorisé par élément : sur une page de deux cents liens, la
+ * même chaîne d'ascendance est remontée deux cents fois sans cela.
+ */
+function hasAncestorMatching(
+  node: Selection,
+  cache: WeakMap<object, boolean>,
+  matches: (signals: Signals) => boolean,
+  includeSelf: boolean,
+): boolean {
+  const element = elementOf(node);
+  if (!element) return false;
+
+  const known = cache.get(element);
   if (known !== undefined) return known;
 
-  const inFooter = node.closest(FOOTER_SELECTOR).length > 0;
-  footerByElement.set(element, inFooter);
-  return inFooter;
+  let found = includeSelf && matches(signalsOf(element));
+  if (!found) {
+    for (const ancestor of ancestorsOf(element)) {
+      if (matches(signalsOf(ancestor))) {
+        found = true;
+        break;
+      }
+    }
+  }
+
+  cache.set(element, found);
+  return found;
 }
 
 /** Le lien est-il dans un conteneur dont le `data-title` annonce un bloc légal ? */
 export function isInLegalTitledContainer(node: Selection): boolean {
-  return node
-    .parents('[data-title]')
-    .toArray()
-    .some(element => LEGAL_TITLE_PATTERN.test(element.attribs?.['data-title'] ?? ''));
+  const element = elementOf(node);
+  if (!element) return false;
+
+  for (const ancestor of ancestorsOf(element)) {
+    if (LEGAL_TITLE_PATTERN.test(ancestor.attribs?.['data-title'] ?? '')) return true;
+  }
+  return false;
 }
 
-export { CTA_SELECTOR };
+/** Le lien EST-IL un bouton, ou est-il posé dans un bouton ? */
+export function isButtonLink(node: Selection): boolean {
+  const element = elementOf(node);
+  if (!element) return false;
+
+  if (isCta(signalsOf(element))) return true;
+  for (const ancestor of ancestorsOf(element)) {
+    if (isCta(signalsOf(ancestor))) return true;
+  }
+  return false;
+}

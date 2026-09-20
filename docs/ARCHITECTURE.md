@@ -482,7 +482,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1571   | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1625   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 392    | 80 %                            |
