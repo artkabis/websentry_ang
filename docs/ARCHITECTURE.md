@@ -248,20 +248,40 @@ résultat : ni base, ni état partagé, ni injection. C'est ce qui permet de
 l'exécuter dans un worker en ne transportant que du JSON, et de le tester sans
 rien monter.
 
-Portés à ce jour (7 sur les 29 de la v1) : `METAS`, `HN_STRUCTURE`,
-`CONTENT_LENGTH`, `CANONICAL`, `OPEN_GRAPH`, `LANG`, `REDIRECTS`. Tous purs,
-sans requête sortante.
+Les **29 critères de la v1 sont portés**, en trois natures :
 
-Restent à porter, par ordre de dépendance croissante :
+| Nature                          | Critères                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DOM pur (23)                    | `METAS`, `HN_STRUCTURE`, `HN_LENGTH`, `CONTENT_LENGTH`, `CANONICAL`, `OPEN_GRAPH`, `LANG`, `REDIRECTS`, `BOLD`, `FAVICON`, `TRACKING`, `STRUCTURED_DATA`, `DUDA_PARAMS`, `CTA`, `LOGO`, `PICTOGRAM`, `NAV_STRUCTURE`, `ACCESSIBILITY`, `SPLIT_LINKS`, `DATA_BINDING`, `MENTIONS_LEGALES_DATA`, `DUPLICATE_IMAGES`, `CONTRAST_V2` |
+| DOM + cartographie de liens (2) | `LINKS`, `ANCHOR_TEXT`                                                                                                                                                                                                                                                                                                           |
+| Requêtes sortantes (4)          | `ROBOTS_META`, `IMAGES` (poids), `BROKEN_LINKS`, `MENTIONS_LEGALES`                                                                                                                                                                                                                                                              |
 
-| Nature                      | Critères                                                                                                                                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| DOM pur                     | `HN_LENGTH`, `BOLD`, `FAVICON`, `TRACKING`, `STRUCTURED_DATA`, `ROBOTS_META`, `DUDA_PARAMS`, `CTA`, `LOGO`, `PICTOGRAM`, `NAV_STRUCTURE`, `ACCESSIBILITY`, `SPLIT_LINKS`, `DATA_BINDING`, `MENTIONS_LEGALES` |
-| DOM + cartographie de liens | `LINKS`, `ANCHOR_TEXT`                                                                                                                                                                                       |
-| Requêtes sortantes          | `IMAGES` (poids), `BROKEN_LINKS`, `DUPLICATE_IMAGES`, `MENTIONS_LEGALES_DATA`, `CONTRAST_V2`                                                                                                                 |
+#### La sonde réseau, porte de sortie unique
 
-Les derniers demandent une capacité de requête **dans le worker** : la politique
-SSRF devra y être instanciée, jamais contournée.
+Un analyseur ne connaît pas `fetch` : il reçoit une `NetworkProbe`, seule à
+émettre depuis le worker, et construite sur la politique SSRF reconstituée dans
+le thread (un worker n'a pas de conteneur Nest : la configuration sortante lui
+est passée sérialisée dans la tâche). La sonde **ne lève jamais** — un lien
+injoignable est un résultat d'analyse, pas une panne d'analyse — et porte trois
+garde-fous :
+
+- un **budget de requêtes par analyse**, décrémenté AVANT l'appel : une page
+  hostile qui déclare dix mille images ne transforme pas WebSentry en
+  amplificateur ;
+- une **concurrence bornée**, pour ne pas faire passer un audit pour une
+  attaque aux yeux du site mesuré ;
+- un **cache TTL/LRU partagé** sur l'analyse : une même URL citée cent fois
+  n'est vérifiée qu'une.
+
+#### Le contraste sans navigateur
+
+`CONTRAST_V2` ne peut pas se lire dans le HTML : il faut résoudre la cascade.
+Un micro-moteur CSS embarqué (`analysis/css/`) calcule les styles — spécificité,
+héritage, custom properties, `@media`/`@layer`/`@supports`/`@container` — puis un
+résolveur de fond effectif compose les couches semi-transparentes et remonte les
+ancêtres jusqu'à une couleur opaque. Ce moteur **n'a aucune porte de sortie** :
+les feuilles externes ne sont pas chargées, la mesure porte sur les styles
+embarqués et en ligne.
 
 ### Règles par page
 
@@ -435,7 +455,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 972    | 85 % global, **100 %** sécurité |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1529   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 216    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 387    | 80 %                            |
@@ -461,9 +481,8 @@ utilisateurs, feedback, messagerie, analytics, supervision, portail
 documentaire.
 
 Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
-sitemap, sécurité) avec 7 analyseurs sur 29. Les 22 restants sont listés plus
-haut ; ils ne demandent aucun changement de structure, sauf les cinq qui émettent
-des requêtes sortantes.
+sitemap, sécurité) avec les 29 analyseurs de la v1. Ce qui reste y tient à
+l'interface, pas au moteur.
 
 Dettes identifiées sur le périmètre déjà livré :
 
@@ -502,18 +521,16 @@ Dettes identifiées sur le périmètre déjà livré :
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de
   design, à mener d'un bloc plutôt qu'au fil des modules.
-- **Analyseurs restants** — 22 des 29 critères de la v1 ne sont pas encore
-  portés. Le rapport produit est donc partiel, et le score global porte sur les
-  seuls critères présents. À lever avant toute bascule de production.
 - **Lot et sitemap dans l'interface** — `/analyse` couvre la page unitaire ; le
   backend expose aussi le lot et le sitemap, sans écran. Le rendu du rapport
   étant désormais factorisé (`report-view.ts` et ses cartes), un écran de lot
   consiste surtout à empiler des rapports et à suivre plusieurs flux, pas à
   réécrire l'affichage.
-- **Requête sortante dans le worker** — cinq analyseurs vérifient des ressources
-  distantes (poids d'images, liens cassés, contraste). Ils demandent que la
-  politique SSRF soit instanciée DANS le thread, ce que l'architecture prévoit
-  mais que rien n'exerce encore.
+- **Feuilles de style externes non mesurées** — `CONTRAST_V2` évalue les styles
+  embarqués et en ligne. Un site dont toute la charte tient dans un `.css`
+  distant est donc mesuré sur des valeurs par défaut. Faire passer ces feuilles
+  par la sonde réseau est possible sans changement de structure ; le coût est un
+  budget de requêtes supplémentaire par page.
 - **Suppressions depuis l'interface** — l'API expose les quatre portées (pages,
   session, site, domaine) et la suite sécurité les couvre ; l'interface ne les
   propose pas encore. Elles attendent la corbeille : offrir une suppression

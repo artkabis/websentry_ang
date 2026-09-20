@@ -442,6 +442,11 @@ sur les critères présents. Il n'est donc pas comparable à un score v1, et le
 module ne peut pas basculer en production tant que les 29 ne sont pas là. C'est
 une dette explicite, listée critère par critère dans `ARCHITECTURE.md`.
 
+**Dette soldée** — Les 29 analyseurs sont portés. Le pari tient : aucun n'a
+demandé de changement de structure, la seule capacité ajoutée au pipeline étant
+la sonde réseau du §23. Les écarts de score vis-à-vis de la v1 qui subsistent
+sont des corrections assumées, décrites au §25.
+
 ---
 
 ## 22. Le rapport d'analyse se lit en trois niveaux, pas en une liste
@@ -487,3 +492,114 @@ automatique d'`EventSource` est perdue. Un flux interrompu avant la fin est donc
 signalé explicitement, avec proposition de relance, plutôt que repris en
 silence — ce qui vaut mieux qu'une reprise invisible qui relancerait une analyse
 complète à l'insu de l'utilisateur.
+
+---
+
+## 23. Une seule porte de sortie réseau : la sonde, jamais `fetch`
+
+**Décision** — Aucun analyseur n'appelle `fetch`. Six critères ont besoin du
+réseau (`ROBOTS_META`, `IMAGES`, `BROKEN_LINKS`, `MENTIONS_LEGALES`, et par
+ricochet la vérification des ressources qu'ils citent) ; tous reçoivent une
+`NetworkProbe` construite sur la politique SSRF **reconstituée dans le worker**.
+La sonde ne lève jamais d'exception, décrémente un budget de requêtes AVANT
+chaque appel, borne la concurrence et partage un cache TTL/LRU sur la durée de
+l'analyse.
+
+**Raison** — Un worker n'a pas de conteneur Nest : sans cette reconstitution,
+la tentation est d'y appeler `fetch` directement, et la garde SSRF devient
+décorative sur le seul chemin qui émet réellement des requêtes. Le budget est
+décrémenté avant l'appel et non après, parce qu'une page hostile qui déclare
+dix mille images ne doit pas pouvoir transformer WebSentry en amplificateur —
+compter après coup laisserait passer la rafale avant de la mesurer. Et une
+sonde qui lève transformerait un lien injoignable — c'est-à-dire un RÉSULTAT
+d'analyse — en panne d'analyse.
+
+**Durcissements par rapport à la v1**, tous couverts par des tests :
+
+- le repli HEAD → GET couvre `403`, `405` et `501`, là où la v1 ne réessayait
+  que sur `405` : beaucoup de serveurs répondent 403 ou 501 à un HEAD légitime,
+  et la v1 comptait ces URL comme cassées ;
+- un `Content-Length` non numérique rend `null` au lieu de propager un `NaN`
+  jusque dans le rapport ;
+- le message d'échec est choisi **par type d'erreur** et jamais recopié depuis
+  l'exception : une page ne dicte pas le texte d'un rapport.
+
+**Coût assumé** — Deux coûts. D'abord un budget qui peut être atteint : sur une
+page qui cite plus d'URL que le budget ne le permet, les dernières ne sont pas
+vérifiées, et le rapport doit le dire plutôt que de les déclarer saines. Ensuite
+une indirection de plus à l'écriture d'un analyseur : la sonde se passe en
+paramètre, ce qui est précisément ce qui rend ces analyseurs testables sans
+réseau.
+
+---
+
+## 24. Le contraste se mesure sans navigateur
+
+**Décision** — `CONTRAST_V2` est porté avec un micro-moteur CSS embarqué
+(`analysis/css/`) : cascade, spécificité, héritage, custom properties,
+`@media`/`@layer`/`@supports`/`@container`, puis un résolveur de fond effectif
+qui compose les couches semi-transparentes et remonte les ancêtres. Pas de
+navigateur sans tête dans le pipeline d'analyse.
+
+**Raison** — Le contraste ne se lit pas dans le HTML. L'alternative était un
+Chromium par page analysée : plusieurs centaines de mégaoctets de mémoire et
+une à deux secondes par page, dans un worker qui en traite des dizaines. Le
+moteur est vendu avec son périmètre : il suit **neuf propriétés**, pas la
+feuille de style entière.
+
+**Écarts fonctionnels assumés vis-à-vis de la v1** :
+
+1. **Les défauts sont groupés** par paire de couleurs et par seuil de taille,
+   et le libellé d'un groupe ne porte pas son décompte — sans quoi un même
+   défaut serait compté comme plusieurs d'une page à l'autre.
+2. **Un dégradé est mesuré** sur son pire arrêt de couleur au lieu d'être
+   renvoyé à une vérification manuelle. Seuls les fonds en image et les
+   empilements de couches restent « à vérifier à l'œil ».
+3. **Un thème sombre déclaré** bascule le fond par défaut sur le noir : sinon
+   un texte clair parfaitement lisible serait rapporté illisible.
+
+**Coût assumé** — Trois coûts. Un moteur CSS de ~2 200 lignes est du code à
+maintenir, et il dérivera des navigateurs à mesure que CSS avance ; c'est pour
+cela qu'il est testé pour lui-même et non seulement à travers l'analyseur. Les
+**feuilles externes ne sont pas chargées** : un site dont toute la charte tient
+dans un `.css` distant est mesuré sur des valeurs par défaut (dette inscrite
+dans `ARCHITECTURE.md`). Enfin, aucune mise en page n'est calculée : un texte
+masqué par un recouvrement est mesuré comme s'il était visible.
+
+---
+
+## 25. Les défauts de logique de la v1 sont corrigés au passage, pas recopiés
+
+**Décision** — Le port des 29 analyseurs applique `CLAUDE.md` §1 : là où le
+portage met au jour une règle bancale, elle est corrigée et la correction est
+couverte par un test qui échoue si on la retire. Une vingtaine de divergences,
+dont deux de sécurité :
+
+- **Injection de sélecteur** — `ACCESSIBILITY` construisait
+  `label[for="${id}"]` à partir d'un identifiant venu de la page analysée ; un
+  `id` contenant un guillemet cassait le sélecteur, donc le critère entier, sur
+  une valeur que l'auteur de la page contrôle. Les `label[for]` sont désormais
+  indexés une fois. `MENTIONS_LEGALES_DATA` souffrait du même défaut.
+- **Comparaisons trop larges** — `links` excluait un domaine par
+  `url.includes(domaine)` (un profil excluant `mappy.com` excluait aussi
+  `notmappy.com.example`), `CTA` testait l'inclusion brute d'un mot (« voir »
+  se trouve dans « savoir »), `PICTOGRAM` filtrait des classes en sous-chaîne.
+  Tous comparent maintenant des jetons ou des domaines entiers.
+- **Cas limites non traités** — `STRUCTURED_DATA` ignorait un document
+  `@graph`, pourtant la forme la plus courante ; `FAVICON` appelait
+  `new URL(href)` sans base, donc échouait sur un chemin relatif ; `TRACKING`
+  cherchait ses motifs dans le document entier et voyait un consentement là où
+  il n'y avait qu'un lien ; `DATA_BINDING` enchaînait deux recherches avec
+  `||`, opérateur qu'une sélection Cheerio vide satisfait.
+
+**Aucune régression** — Chaque correction a été vérifiée dans le sens du
+portage : le comportement v1 reste obtenu sur les cas que la v1 traitait
+correctement ; seuls les cas qu'elle traitait mal changent de verdict.
+
+**Coût assumé** — Deux coûts, acceptés. Un **score non identique** à celui de
+la v1 sur les pages qui déclenchaient ces défauts : une comparaison v1/v2 sur
+un même site montrera des écarts, qui sont des corrections et non des
+régressions — il faut pouvoir le dire à l'équipe qualité, d'où cet arbitrage.
+Et un **coût de relecture** : chaque divergence est portée par un commentaire
+qui dit ce que faisait la v1 et pourquoi la v2 fait autrement, sans quoi la
+prochaine lecture du code prendrait la correction pour une erreur de portage.

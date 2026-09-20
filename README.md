@@ -25,20 +25,20 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 2042 au total — 337 paquet partagé, 972 unitaires backend,
+**Tests** : 2599 au total — 337 paquet partagé, 1529 unitaires backend,
 311 E2E + sécurité API, 387 unitaires frontend, 35 E2E navigateur.
-**Couverture** : 100 % lignes paquet partagé, 95,6 % lignes backend
-(100 % sur chaque module de sécurité), 98,8 % lignes frontend.
+**Couverture** : 100 % lignes paquet partagé, 95,4 % lignes backend
+(100 % sur chaque module de sécurité), 98,9 % lignes frontend.
 
 > **Module 4 — partiel.** Le pipeline d'analyse est livré de bout en bout
 > (récupération SSRF-sûre, profils, pool de threads, flux SSE, sitemap,
-> historisation, suite sécurité) avec **7 analyseurs sur les 29** de la v1. Le
-> rapport produit est donc incomplet et son score global n'est pas comparable à
-> celui de la v1. Côté interface, `/analyse` couvre **la page unitaire** —
-> progression en direct et rapport à divulgation progressive ; les écrans de lot
-> et de sitemap restent à faire. Détail et liste des critères restants dans
+> historisation, suite sécurité) et les **29 analyseurs sur 29** de la v1 sont
+> portés : le rapport produit est complet et son score comparable à celui de la
+> v1. Côté interface, `/analyse` couvre **la page unitaire** — progression en
+> direct et rapport à divulgation progressive ; les écrans de lot et de sitemap
+> restent à faire. Détail dans
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrages en
-> [`docs/DECISIONS.md`](docs/DECISIONS.md) §21 et §22.
+> [`docs/DECISIONS.md`](docs/DECISIONS.md) §21 à §25.
 
 ---
 
