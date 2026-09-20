@@ -1,0 +1,365 @@
+import { describe, expect, it } from 'vitest';
+import { buildCSSOM, matchMedia, specificity, substituteVars } from './micro-cssom.js';
+
+/** Style calculé du premier élément correspondant au sélecteur. */
+function styleOf(html: string, selector: string, viewportWidth?: number) {
+  const cssom = buildCSSOM(
+    html,
+    viewportWidth ? { viewport: { width: viewportWidth, height: 800 } } : {},
+  );
+  const element = cssom.$(selector).get(0);
+  if (!element) throw new Error(`Aucun élément pour « ${selector} »`);
+  return cssom.getComputedStyle(element);
+}
+
+function page(css: string, body: string): string {
+  return `<html><head><style>${css}</style></head><body>${body}</body></html>`;
+}
+
+describe('cascade', () => {
+  it('applique une règle simple', () => {
+    expect(styleOf(page('p { color: red; }', '<p>x</p>'), 'p').color).toBe('red');
+  });
+
+  it('fait gagner le sélecteur le plus SPÉCIFIQUE, pas le dernier écrit', () => {
+    const html = page('.rouge { color: red; } p { color: blue; }', '<p class="rouge">x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('départage deux règles de même spécificité par leur ORDRE', () => {
+    const html = page('p { color: blue; } p { color: green; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+
+  it('fait gagner le style EN LIGNE sur la feuille', () => {
+    const html = page('p { color: blue; }', '<p style="color: green">x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+
+  it('fait gagner !important sur tout le reste', () => {
+    const html = page('p { color: blue !important; }', '<p style="color: green">x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('blue');
+  });
+});
+
+describe('héritage', () => {
+  it('transmet une propriété héritable', () => {
+    const html = page('div { color: purple; }', '<div><p>x</p></div>');
+
+    expect(styleOf(html, 'p').color).toBe('purple');
+  });
+
+  it('NE TRANSMET PAS une propriété non héritable', () => {
+    // Le fond ne s'hérite pas : il se voit à travers un enfant transparent,
+    // ce qui n'est pas la même chose et se calcule ailleurs.
+    const html = page('div { background-color: red; }', '<div><p>x</p></div>');
+
+    expect(styleOf(html, 'p')['background-color']).not.toBe('red');
+  });
+
+  it('honore le mot-clé inherit', () => {
+    const html = page(
+      'div { background-color: red; } p { background-color: inherit; }',
+      '<div><p>x</p></div>',
+    );
+
+    expect(styleOf(html, 'p')['background-color']).toBe('red');
+  });
+});
+
+describe('variables personnalisées', () => {
+  it('résout une variable déclarée à la racine', () => {
+    const html = page(':root { --ton: #123456; } p { color: var(--ton); }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('#123456');
+  });
+
+  it('résout une variable héritée d’un ancêtre', () => {
+    const html = page(
+      '.bloc { --ton: red; } p { color: var(--ton); }',
+      '<div class="bloc"><p>x</p></div>',
+    );
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('retombe sur la valeur de repli quand la variable manque', () => {
+    const html = page('p { color: var(--absent, green); }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+
+  it('substitue aussi dans une valeur composite', () => {
+    const vars = new Map([['--ton', 'red']]);
+
+    expect(substituteVars('1px solid var(--ton)', vars)).toBe('1px solid red');
+  });
+
+  it('rend la valeur inchangée sans variable à substituer', () => {
+    expect(substituteVars('1px solid red', new Map())).toBe('1px solid red');
+  });
+});
+
+describe('spécificité', () => {
+  it('classe identifiant > classe > élément', () => {
+    expect(specificity('#a')).toEqual([1, 0, 0]);
+    expect(specificity('.a')).toEqual([0, 1, 0]);
+    expect(specificity('a')).toEqual([0, 0, 1]);
+  });
+
+  it('additionne les composants d’un sélecteur', () => {
+    expect(specificity('div.actif > p#cible')).toEqual([1, 1, 2]);
+  });
+
+  it('compte :not() par son ARGUMENT', () => {
+    // La pseudo-classe ne pèse rien, mais ce qu'elle contient pèse : l'ignorer
+    // ferait perdre des cascades entières.
+    expect(specificity(':not(.a)')).toEqual([0, 1, 0]);
+  });
+
+  it('ne compte RIEN pour :where()', () => {
+    expect(specificity(':where(.a, #b)')).toEqual([0, 0, 0]);
+  });
+
+  it('compte :is() par son argument le plus fort', () => {
+    expect(specificity(':is(.a, #b)')).toEqual([1, 0, 0]);
+  });
+
+  it('compte un attribut comme une classe', () => {
+    expect(specificity('[data-actif]')).toEqual([0, 1, 0]);
+  });
+});
+
+describe('requêtes de média', () => {
+  const viewport = { width: 1024, height: 768 };
+
+  it('évalue une largeur minimale', () => {
+    expect(matchMedia('(min-width: 768px)', viewport)).toBe(true);
+    expect(matchMedia('(min-width: 1280px)', viewport)).toBe(false);
+  });
+
+  it('évalue une largeur maximale', () => {
+    expect(matchMedia('(max-width: 1280px)', viewport)).toBe(true);
+  });
+
+  it('évalue la syntaxe par intervalle', () => {
+    expect(matchMedia('(768px <= width <= 1280px)', viewport)).toBe(true);
+    expect(matchMedia('(width > 2000px)', viewport)).toBe(false);
+  });
+
+  it('combine deux conditions', () => {
+    expect(matchMedia('screen and (min-width: 768px)', viewport)).toBe(true);
+    expect(matchMedia('(min-width: 768px) and (max-width: 800px)', viewport)).toBe(false);
+  });
+
+  it('accepte une liste de requêtes', () => {
+    expect(matchMedia('(max-width: 400px), (min-width: 1000px)', viewport)).toBe(true);
+  });
+
+  it('écarte un média de type impression', () => {
+    // Les styles d'impression ne décrivent pas ce que le visiteur voit :
+    // les appliquer fausserait toute mesure de contraste.
+    expect(matchMedia('print', viewport)).toBe(false);
+  });
+
+  it('applique une règle sous média au style calculé', () => {
+    const html = page(
+      'p { color: blue; } @media (min-width: 900px) { p { color: red; } }',
+      '<p>x</p>',
+    );
+
+    expect(styleOf(html, 'p', 1200).color).toBe('red');
+    expect(styleOf(html, 'p', 600).color).toBe('blue');
+  });
+});
+
+describe('taille de police', () => {
+  it('résout une taille relative à son parent', () => {
+    const html = page('div { font-size: 20px; } p { font-size: 1.5em; }', '<div><p>x</p></div>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeCloseTo(30, 1);
+  });
+
+  it('résout une taille en rem depuis la racine', () => {
+    const html = page('html { font-size: 20px; } p { font-size: 2rem; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeCloseTo(40, 1);
+  });
+
+  it('résout un pourcentage', () => {
+    const html = page('div { font-size: 20px; } p { font-size: 50%; }', '<div><p>x</p></div>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeCloseTo(10, 1);
+  });
+
+  it('applique la feuille par défaut du navigateur', () => {
+    // Sans elle, un <h1> aurait la taille d'un paragraphe et passerait pour du
+    // texte courant — donc sous un seuil de contraste plus exigeant.
+    const html = page('', '<h1>Titre</h1>');
+
+    expect(styleOf(html, 'h1')._fontSizePx).toBeGreaterThan(16);
+  });
+});
+
+describe('couches et règles conditionnelles', () => {
+  it('applique une règle déclarée dans une couche', () => {
+    const html = page('@layer base { p { color: red; } }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('fait gagner la couche DÉCLARÉE en dernier', () => {
+    // L'ordre des couches prime sur la spécificité : c'est tout l'intérêt de
+    // `@layer`, et l'ignorer inverserait le résultat sur les thèmes modernes.
+    const html = page(
+      '@layer base, theme; @layer theme { p { color: green; } } @layer base { p { color: red; } }',
+      '<p>x</p>',
+    );
+
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+
+  it('fait gagner une règle HORS couche sur une règle en couche', () => {
+    const html = page('@layer base { p { color: red; } } p { color: blue; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('blue');
+  });
+
+  it('applique le contenu d’un @supports', () => {
+    const html = page('@supports (display: grid) { p { color: red; } }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('applique le contenu d’un @container', () => {
+    const html = page('@container (min-width: 100px) { p { color: red; } }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+});
+
+describe('tailles de police particulières', () => {
+  it('reconnaît les mots-clés absolus', () => {
+    const html = page('p { font-size: x-large; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeGreaterThan(16);
+  });
+
+  it('reconnaît larger et smaller', () => {
+    const larger = page('div { font-size: 20px; } p { font-size: larger; }', '<div><p>x</p></div>');
+    const smaller = page(
+      'div { font-size: 20px; } p { font-size: smaller; }',
+      '<div><p>x</p></div>',
+    );
+
+    expect(styleOf(larger, 'p')._fontSizePx).toBeGreaterThan(20);
+    expect(styleOf(smaller, 'p')._fontSizePx).toBeLessThan(20);
+  });
+
+  it('résout clamp() par son MINIMUM', () => {
+    // Approximation conservative : la typographie fluide est partout, et
+    // retenir la borne basse ne surestime jamais la taille — donc jamais le
+    // seuil de contraste allégé.
+    const html = page('p { font-size: clamp(14px, 2vw, 32px); }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeCloseTo(14, 1);
+  });
+
+  it('résout une taille en unités de viewport', () => {
+    const html = page('p { font-size: 2vw; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeGreaterThan(16);
+  });
+
+  it('résout une taille en points', () => {
+    const html = page('p { font-size: 12pt; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeCloseTo(16, 0);
+  });
+
+  it('retombe sur la taille du parent pour une valeur illisible', () => {
+    const html = page('div { font-size: 20px; } p { font-size: nawak; }', '<div><p>x</p></div>');
+
+    expect(styleOf(html, 'p')._fontSizePx).toBeCloseTo(20, 1);
+  });
+});
+
+describe('spécificité — formes fonctionnelles', () => {
+  it('compte :nth-child() comme une classe', () => {
+    expect(specificity('p:nth-child(2)')).toEqual([0, 1, 1]);
+  });
+
+  it('ajoute la spécificité du « of » d’un :nth-child()', () => {
+    expect(specificity(':nth-child(2 of .actif)')).toEqual([0, 2, 0]);
+  });
+
+  it('compte :has() par son argument', () => {
+    expect(specificity('p:has(.actif)')).toEqual([0, 1, 1]);
+  });
+
+  it('compte un pseudo-élément comme un élément', () => {
+    expect(specificity('p::before')).toEqual([0, 0, 2]);
+  });
+
+  it('compte une pseudo-classe ordinaire comme une classe', () => {
+    expect(specificity('a:hover')).toEqual([0, 1, 1]);
+  });
+});
+
+describe('propriétés raccourcies', () => {
+  it('extrait la couleur d’un background composite', () => {
+    const html = page('p { background: #ff0000 url(/x.png) no-repeat; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')['background-color']).toBe('#ff0000');
+  });
+
+  it('extrait la graisse d’un font composite, en valeur numérique', () => {
+    // `bold` est normalisé en `700` : le seuil de « grand texte » se compare à
+    // un nombre, et le laisser en mot-clé le rendrait incomparable.
+    const html = page('p { font: bold 16px/1.5 Arial; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')['font-weight']).toBe('700');
+  });
+});
+
+describe('mot-clé currentcolor', () => {
+  it('rend la couleur de l’élément sur une autre propriété', () => {
+    // Un fond en `currentcolor` vaut la couleur du texte : le laisser tel quel
+    // rendrait le fond illisible pour la mesure de contraste.
+    const html = page('p { color: #ff0000; background-color: currentcolor; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p')['background-color']).toBe('#ff0000');
+  });
+
+  it('vaut HÉRITAGE quand il porte sur la couleur elle-même', () => {
+    // `color: currentcolor` ne peut pas se référer à elle-même : la spec la
+    // ramène à l'héritage. La résoudre sur la valeur initiale rendrait du noir
+    // là où le visiteur voit la couleur du parent.
+    const html = page(
+      '.parent { color: #00ff00; } p { color: currentcolor; }',
+      '<div class="parent"><p>x</p></div>',
+    );
+
+    expect(styleOf(html, 'p').color).toBe('#00ff00');
+  });
+});
+
+describe('robustesse', () => {
+  it('ignore une règle syntaxiquement invalide sans perdre les suivantes', () => {
+    const html = page('p { color: ; } p { color: red; }', '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('red');
+  });
+
+  it('survit à une feuille vide', () => {
+    expect(() => buildCSSOM(page('', '<p>x</p>'))).not.toThrow();
+  });
+
+  it('survit à un document sans style', () => {
+    expect(() => buildCSSOM('<html><body><p>x</p></body></html>')).not.toThrow();
+  });
+});

@@ -320,6 +320,193 @@ describe('DataBindingAnalyzer', () => {
     });
   });
 
+  describe('boutons de contact', () => {
+    it('relève les numéros des boutons d’appel', async () => {
+      const result = await analyzer.analyze(
+        dudaPage(
+          '<a data-element-type="clicktocall" phone="04 72 00 00 00">Appeler</a><div data-element-type="clicktocall"><span class="phoneNumHolder">01 23 45 67 89</span></div>',
+        ),
+        settings,
+      );
+
+      const item = result.items.find(entry => entry.key === 'DATA_BINDING.ctc_count');
+      expect(item?.label).toContain('2');
+      expect(item?.value).toContain('04 72 00 00 00');
+      expect(item?.value).toContain('01 23 45 67 89');
+    });
+
+    it('lit le numéro depuis un lien tel: ancêtre', async () => {
+      // L'éditeur enveloppe parfois le widget dans le lien plutôt que
+      // l'inverse : ne regarder que l'élément lui-même perdrait le numéro.
+      const result = await analyzer.analyze(
+        dudaPage(
+          '<a href="tel:0472000000"><span data-element-type="clicktocall">Appeler</span></a>',
+        ),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.ctc_count')?.value).toBe(
+        '0472000000',
+      );
+    });
+
+    it('relève les adresses des boutons de courriel', async () => {
+      const result = await analyzer.analyze(
+        dudaPage(
+          '<a data-element-type="clicktomail" href="mailto:contact@exemple.fr?subject=Devis">Écrire</a>',
+        ),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.ctm_count')?.value).toBe(
+        'contact@exemple.fr',
+      );
+    });
+
+    it('compte les boutons sans exiger qu’ils portent une adresse', async () => {
+      const result = await analyzer.analyze(
+        dudaPage('<div data-element-type="clicktomail">Écrire</div>'),
+        settings,
+      );
+
+      const item = result.items.find(entry => entry.key === 'DATA_BINDING.ctm_count');
+      expect(item?.label).toContain('1');
+      expect(item?.value).toBeUndefined();
+    });
+  });
+
+  describe('repli du destinataire de formulaire', () => {
+    it('se rabat sur un lien mailto du formulaire', async () => {
+      const result = await analyzer.analyze(
+        dudaPage('<form class="dmform"><a href="mailto:devis@exemple.fr">Écrire</a></form>'),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.form_connected')?.value).toBe(
+        'devis@exemple.fr',
+      );
+    });
+
+    it('se rabat sur l’action du formulaire', async () => {
+      const result = await analyzer.analyze(
+        dudaPage('<form class="dmform" action="mailto:action@exemple.fr"></form>'),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.form_connected')?.value).toBe(
+        'action@exemple.fr',
+      );
+    });
+
+    it('se rabat enfin sur l’adresse des boutons de courriel', async () => {
+      // Le formulaire et les boutons puisent à la même source : montrer
+      // l'adresse connue vaut mieux que n'en montrer aucune.
+      const result = await analyzer.analyze(
+        dudaPage(
+          '<a data-element-type="clicktomail" href="mailto:contact@exemple.fr">Écrire</a><form class="dmform"></form>',
+        ),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.form_connected')?.value).toBe(
+        'contact@exemple.fr',
+      );
+    });
+
+    it('accepte plusieurs destinataires séparés par une virgule', async () => {
+      const result = await analyzer.analyze(
+        dudaPage(
+          '<form class="dmform"><input name="dmformsendto" value="a@exemple.fr, b@exemple.fr"></form>',
+        ),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.form_connected')?.value).toBe(
+        'a@exemple.fr, b@exemple.fr',
+      );
+    });
+  });
+
+  describe('composants absents', () => {
+    it('ne dit RIEN des composants que la page ne contient pas', async () => {
+      // Reprocher l'absence d'une carte à une page qui n'en a pas ferait
+      // échouer toute page sans carte.
+      const result = await analyzer.analyze(dudaPage('<p>Page simple</p>'), settings);
+
+      for (const key of [
+        'DATA_BINDING.ctc_connected',
+        'DATA_BINDING.map_connected',
+        'DATA_BINDING.hours_connected',
+        'DATA_BINDING.social_connected',
+        'DATA_BINDING.form_connected',
+      ]) {
+        expect(result.items.some(item => item.key === key)).toBe(false);
+      }
+    });
+
+    it('signale en revanche un logo introuvable', async () => {
+      const result = await analyzer.analyze(dudaPage('<p>Page sans logo</p>'), settings);
+
+      expect(
+        result.items.find(entry => entry.key === 'DATA_BINDING.logo_connected')?.label,
+      ).toContain('aucune liaison');
+    });
+  });
+
+  describe('horaires', () => {
+    it('se rabat sur le texte visible du widget', async () => {
+      const result = await analyzer.analyze(
+        dudaPage('<div data-element-type="open_hours">Lundi au vendredi, 9h–18h</div>'),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.hours_connected')?.value).toBe(
+        'Lundi au vendredi, 9h–18h',
+      );
+    });
+
+    it('ignore un jour fermé dans les horaires encodés', async () => {
+      const hours = Buffer.from(
+        JSON.stringify([
+          { day: '0', open: '09:00', close: '18:00' },
+          { day: '6', closed: true },
+        ]),
+      ).toString('base64');
+
+      const result = await analyzer.analyze(
+        dudaPage(`<div data-element-type="open_hours" hours_data="${hours}"></div>`),
+        settings,
+      );
+
+      const value = result.items.find(entry => entry.key === 'DATA_BINDING.hours_connected')?.value;
+      expect(value).toBe('Lun 09:00–18:00');
+    });
+
+    it('lit des horaires encodés sous forme d’objet', async () => {
+      const hours = Buffer.from(
+        JSON.stringify({ '2': { open: '08:00', close: '12:00' } }),
+      ).toString('base64');
+
+      const result = await analyzer.analyze(
+        dudaPage(`<div data-element-type="open_hours" data-hours-data="${hours}"></div>`),
+        settings,
+      );
+
+      expect(result.items.find(entry => entry.key === 'DATA_BINDING.hours_connected')?.value).toBe(
+        'Mer 08:00–12:00',
+      );
+    });
+
+    it('ignore des horaires encodés illisibles', async () => {
+      const result = await analyzer.analyze(
+        dudaPage('<div data-element-type="open_hours" hours_data="cGFzLWR1LWpzb24="></div>'),
+        settings,
+      );
+
+      expect(result.items.some(entry => entry.key === 'DATA_BINDING.hours_connected')).toBe(true);
+    });
+  });
+
   it('constate la configuration de l’éditeur sans la noter', async () => {
     const result = await analyzer.analyze(
       dudaPage('<script>window.__DUDA__ = {};</script>'),

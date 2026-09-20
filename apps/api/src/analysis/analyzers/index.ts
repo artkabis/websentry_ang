@@ -5,6 +5,7 @@ import { BrokenLinksAnalyzer } from './broken-links.analyzer.js';
 import { BoldAnalyzer } from './bold.analyzer.js';
 import { CanonicalAnalyzer } from './canonical.analyzer.js';
 import { ContentLengthAnalyzer } from './content-length.analyzer.js';
+import { ContrastAnalyzer } from './contrast.analyzer.js';
 import { CtaAnalyzer } from './cta.analyzer.js';
 import { DataBindingAnalyzer } from './data-binding.analyzer.js';
 import { DudaParamsAnalyzer } from './duda-params.analyzer.js';
@@ -62,6 +63,7 @@ export function createAnalyzers(): BaseAnalyzer[] {
     new ImagesAnalyzer(),
     new DuplicateImagesAnalyzer(),
     new PictogramAnalyzer(),
+    new ContrastAnalyzer(),
     new NavStructureAnalyzer(),
     new DataBindingAnalyzer(),
     new DudaParamsAnalyzer(),
