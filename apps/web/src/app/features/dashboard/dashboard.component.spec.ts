@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
-import { Router } from '@angular/router';
+import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter } from '@angular/router';
 import { RANKS, type CurrentUser } from '@websentry/shared';
 import { render, screen } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
@@ -11,9 +12,13 @@ function profile(rank: number, permissions: CurrentUser['permissions'] = []): Cu
   return { id: 'u1', username: 'alice', rank, role: 'tester', status: 'active', permissions };
 }
 
+/**
+ * Le VRAI routeur est fourni : le tableau de bord porte un `routerLink` vers les
+ * profils, et remplacer le routeur par un double casse la construction d'URL de
+ * la directive. Seule la navigation est espionnée, sur l'instance réelle.
+ */
 function setup(user: CurrentUser | null, role = 'tester') {
   const logout = vi.fn().mockResolvedValue(undefined);
-  const navigateByUrl = vi.fn().mockResolvedValue(true);
 
   const auth = {
     user: () => user,
@@ -24,13 +29,19 @@ function setup(user: CurrentUser | null, role = 'tester') {
 
   return {
     logout,
-    navigateByUrl,
     providers: [
       provideZonelessChangeDetection(),
+      provideRouter([]),
       { provide: AuthService, useValue: auth },
-      { provide: Router, useValue: { navigateByUrl } },
     ],
   };
+}
+
+/** Espionne `navigateByUrl` sur le routeur réellement injecté. */
+function spyOnNavigate(): ReturnType<typeof vi.fn> {
+  const navigateByUrl = vi.fn().mockResolvedValue(true);
+  vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockImplementation(navigateByUrl);
+  return navigateByUrl;
 }
 
 describe('DashboardComponent', () => {
@@ -85,11 +96,12 @@ describe('DashboardComponent', () => {
     const user = userEvent.setup();
     const t = setup(profile(RANKS.TESTER));
     await render(DashboardComponent, { providers: t.providers });
+    const navigateByUrl = spyOnNavigate();
 
     await user.click(screen.getByRole('button', { name: 'Se déconnecter' }));
 
     expect(t.logout).toHaveBeenCalled();
-    expect(t.navigateByUrl).toHaveBeenCalledWith('/connexion');
+    expect(navigateByUrl).toHaveBeenCalledWith('/connexion');
   });
 
   it('reste affichable sans profil résolu', async () => {

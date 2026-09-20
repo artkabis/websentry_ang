@@ -87,6 +87,18 @@ jobs:
 
       # Les seuils de couverture sont appliqués par Vitest : sous le seuil, la
       # commande sort en code non nul et l'étape échoue.
+      # Le paquet partagé porte le schéma de validation qui garde la frontière
+      # HTTP : ses seuils sont les plus élevés du dépôt (95 %).
+      - name: Tests unitaires + couverture (paquet partagé)
+        run: pnpm --filter @websentry/shared test:coverage
+
+      # Le worker d'analyse est du JavaScript COMPILÉ : un thread Piscina est un
+      # vrai thread Node, sans transformation TypeScript. Sans ce build, le test
+      # qui vérifie le chemin « pool de threads » prendrait sa branche de repli
+      # et ne prouverait rien.
+      - name: Build backend
+        run: pnpm --filter @websentry/api build
+
       - name: Tests unitaires + couverture (backend)
         run: pnpm --filter @websentry/api test:coverage
 
@@ -101,9 +113,6 @@ jobs:
       - name: Suite sécurité (15 failles OWASP)
         run: pnpm --filter @websentry/api test:security
 
-      - name: Build backend
-        run: pnpm --filter @websentry/api build
-
       - name: Build frontend
         run: pnpm --filter @websentry/web build
 
@@ -113,6 +122,7 @@ jobs:
         with:
           name: couverture
           path: |
+            packages/shared/coverage/lcov.info
             apps/api/coverage/lcov.info
             apps/web/coverage/lcov.info
           retention-days: 7

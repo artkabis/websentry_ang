@@ -64,6 +64,44 @@ export const EnvSchema = z
       .default('Mozilla/5.0 (compatible; WebSentry/2.0; +https://websentry.artkabis.fr/bot)'),
     FETCH_TIMEOUT_MS: intFromEnv(15000, 1000),
 
+    // ── Rétention de l'historique des scans ─────────────────────────────────
+    /**
+     * Âge à partir duquel un rapport est compressé (jours). Sept jours couvrent
+     * la fenêtre pendant laquelle un rapport est encore relu au quotidien ;
+     * au-delà, la consultation devient occasionnelle et la décompression à la
+     * demande coûte moins cher que le stockage en clair.
+     */
+    SCAN_COMPRESS_AFTER_DAYS: intFromEnv(7, 1),
+    /**
+     * Âge à partir duquel le rapport complet est purgé (jours). Le résumé des
+     * critères, lui, n'est JAMAIS purgé : c'est ce qui permet de comparer deux
+     * scans anciens longtemps après que leurs rapports ont disparu.
+     */
+    SCAN_PURGE_AFTER_DAYS: intFromEnv(180, 1),
+    /** Lignes traitées par passage du travail de fond — borne les verrous pris. */
+    SCAN_RETENTION_BATCH: intFromEnv(500, 1),
+    /** `false` désactive entièrement le travail de fond de rétention. */
+    SCAN_RETENTION_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform(v => v === 'true'),
+
+    // ── Moteur d'analyse ────────────────────────────────────────────────────
+    /**
+     * `false` exécute les analyses sur le thread principal.
+     *
+     * Le repli existe pour les hébergements qui interdisent `worker_threads` ou
+     * contraignent la mémoire : mieux vaut analyser lentement que pas du tout.
+     */
+    ANALYSIS_WORKERS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform(v => v === 'true'),
+    /** 0 = automatique : un thread de moins que de cœurs disponibles. */
+    ANALYSIS_MAX_WORKERS: intFromEnv(0, 0),
+    /** Pages analysées en parallèle dans un lot — borne l'egress simultané. */
+    ANALYSIS_BATCH_CONCURRENCY: intFromEnv(4, 1),
+
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {
@@ -84,6 +122,15 @@ export const EnvSchema = z
         code: 'custom',
         path: ['REFRESH_TOKEN_TTL'],
         message: 'REFRESH_TOKEN_TTL doit être strictement supérieur à ACCESS_TOKEN_TTL',
+      });
+    }
+    // Purger avant d'avoir compressé rend la compression inutile : le défaut ne
+    // se verrait qu'à la facture de stockage, des mois plus tard.
+    if (env.SCAN_PURGE_AFTER_DAYS <= env.SCAN_COMPRESS_AFTER_DAYS) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SCAN_PURGE_AFTER_DAYS'],
+        message: 'SCAN_PURGE_AFTER_DAYS doit être strictement supérieur à SCAN_COMPRESS_AFTER_DAYS',
       });
     }
   });

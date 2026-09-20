@@ -173,9 +173,506 @@ pas pouvoir être enfermé dehors par une panne.
 
 ---
 
-## 9. Environnement : Node ≥ 22.22.3
+## 10. Profils par gamme : MariaDB, plus export fichier
+
+**Décision** — La base est la source de vérité ; des endpoints d'export/import
+JSON conservent le format fichier.
+
+**Raison** — La v1 stockait un `settings-{gamme}.json` par gamme sur disque. Ce
+modèle portait trois défauts :
+
+1. Son verrouillage optimiste lisait la version, comparait, puis réécrivait —
+   une **fenêtre de course** entre les deux. En base, la condition et l'incrément
+   tiennent dans le même `UPDATE`, donc sont indivisibles.
+2. Son cache TTL de 5 minutes servait des profils **périmés** derrière un
+   répartiteur de charge : chaque instance avait sa propre vue du disque.
+3. Le nom de gamme construisait un **chemin de fichier**. La traversée de chemin
+   disparaît comme surface au lieu d'être contenue par une normalisation qu'il
+   faudrait maintenir indéfiniment.
+
+L'export/import préserve ce que le modèle fichier avait de bon : versionner un
+profil dans Git, le rejouer d'un environnement à l'autre, l'inspecter hors ligne.
+
+**Coût assumé** — Une table de plus, et un script d'import des fichiers existants
+à écrire au moment de la bascule en production.
+
+**Garde-fou** — Contrainte `CHECK (gamme REGEXP '^[a-z0-9-]+$')` en base, en plus
+de la normalisation applicative : même un appelant qui contournerait le service
+ne peut pas écrire une gamme hors de l'alphabet attendu.
+
+---
+
+## 11. Réglages globaux : une seule source de vérité
+
+**Décision** — `/settings` opère sur le profil `default`. Les deux endpoints
+restent exposés, mais s'appuient sur une seule ligne en base.
+
+**Raison** — La v1 tenait `settings.json` ET `settings-default.json`, deux
+fichiers remplissant le même rôle et pouvant diverger sans que rien ne le
+signale. Un opérateur modifiant l'un pouvait constater que l'analyse continuait
+d'appliquer l'autre.
+
+**Coût assumé** — Si une installation v1 avait délibérément fait diverger les
+deux fichiers, la bascule retient le profil `default`. À vérifier lors de la
+migration ; en pratique les deux sont identiques.
+
+---
+
+## 12. Environnement : Node ≥ 22.22.3
 
 **Décision** — Plancher relevé de 22.0.0 à 22.22.3.
 
 **Raison** — Angular CLI 22 le refuse en deçà. Mieux vaut que l'installation
 échoue immédiatement, avec un message clair, qu'au premier build.
+
+---
+
+## 13. Cap fonctionnel : la migration peut améliorer, pas seulement transcrire
+
+**Décision** — Le port d'un module n'est pas tenu de reproduire les choix
+fonctionnels de la v1 quand ils sont perfectibles. Corriger une logique métier
+bancale, traiter un cas limite laissé de côté, ou moderniser un parcours
+d'interface fait partie du travail de migration et ne nécessite pas d'accord
+préalable module par module.
+
+**Raison** — Recopier à l'identique un comportement dont on a constaté le défaut
+pendant le port, c'est payer deux fois : une fois la recopie, une fois la
+correction ultérieure — avec entre-temps une v2 qui hérite d'une dette qu'elle
+n'avait aucune raison de contracter. Le moment où l'on relit une règle métier
+ligne à ligne pour la porter est précisément celui où ses angles morts sont
+visibles ; les laisser passer est un gâchis d'attention.
+
+Trois améliorations de ce type sont déjà actées et documentées ici : la
+révocation qui refuse au lieu de laisser passer (§8), l'unification des deux
+fichiers de réglages divergents (§11), et le verrouillage optimiste des profils,
+absent de la v1.
+
+**Coût assumé** — La v2 cesse d'être comparable à la v1 ligne à ligne : une
+différence de comportement n'est plus, en soi, la preuve d'un bug de migration.
+C'est ce qui rend la règle suivante non négociable — **toute divergence
+fonctionnelle assumée est consignée dans ce document**, avec sa raison et son
+coût. Ce qui n'y figure pas et diffère de la v1 reste, lui, un bug.
+
+**Garde-fous** — Aucune régression : ce que la v1 fait, la v2 le fait au minimum
+(retirer une capacité n'est pas une amélioration, c'est un arbitrage qui se
+discute avant). Améliorer n'est pas élargir : le périmètre demandé reste le
+livrable, et une refonte large se propose plutôt qu'elle ne se code. Une
+amélioration franchit exactement les mêmes portes que le reste — tests,
+couverture, sécurité, lint, typecheck. Enfin, sur le périmètre sécurité, on
+durcit, jamais on n'assouplit, et jamais sans test qui le prouve.
+
+---
+
+## 14. Historique des scans : la base v1 est reprise, pas recréée
+
+**Décision** — Les tables `sites`, `scan_sessions` et `scan_pages` de la v1 sont
+lues telles quelles. Le fichier `003-scan-history.sql` est à la fois une
+création (base neuve) et une migration **additive** (base v1) : il n'ajoute
+qu'une colonne, ne supprime ni ne renomme rien.
+
+**Raison** — Ces tables tournent en production et contiennent l'historique réel.
+Les recréer imposerait une reprise de données, une double écriture pendant la
+bascule, ou une coupure — trois façons de payer cher un modèle qui, lui, est
+sain : la normalisation site → session → page est exactement celle que la v2
+aurait choisie. L'historique est ainsi utilisable dès le premier déploiement, et
+une v1 et une v2 peuvent lire la même base pendant la transition, ce que le mode
+« strangler » exige.
+
+**Coût assumé** — La v2 hérite de conventions qu'elle n'a pas choisies : noms de
+colonnes en `snake_case` anglais, dénormalisation de `gamme`/`epj` sur la
+session, colonne générée `identity_key`. Aucune de ces décisions ne se rediscute
+tant que la v1 lit la même base.
+
+---
+
+## 15. Rapport purgé : 410 Gone, et une colonne pour le savoir
+
+**Décision** — Ajout de `scan_pages.report_purged_at`. Un rapport effacé par la
+rétention donne un **410 Gone** portant la date de purge, là où un scan
+inexistant donne un 404.
+
+**Raison** — La v1 remettait `is_compressed = 0` et vidait les deux colonnes
+après purge : la ligne devenait indiscernable d'une page qui n'a jamais eu de
+rapport, et l'API répondait « scan introuvable ». C'est faux — le scan existe —
+et c'est trompeur : l'utilisateur, puis le support, partent chercher une donnée
+que l'application a elle-même supprimée. Un 410 dit que la donnée a existé,
+qu'elle a été supprimée volontairement, et depuis quand.
+
+**Coût assumé** — Une colonne de plus, et un code HTTP que les clients doivent
+traiter. Les lignes déjà purgées par la v1 restent à `NULL` : elles se
+comportent comme aujourd'hui (rapport indisponible, date inconnue) plutôt que de
+se voir attribuer une date inventée.
+
+---
+
+## 16. Ingestion de l'historique : aucun endpoint HTTP
+
+**Décision** — `ScansService.record()` est appelée **en process** par le module
+d'analyse. Aucune route n'expose l'écriture de l'historique.
+
+**Raison** — L'historique est une base de preuve : on s'y réfère pour dire ce
+qu'était l'état d'un site à une date. Un endpoint d'ingestion offrirait à un
+jeton volé — ou à un compte interne mal intentionné — le moyen de **fabriquer un
+passé** : des audits qui n'ont jamais eu lieu, des scores qui n'ont jamais été
+mesurés. Aucune validation d'entrée ne protège de cela, puisque la charge serait
+parfaitement conforme. La seule défense est l'absence de porte.
+
+**Coût assumé** — Un agent externe ne peut pas alimenter l'historique. Si le
+besoin apparaît (sondes réparties, import de données tierces), il faudra une
+route dédiée, authentifiée par un secret distinct du JWT utilisateur, et des
+scans marqués comme provenant de l'extérieur — c'est-à-dire un arbitrage à part
+entière, pas une extension de celui-ci.
+
+**Garde-fou** — Un test de la suite sécurité vérifie qu'aucun `POST` sur
+`/scans`, `/scans/ingest` ou `/scans/sessions` n'est routé.
+
+---
+
+## 17. Comparaison : les améliorations sont montrées, pas seulement les régressions
+
+**Décision** — Le diff entre deux audits porte les dégradations **et** les
+améliorations, les dégradations en tête.
+
+**Raison** — La v1 ne remontait que les dégradations, pour éviter le bruit
+pendant une analyse. Le raisonnement tenait dans ce contexte : on venait de
+lancer un scan, on voulait savoir ce qui s'était cassé. Dans un écran
+d'historique dont le sujet **est** l'évolution, il revient à ne montrer que la
+moitié de l'information — et à laisser croire qu'un site ne progresse jamais,
+alors même que l'équipe qualité vient de passer une semaine à le corriger.
+
+Deux autres écarts avec la v1 suivent la même logique : une page disparue entre
+deux audits est **signalée** au lieu d'être écartée (un site qui perd la moitié
+de ses pages est un fait à montrer), et une page dont seul le score bouge —
+pondération modifiée, statuts identiques — compte comme changée.
+
+**Coût assumé** — Un diff plus volumineux, et un écran qui doit hiérarchiser au
+lieu de tout aligner. Le tri fait ce travail : dégradations d'abord, puis delta
+croissant, puis URL — un ordre total, donc reproductible d'un appel à l'autre.
+
+---
+
+## 18. Statistiques de l'historique : cache court plutôt que table d'agrégats
+
+**Décision** — `GET /scans/stats` est servi depuis un cache mémoire d'une
+minute, et limité à 20 appels par minute.
+
+**Raison** — Le calcul balaie la table entière quatre fois. Sans cache, un
+tableau de bord ouvert par trois personnes suffit à peser sur la base — et la
+v1 n'imposait même pas de limite de débit sur cette route. Une table d'agrégats
+entretenue à l'écriture serait plus efficace, mais introduirait un état à
+maintenir cohérent à chaque suppression : un coût permanent pour un écran
+consulté quelques fois par jour.
+
+**Coût assumé** — Un chiffre peut avoir jusqu'à une minute de retard. Le cache
+est invalidé à chaque suppression, qui est le seul évènement rendant les
+chiffres faux d'un coup.
+
+---
+
+## 19. Isolation CPU : Piscina, avec repli en ligne obligatoire
+
+**Décision** — Les analyses s'exécutent dans un pool Piscina dimensionné à un
+thread de moins que de cœurs. Quand le pool ne peut pas démarrer, l'analyse se
+fait **en ligne**, sur le thread principal.
+
+**Raison** — Le parse du DOM d'une page de plusieurs centaines de kilo-octets
+bloque la boucle d'événements assez longtemps pour retarder toutes les autres
+requêtes servies. C'est le seul calcul lourd de l'application, et il est
+parfaitement isolable : un analyseur ne touche ni la base ni l'état partagé.
+
+Le repli n'est pas une commodité de test. Le produit cible des hébergements
+mutualisés, où `worker_threads` peut être indisponible ou la mémoire contrainte.
+Sur ces environnements, analyser lentement vaut mieux que ne pas analyser.
+
+**Coût assumé** — Deux chemins d'exécution à maintenir, donc à tester tous les
+deux. Le worker étant du JavaScript compilé, le chemin « pool » n'existe qu'après
+`pnpm build` : la CI bâtit désormais le backend AVANT la suite de tests, sans
+quoi le test du pool prendrait sa branche de repli et ne prouverait rien.
+
+---
+
+## 20. Le rapport d'analyse est décrit par un schéma, pas par une interface
+
+**Décision** — `AnalysisReport` et tout ce qu'il contient sont des schémas Zod,
+validés à la production comme à la relecture.
+
+**Raison** — Ce rapport franchit trois frontières : la sérialisation vers un
+worker, l'écriture en base, et la relecture des mois plus tard. Une interface
+TypeScript ne survit à aucune des trois — elle disparaît à la compilation. À
+chacune, une forme inattendue doit être détectée là où elle apparaît, et non
+trois écrans plus loin sous la forme d'un champ manquant.
+
+Le filtrage des en-têtes HTTP par **liste fermée** relève du même souci : un
+rapport est stocké puis relu par des tiers, et y recopier tous les en-têtes
+ferait entrer cookies, jetons de session et noms de serveurs internes sans que
+personne ne l'ait décidé.
+
+**Coût assumé** — Une validation supplémentaire par rapport produit. Le coût est
+réel sur un lot de deux cents pages ; il reste inférieur à celui d'un rapport
+corrompu stocké définitivement.
+
+**Nuance** — L'historique (module 3) garde `report: z.unknown()` de son côté. Ce
+n'est pas une incohérence : il restitue des rapports écrits par des versions
+ANTÉRIEURES du moteur, et leur opposer le schéma courant rendrait illisibles les
+scans déjà stockés.
+
+---
+
+## 21. Module 4 livré par l'architecture, pas par le nombre d'analyseurs
+
+**Décision** — Le module 4 livre le pipeline complet (récupération SSRF-sûre,
+profils, pool de threads, flux SSE, sitemap, historisation, suite sécurité) avec
+**7 analyseurs sur les 29** de la v1. Les 22 restants suivent, sans changement de
+structure.
+
+**Raison** — Les analyseurs représentent près de 12 000 lignes en v1, et leur
+port est un travail mécanique : ils ne posent aucune question d'architecture,
+seulement du volume et des tests. Le pipeline, lui, tranche toutes les questions
+difficiles — isolation CPU, sortie réseau, progression, assainissement des
+erreurs hors filtre global, ordre de résolution des réglages. Livrer le pipeline
+d'abord rend le port des analyseurs suivants purement additif : chacun est une
+classe et un fichier de tests, sans effet sur le reste.
+
+L'inverse aurait été pire : vingt-neuf analyseurs sans pipeline ne s'exécutent
+nulle part, et les questions difficiles se seraient posées à la fin, quand les
+reprendre coûte le plus cher.
+
+**Coût assumé** — Le rapport produit est PARTIEL, et le score global ne porte que
+sur les critères présents. Il n'est donc pas comparable à un score v1, et le
+module ne peut pas basculer en production tant que les 29 ne sont pas là. C'est
+une dette explicite, listée critère par critère dans `ARCHITECTURE.md`.
+
+**Dette soldée** — Les 29 analyseurs sont portés. Le pari tient : aucun n'a
+demandé de changement de structure, la seule capacité ajoutée au pipeline étant
+la sonde réseau du §23. Les écarts de score vis-à-vis de la v1 qui subsistent
+sont des corrections assumées, décrites au §25.
+
+---
+
+## 22. Le rapport d'analyse se lit en trois niveaux, pas en une liste
+
+**Décision** — L'écran `/analyse` ne reproduit pas la liste plate de la v1, où
+les vingt-neuf critères sont affichés au même rang visuel. Il hiérarchise :
+score, verdict et trois corrections prioritaires d'abord ; critères groupés et
+**filtrés sur « à traiter »** ensuite ; occurrences et recommandations au dépli
+d'un critère. C'est une divergence fonctionnelle assumée vis-à-vis de la v1, au
+sens de `CLAUDE.md` §1.
+
+**Raison** — Un rapport dont vingt-cinq lignes sur vingt-neuf sont vertes
+apprend à l'équipe à le survoler, et qui le survole rate aussi les quatre
+rouges. Le tri des corrections prioritaires par gravité puis par **poids du
+critère** répond à la même logique : deux échecs ne coûtent pas le même score,
+et l'écran doit dire lequel traiter d'abord plutôt que laisser l'auditeur le
+recalculer. Les critères de poids nul en sont exclus — corriger ce qui ne pèse
+rien sur le score n'est pas une priorité.
+
+**Aucune régression** — Rien n'est retiré : l'intégralité du rapport reste
+atteignable, en un clic sur le filtre « tout afficher », et le nombre de
+critères masqués est affiché en permanence. Le masquage par défaut ne devient
+jamais un masquage implicite.
+
+**Coût assumé** — Trois coûts, tous acceptés :
+
+1. **Un geste de plus pour la lecture exhaustive.** Un auditeur qui veut relire
+   les vingt-neuf critères doit changer de filtre. C'est le prix de l'inversion :
+   le cas fréquent (« qu'est-ce qui ne va pas ? ») coûte zéro geste, le cas rare
+   en coûte un.
+2. **Une logique de présentation à tester pour elle-même.** Priorisation,
+   groupement, filtrage et comptes masqués sont du code, donc des bugs
+   possibles — d'où `report-view.ts` en fonctions pures testées à part, plutôt
+   que des expressions dispersées dans les gabarits.
+3. **Un écart de vocabulaire avec la v1.** Le « verdict » et les « corrections
+   prioritaires » n'existent pas en v1 ; une équipe habituée à l'ancien écran
+   doit relier les deux vues. Les libellés de critères, eux, sont inchangés.
+
+**Corollaire technique** — Le flux passe par `fetch` + `ReadableStream` plutôt
+que par `EventSource`, qui ne sait faire que du GET et exposerait l'URL auditée
+dans une barre d'adresse et dans les journaux des proxys. Coût : la reconnexion
+automatique d'`EventSource` est perdue. Un flux interrompu avant la fin est donc
+signalé explicitement, avec proposition de relance, plutôt que repris en
+silence — ce qui vaut mieux qu'une reprise invisible qui relancerait une analyse
+complète à l'insu de l'utilisateur.
+
+---
+
+## 23. Une seule porte de sortie réseau : la sonde, jamais `fetch`
+
+**Décision** — Aucun analyseur n'appelle `fetch`. Six critères ont besoin du
+réseau (`ROBOTS_META`, `IMAGES`, `BROKEN_LINKS`, `MENTIONS_LEGALES`, et par
+ricochet la vérification des ressources qu'ils citent) ; tous reçoivent une
+`NetworkProbe` construite sur la politique SSRF **reconstituée dans le worker**.
+La sonde ne lève jamais d'exception, décrémente un budget de requêtes AVANT
+chaque appel, borne la concurrence et partage un cache TTL/LRU sur la durée de
+l'analyse.
+
+**Raison** — Un worker n'a pas de conteneur Nest : sans cette reconstitution,
+la tentation est d'y appeler `fetch` directement, et la garde SSRF devient
+décorative sur le seul chemin qui émet réellement des requêtes. Le budget est
+décrémenté avant l'appel et non après, parce qu'une page hostile qui déclare
+dix mille images ne doit pas pouvoir transformer WebSentry en amplificateur —
+compter après coup laisserait passer la rafale avant de la mesurer. Et une
+sonde qui lève transformerait un lien injoignable — c'est-à-dire un RÉSULTAT
+d'analyse — en panne d'analyse.
+
+**Durcissements par rapport à la v1**, tous couverts par des tests :
+
+- le repli HEAD → GET couvre `403`, `405` et `501`, là où la v1 ne réessayait
+  que sur `405` : beaucoup de serveurs répondent 403 ou 501 à un HEAD légitime,
+  et la v1 comptait ces URL comme cassées ;
+- un `Content-Length` non numérique rend `null` au lieu de propager un `NaN`
+  jusque dans le rapport ;
+- le message d'échec est choisi **par type d'erreur** et jamais recopié depuis
+  l'exception : une page ne dicte pas le texte d'un rapport.
+
+**Coût assumé** — Deux coûts. D'abord un budget qui peut être atteint : sur une
+page qui cite plus d'URL que le budget ne le permet, les dernières ne sont pas
+vérifiées, et le rapport doit le dire plutôt que de les déclarer saines. Ensuite
+une indirection de plus à l'écriture d'un analyseur : la sonde se passe en
+paramètre, ce qui est précisément ce qui rend ces analyseurs testables sans
+réseau.
+
+---
+
+## 24. Le contraste se mesure sans navigateur
+
+**Décision** — `CONTRAST_V2` est porté avec un micro-moteur CSS embarqué
+(`analysis/css/`) : cascade, spécificité, héritage, custom properties,
+`@media`/`@layer`/`@supports`/`@container`, puis un résolveur de fond effectif
+qui compose les couches semi-transparentes et remonte les ancêtres. Pas de
+navigateur sans tête dans le pipeline d'analyse.
+
+**Raison** — Le contraste ne se lit pas dans le HTML. L'alternative était un
+Chromium par page analysée : plusieurs centaines de mégaoctets de mémoire et
+une à deux secondes par page, dans un worker qui en traite des dizaines. Le
+moteur est vendu avec son périmètre : il suit **neuf propriétés**, pas la
+feuille de style entière.
+
+**Écarts fonctionnels assumés vis-à-vis de la v1** :
+
+1. **Les défauts sont groupés** par paire de couleurs et par seuil de taille,
+   et le libellé d'un groupe ne porte pas son décompte — sans quoi un même
+   défaut serait compté comme plusieurs d'une page à l'autre.
+2. **Un dégradé est mesuré** sur son pire arrêt de couleur au lieu d'être
+   renvoyé à une vérification manuelle. Seuls les fonds en image et les
+   empilements de couches restent « à vérifier à l'œil ».
+3. **Un thème sombre déclaré** bascule le fond par défaut sur le noir : sinon
+   un texte clair parfaitement lisible serait rapporté illisible.
+
+**Coût assumé** — Trois coûts. Un moteur CSS de ~2 200 lignes est du code à
+maintenir, et il dérivera des navigateurs à mesure que CSS avance ; c'est pour
+cela qu'il est testé pour lui-même et non seulement à travers l'analyseur. Les
+**feuilles externes ne sont pas chargées** : un site dont toute la charte tient
+dans un `.css` distant est mesuré sur des valeurs par défaut (dette inscrite
+dans `ARCHITECTURE.md`). Enfin, aucune mise en page n'est calculée : un texte
+masqué par un recouvrement est mesuré comme s'il était visible.
+
+---
+
+## 25. Les défauts de logique de la v1 sont corrigés au passage, pas recopiés
+
+**Décision** — Le port des 29 analyseurs applique `CLAUDE.md` §1 : là où le
+portage met au jour une règle bancale, elle est corrigée et la correction est
+couverte par un test qui échoue si on la retire. Une vingtaine de divergences,
+dont deux de sécurité :
+
+- **Injection de sélecteur** — `ACCESSIBILITY` construisait
+  `label[for="${id}"]` à partir d'un identifiant venu de la page analysée ; un
+  `id` contenant un guillemet cassait le sélecteur, donc le critère entier, sur
+  une valeur que l'auteur de la page contrôle. Les `label[for]` sont désormais
+  indexés une fois. `MENTIONS_LEGALES_DATA` souffrait du même défaut.
+- **Comparaisons trop larges** — `links` excluait un domaine par
+  `url.includes(domaine)` (un profil excluant `mappy.com` excluait aussi
+  `notmappy.com.example`), `CTA` testait l'inclusion brute d'un mot (« voir »
+  se trouve dans « savoir »), `PICTOGRAM` filtrait des classes en sous-chaîne.
+  Tous comparent maintenant des jetons ou des domaines entiers.
+- **Cas limites non traités** — `STRUCTURED_DATA` ignorait un document
+  `@graph`, pourtant la forme la plus courante ; `FAVICON` appelait
+  `new URL(href)` sans base, donc échouait sur un chemin relatif ; `TRACKING`
+  cherchait ses motifs dans le document entier et voyait un consentement là où
+  il n'y avait qu'un lien ; `DATA_BINDING` enchaînait deux recherches avec
+  `||`, opérateur qu'une sélection Cheerio vide satisfait.
+
+**Aucune régression** — Chaque correction a été vérifiée dans le sens du
+portage : le comportement v1 reste obtenu sur les cas que la v1 traitait
+correctement ; seuls les cas qu'elle traitait mal changent de verdict.
+
+**Coût assumé** — Deux coûts, acceptés. Un **score non identique** à celui de
+la v1 sur les pages qui déclenchaient ces défauts : une comparaison v1/v2 sur
+un même site montrera des écarts, qui sont des corrections et non des
+régressions — il faut pouvoir le dire à l'équipe qualité, d'où cet arbitrage.
+Et un **coût de relecture** : chaque divergence est portée par un commentaire
+qui dit ce que faisait la v1 et pourquoi la v2 fait autrement, sans quoi la
+prochaine lecture du code prendrait la correction pour une erreur de portage.
+
+---
+
+## 26. Le budget réseau est réparti à l'avance, critère par critère
+
+**Décision** — Les requêtes sortantes d'une analyse ne sont plus une enveloppe
+commune servie au premier qui la demande : chaque critère reçoit un quota fixé
+d'avance (`CHECK_QUOTAS`), et l'orchestrateur lui donne une vue de sonde qui ne
+dépasse pas ce quota. Le plafond global subsiste, mais comme garde-fou, pas
+comme mode de répartition. Un dépassement produit un état distinct
+(`exhausted`), que les quatre critères réseau annoncent en note d'information
+sans le compter comme un défaut du site.
+
+**Raison** — Les analyseurs partent ensemble, et la somme de ce qu'ils veulent
+vérifier dépasse le plafond d'une analyse. Avec une enveloppe commune, le
+partage se décidait donc par l'ordonnancement : deux analyses de la même page
+pouvaient rendre deux rapports différents, l'une ayant pesé les images, l'autre
+vérifié les liens. **Un audit qui bouge d'une exécution à l'autre n'est pas un
+audit** — c'est un défaut de correction, pas une question de performance.
+
+Quant au dépassement, le confondre avec un échec revenait à reprocher au site
+une limite que nous nous imposons : un lien jamais interrogé était rapporté
+« injoignable », et la note du critère baissait.
+
+**Aucune régression** — Les seuils par critère sont au-dessus de ce qu'une page
+ordinaire demande, et une réponse déjà connue ne consomme rien : sur un lot, la
+deuxième page et les suivantes retrouvent leur quota intact pour ce qu'elles
+ont de propre.
+
+**Coût assumé** — Deux coûts. D'abord une **table à tenir** : ajouter un critère
+réseau sans lui donner de quota lui laisse le minimum, et la somme des quotas
+doit rester sous le plafond — c'est une contrainte de plus à la revue. Ensuite,
+sur une page très fournie, un critère peut atteindre son quota alors que le
+plafond global n'est pas épuisé : le rapport annonce alors des liens non
+vérifiés là où une enveloppe commune en aurait vérifié davantage — mais sans
+garantir lesquels d'une exécution à l'autre.
+
+---
+
+## 27. Une ressource déjà vue ne se revérifie pas
+
+**Décision** — Le moteur de sortie réseau vit dans le **processus principal**,
+et les threads d'analyse lui adressent leurs demandes par un canal. Il
+mémorise chaque URL, partage les requêtes déjà en vol, dédoublonne les listes
+qu'on lui donne, et borne la concurrence pour le processus entier.
+
+**Raison** — Le menu et le pied de page d'un site sont les mêmes sur toutes ses
+pages : sur un scan de sitemap de deux cents pages, les vérifier page par page
+multiplie par deux cents une information qui n'a pas changé. Le cache existait
+déjà, mais il était **dans le thread** : un pool de huit threads le fragmentait
+en huit, et le même lien repartait huit fois. C'est du réseau dépensé pour
+rien, et surtout une charge infligée au site audité que l'audit n'exige pas.
+
+**Aucune régression** — La politique SSRF n'est ni contournée ni assouplie :
+elle s'applique désormais au même endroit pour tous les chemins d'exécution,
+là où elle était reconstruite dans chaque thread. Un échec de canal rend un
+résultat « sortie réseau indisponible », non facturé et non confondu avec un
+quota atteint.
+
+**Corollaire** — La même règle vaut un cran plus haut : un lot n'analyse
+qu'une fois une URL répétée. Un sitemap qui cite deux fois la même page ne
+décrit qu'une page, et le total annoncé porte donc sur les pages réellement
+distinctes — gonfler le compte d'un travail qui n'a pas eu lieu serait un
+mensonge par arrondi.
+
+**Coût assumé** — Trois coûts. Les requêtes sortantes reviennent sur la **boucle
+d'événements principale** : c'est de l'attente réseau et non du calcul — ce que
+le thread isole, le parse du DOM, y reste — mais la lecture d'un corps borné
+(512 Ko) s'y décode désormais. Ensuite, un **canal de plus par tâche**, donc un
+cycle de vie à tenir : un thread arrêté en pleine requête doit voir ses attentes
+dénouées, sans quoi l'analyse resterait suspendue. Enfin, un résultat mémorisé
+**vieillit** : dix minutes pour un succès, une pour un échec — un lien réparé
+pendant un scan peut donc être encore rapporté cassé jusqu'à la fin du scan.

@@ -15,20 +15,30 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Auth (cookies + Bearer, JWT rotatif)         | ✅      | ✅       | **Livré** |
 | RBAC + permissions fines                     | ✅      | ✅       | **Livré** |
 | Socle sécurité (SSRF, CSRF, audit, en-têtes) | ✅      | —        | **Livré** |
-| Settings & profils par gamme                 | ⬜      | ⬜       | À faire   |
-| Historique des scans                         | ⬜      | ⬜       | À faire   |
+| Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
+| Historique des scans                         | ✅      | ✅       | **Livré** |
 | Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
-| Analyse (page, batch, sitemap, SSE)          | ⬜      | ⬜       | À faire   |
+| Analyse (page, batch, sitemap, SSE)          | 🟨      | 🟨       | Partiel   |
 | Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
 | Messagerie in-app                            | ⬜      | ⬜       | À faire   |
 | Analytics d'usage / RGPD                     | ⬜      | ⬜       | À faire   |
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 614 au total — 402 unitaires backend, 106 E2E + sécurité API,
-97 unitaires frontend, 9 E2E navigateur.
-**Couverture** : 98 % lignes backend (100 % sur les modules de sécurité),
-99 % lignes frontend.
+**Tests** : 2633 au total — 337 paquet partagé, 1563 unitaires backend,
+311 E2E + sécurité API, 387 unitaires frontend, 35 E2E navigateur.
+**Couverture** : 100 % lignes paquet partagé, 95,4 % lignes backend
+(100 % sur chaque module de sécurité), 98,9 % lignes frontend.
+
+> **Module 4 — partiel.** Le pipeline d'analyse est livré de bout en bout
+> (récupération SSRF-sûre, profils, pool de threads, flux SSE, sitemap,
+> historisation, suite sécurité) et les **29 analyseurs sur 29** de la v1 sont
+> portés : le rapport produit est complet et son score comparable à celui de la
+> v1. Côté interface, `/analyse` couvre **la page unitaire** — progression en
+> direct et rapport à divulgation progressive ; les écrans de lot et de sitemap
+> restent à faire. Détail dans
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrages en
+> [`docs/DECISIONS.md`](docs/DECISIONS.md) §21 à §25.
 
 ---
 
@@ -80,6 +90,7 @@ consultatif, aucun override manuel n'est prévu.
 
 Seuils de couverture appliqués :
 
+- **Paquet partagé** — 95 % ; il porte le schéma qui garde la frontière HTTP.
 - **Backend** — 85 % lignes et branches ; **100 %** sur les modules de sécurité
   (SSRF, mots de passe, CSRF, jetons, gardes, RBAC).
 - **Frontend** — 80 % sur les composants et services.
@@ -94,3 +105,5 @@ Seuils de couverture appliqués :
   leur coût
 - [`docs/SECURITE.md`](docs/SECURITE.md) — les 15 failles et leur couverture,
   mesures permanentes
+- [`CLAUDE.md`](CLAUDE.md) — consignes permanentes de développement : règle
+  absolue du build, seuils de test, et le cap fonctionnel de la migration

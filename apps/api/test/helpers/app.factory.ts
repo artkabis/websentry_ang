@@ -10,6 +10,10 @@ import { UserRepository } from '../../src/database/repositories/user.repository.
 import { SessionRepository } from '../../src/database/repositories/session.repository.js';
 import { PermissionRepository } from '../../src/database/repositories/permission.repository.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repository.js';
+import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
+import { ScanRepository } from '../../src/database/repositories/scan.repository.js';
+import { ScanRetentionRepository } from '../../src/database/repositories/scan-retention.repository.js';
+import { PageFetcherService } from '../../src/analysis/page-fetcher.service.js';
 
 /**
  * Monte l'application COMPLÈTE (adapter Fastify, helmet, cookies, gardes et
@@ -42,12 +46,76 @@ export class FakeDb {
   >();
   readonly auditLog: Array<Record<string, unknown>> = [];
 
+  /** Profils par gamme — reproduit la table `settings_profiles`. */
+  readonly profiles = new Map<
+    string,
+    {
+      gamme: string;
+      label: string;
+      description: string | null;
+      settings: unknown;
+      version: number;
+      created_at: string;
+      updated_at: string;
+      updated_by: string | null;
+    }
+  >();
+
+  /** Pages servies au moteur d'analyse, indexées par URL. */
+  readonly pages = new Map<string, string>();
+
+  /** Historique des scans — reproduit `sites`, `scan_sessions` et `scan_pages`. */
+  readonly scanSites = new Map<string, FakeSite>();
+  readonly scanSessions = new Map<string, FakeSession>();
+  readonly scanPages = new Map<string, FakePage>();
+
   byUsername(username: string): UserRow | null {
     for (const user of this.users.values()) {
       if (user.username === username) return user;
     }
     return null;
   }
+}
+
+export interface FakeSite {
+  id: string;
+  domain: string;
+  gamme: string | null;
+  epj: string | null;
+  metadata: unknown;
+  last_seen: string;
+}
+
+export interface FakeSession {
+  id: string;
+  site_id: string;
+  gamme: string | null;
+  epj: string | null;
+  platform: string | null;
+  page_count: number;
+  avg_score: number | null;
+  min_score: number | null;
+  max_score: number | null;
+  analyzed_at: string;
+  duration_ms: number | null;
+  launched_by: string | null;
+  profile_snapshot: unknown;
+}
+
+export interface FakePage {
+  id: string;
+  session_id: string;
+  url: string;
+  domain: string;
+  global_score: number | null;
+  status_code: number | null;
+  analyzed_at: string;
+  duration_ms: number | null;
+  check_summary: unknown;
+  report: string | null;
+  report_gz: Buffer | null;
+  is_compressed: number;
+  report_purged_at: string | null;
 }
 
 export interface TestApp {
@@ -185,6 +253,354 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     }),
   };
 
+  const profileRepo = {
+    available: true,
+    list: vi.fn(() =>
+      Promise.resolve(
+        [...db.profiles.values()].sort((a, b) => {
+          if (a.gamme === 'default') return -1;
+          if (b.gamme === 'default') return 1;
+          return a.gamme.localeCompare(b.gamme);
+        }) as never,
+      ),
+    ),
+    findByGamme: vi.fn((gamme: string) =>
+      Promise.resolve((db.profiles.get(gamme) ?? null) as never),
+    ),
+    create: vi.fn(
+      (
+        gamme: string,
+        label: string,
+        description: string | null,
+        settings: unknown,
+        by: string | null,
+      ) => {
+        if (db.profiles.has(gamme)) return Promise.resolve(false);
+        const now = new Date().toISOString();
+        db.profiles.set(gamme, {
+          gamme,
+          label,
+          description,
+          settings,
+          version: 1,
+          created_at: now,
+          updated_at: now,
+          updated_by: by,
+        });
+        return Promise.resolve(true);
+      },
+    ),
+    // Reproduit fidèlement l'atomicité du `UPDATE ... WHERE version = ?` :
+    // une version attendue qui ne correspond plus ne touche aucune ligne.
+    updateWithVersion: vi.fn(
+      (
+        gamme: string,
+        label: string,
+        description: string | null,
+        settings: unknown,
+        by: string | null,
+        expectedVersion: number | null,
+      ) => {
+        const existing = db.profiles.get(gamme);
+        if (!existing) return Promise.resolve(false);
+        if (expectedVersion !== null && existing.version !== expectedVersion) {
+          return Promise.resolve(false);
+        }
+        db.profiles.set(gamme, {
+          ...existing,
+          label,
+          description,
+          settings,
+          updated_by: by,
+          version: existing.version + 1,
+          updated_at: new Date().toISOString(),
+        });
+        return Promise.resolve(true);
+      },
+    ),
+    delete: vi.fn((gamme: string) => {
+      if (gamme === 'default') return Promise.resolve(false);
+      return Promise.resolve(db.profiles.delete(gamme));
+    }),
+    currentVersion: vi.fn((gamme: string) =>
+      Promise.resolve(db.profiles.get(gamme)?.version ?? null),
+    ),
+  };
+
+  // ── Historique des scans ────────────────────────────────────────────────────
+  // Le double reproduit les SÉMANTIQUES qui portent une décision — jointure
+  // site/session/page, filtres, pagination, cascade de suppression, distinction
+  // du rapport purgé — et non le dialecte SQL, couvert par les tests unitaires
+  // du repository.
+
+  const identityOf = (domain: string, gamme: string | null) => `${domain}|${gamme ?? ''}`;
+
+  const siteOfSession = (sessionId: string): FakeSite | null => {
+    const session = db.scanSessions.get(sessionId);
+    return session ? (db.scanSites.get(session.site_id) ?? null) : null;
+  };
+
+  /** Ligne « page » telle que la produit la jointure des trois tables. */
+  const joinPage = (page: FakePage) => {
+    const session = db.scanSessions.get(page.session_id);
+    const site = session ? db.scanSites.get(session.site_id) : null;
+    return {
+      ...page,
+      gamme: site?.gamme ?? null,
+      epj: site?.epj ?? null,
+      platform: session?.platform ?? null,
+      metadata: site?.metadata ?? null,
+      launched_by: session?.launched_by ?? null,
+      has_report: page.report != null || page.report_gz != null ? 1 : 0,
+      site_domain: site?.domain ?? page.domain,
+    };
+  };
+
+  const matchesText = (value: string | null, needle: string | undefined) =>
+    !needle || (value ?? '').toLowerCase().includes(needle.toLowerCase());
+
+  const withinDates = (at: string, from?: string, to?: string) => {
+    const iso = at.replace(' ', 'T');
+    if (from && iso < from.slice(0, 10)) return false;
+    if (to && iso.slice(0, 10) > to.slice(0, 10)) return false;
+    return true;
+  };
+
+  interface FakeQuery {
+    q?: string;
+    domain?: string;
+    gamme?: string;
+    epj?: string;
+    scoreMin?: number;
+    scoreMax?: number;
+    dateFrom?: string;
+    dateTo?: string;
+    sessionId?: string;
+  }
+
+  const filterPages = (params: FakeQuery) =>
+    [...db.scanPages.values()].map(joinPage).filter(row => {
+      if (params.sessionId && row.session_id !== params.sessionId) return false;
+      if (!matchesText(row.site_domain, params.domain)) return false;
+      if (params.gamme && row.gamme !== params.gamme) return false;
+      if (!matchesText(row.epj, params.epj)) return false;
+      if (params.q && !matchesText(`${row.site_domain} ${row.epj ?? ''}`, params.q)) return false;
+      if (params.scoreMin != null && (row.global_score ?? -1) < params.scoreMin) return false;
+      if (params.scoreMax != null && (row.global_score ?? 99) > params.scoreMax) return false;
+      return withinDates(row.analyzed_at, params.dateFrom, params.dateTo);
+    });
+
+  /** Chaque site avec sa session la plus récente — équivalent du ROW_NUMBER(). */
+  const siteRows = (params: FakeQuery) =>
+    [...db.scanSites.values()]
+      .map(site => {
+        const sessions = [...db.scanSessions.values()]
+          .filter(s => s.site_id === site.id)
+          .sort((a, b) => b.analyzed_at.localeCompare(a.analyzed_at));
+        const last = sessions[0] ?? null;
+        return {
+          site_id: site.id,
+          domain: site.domain,
+          gamme: site.gamme,
+          epj: site.epj,
+          metadata: site.metadata,
+          last_session_id: last?.id ?? null,
+          page_count: last?.page_count ?? null,
+          avg_score: last?.avg_score ?? null,
+          min_score: last?.min_score ?? null,
+          max_score: last?.max_score ?? null,
+          launched_by: last?.launched_by ?? null,
+          last_scan: last?.analyzed_at ?? site.last_seen,
+          session_count: sessions.length,
+        };
+      })
+      .filter(row => {
+        if (!matchesText(row.domain, params.domain)) return false;
+        if (params.gamme && row.gamme !== params.gamme) return false;
+        if (!matchesText(row.epj, params.epj)) return false;
+        if (params.q && !matchesText(`${row.domain} ${row.epj ?? ''}`, params.q)) return false;
+        if (params.scoreMin != null && (row.avg_score ?? -1) < params.scoreMin) return false;
+        if (params.scoreMax != null && (row.avg_score ?? 99) > params.scoreMax) return false;
+        return withinDates(row.last_scan, params.dateFrom, params.dateTo);
+      });
+
+  const sessionRow = (session: FakeSession) => ({
+    ...session,
+    domain: db.scanSites.get(session.site_id)?.domain ?? '',
+  });
+
+  const scanRepo = {
+    available: true,
+    countPages: vi.fn((params: FakeQuery) => Promise.resolve(filterPages(params).length)),
+    searchPages: vi.fn((params: FakeQuery, limit: number, offset: number) =>
+      Promise.resolve(
+        filterPages(params)
+          .sort((a, b) => b.analyzed_at.localeCompare(a.analyzed_at) || a.id.localeCompare(b.id))
+          .slice(offset, offset + limit),
+      ),
+    ),
+    countSites: vi.fn((params: FakeQuery) => Promise.resolve(siteRows(params).length)),
+    listSites: vi.fn((params: FakeQuery, limit: number, offset: number) =>
+      Promise.resolve(
+        siteRows(params)
+          .sort((a, b) => b.last_scan.localeCompare(a.last_scan))
+          .slice(offset, offset + limit),
+      ),
+    ),
+    listSiteSessions: vi.fn((domain: string, gamme: string | null) => {
+      const site = [...db.scanSites.values()].find(
+        s => identityOf(s.domain, s.gamme) === identityOf(domain, gamme),
+      );
+      if (!site) return Promise.resolve([]);
+      return Promise.resolve(
+        [...db.scanSessions.values()]
+          .filter(s => s.site_id === site.id)
+          .sort((a, b) => b.analyzed_at.localeCompare(a.analyzed_at))
+          .map(sessionRow),
+      );
+    }),
+    findPageWithReport: vi.fn((id: string) => {
+      const page = db.scanPages.get(id);
+      return Promise.resolve(page ? joinPage(page) : null);
+    }),
+    findSession: vi.fn((id: string) => {
+      const session = db.scanSessions.get(id);
+      return Promise.resolve(session ? sessionRow(session) : null);
+    }),
+    listSessionPages: vi.fn((sessionId: string, limit: number) =>
+      Promise.resolve(
+        [...db.scanPages.values()]
+          .filter(p => p.session_id === sessionId)
+          .sort((a, b) => a.analyzed_at.localeCompare(b.analyzed_at))
+          .slice(0, limit),
+      ),
+    ),
+    listComparablePages: vi.fn((sessionId: string, limit: number) =>
+      Promise.resolve(
+        [...db.scanPages.values()]
+          .filter(p => p.session_id === sessionId)
+          .slice(0, limit)
+          .map(p => ({ url: p.url, global_score: p.global_score, check_summary: p.check_summary })),
+      ),
+    ),
+    findSessionIdsForPages: vi.fn((ids: readonly string[]) =>
+      Promise.resolve([
+        ...new Set(ids.map(id => db.scanPages.get(id)?.session_id).filter(Boolean)),
+      ] as string[]),
+    ),
+    deletePages: vi.fn((ids: readonly string[]) => {
+      let deleted = 0;
+      for (const id of ids) if (db.scanPages.delete(id)) deleted += 1;
+      return Promise.resolve(deleted);
+    }),
+    countPagesForSite: vi.fn((domain: string, gamme: string | null) =>
+      Promise.resolve(
+        [...db.scanPages.values()].filter(p => {
+          const site = siteOfSession(p.session_id);
+          return site && identityOf(site.domain, site.gamme) === identityOf(domain, gamme);
+        }).length,
+      ),
+    ),
+    countPagesForDomain: vi.fn((domain: string) =>
+      Promise.resolve(
+        [...db.scanPages.values()].filter(p => siteOfSession(p.session_id)?.domain === domain)
+          .length,
+      ),
+    ),
+    countPagesForSession: vi.fn((sessionId: string) =>
+      Promise.resolve([...db.scanPages.values()].filter(p => p.session_id === sessionId).length),
+    ),
+    deleteSite: vi.fn((domain: string, gamme: string | null) => {
+      const sites = [...db.scanSites.values()].filter(
+        s => identityOf(s.domain, s.gamme) === identityOf(domain, gamme),
+      );
+      for (const site of sites) cascadeDeleteSite(site.id);
+      return Promise.resolve(sites.length);
+    }),
+    deleteDomain: vi.fn((domain: string) => {
+      const sites = [...db.scanSites.values()].filter(s => s.domain === domain);
+      for (const site of sites) cascadeDeleteSite(site.id);
+      return Promise.resolve(sites.length);
+    }),
+    deleteSession: vi.fn((sessionId: string) => {
+      for (const page of [...db.scanPages.values()]) {
+        if (page.session_id === sessionId) db.scanPages.delete(page.id);
+      }
+      return Promise.resolve(db.scanSessions.delete(sessionId) ? 1 : 0);
+    }),
+    reconcileSessions: vi.fn((ids: readonly string[]) => {
+      for (const id of new Set(ids)) {
+        const session = db.scanSessions.get(id);
+        if (!session) continue;
+        const pages = [...db.scanPages.values()].filter(p => p.session_id === id);
+        if (pages.length === 0) {
+          db.scanSessions.delete(id);
+          continue;
+        }
+        const scores = pages.map(p => p.global_score).filter((s): s is number => s != null);
+        session.page_count = pages.length;
+        session.avg_score = scores.length
+          ? scores.reduce((a, b) => a + b, 0) / scores.length
+          : null;
+        session.min_score = scores.length ? Math.min(...scores) : null;
+        session.max_score = scores.length ? Math.max(...scores) : null;
+      }
+      return Promise.resolve();
+    }),
+    deleteOrphanSites: vi.fn(() => {
+      let removed = 0;
+      for (const site of [...db.scanSites.values()]) {
+        const hasSession = [...db.scanSessions.values()].some(s => s.site_id === site.id);
+        if (!hasSession && db.scanSites.delete(site.id)) removed += 1;
+      }
+      return Promise.resolve(removed);
+    }),
+    statsSummary: vi.fn(() => {
+      const pages = [...db.scanPages.values()];
+      const scores = pages.map(p => p.global_score).filter((s): s is number => s != null);
+      const dates = pages.map(p => p.analyzed_at).sort();
+      return Promise.resolve({
+        total: pages.length,
+        inline: pages.filter(p => p.report != null).length,
+        compressed: pages.filter(p => p.is_compressed === 1 && p.report_gz != null).length,
+        purged: pages.filter(p => p.report == null && p.report_gz == null).length,
+        avg_score: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+        oldest: dates[0] ?? null,
+        newest: dates[dates.length - 1] ?? null,
+        storage_gz: pages.reduce((sum, p) => sum + (p.report_gz?.length ?? 0), 0),
+      });
+    }),
+    countRows: vi.fn((table: 'sites' | 'scan_sessions') =>
+      Promise.resolve(table === 'sites' ? db.scanSites.size : db.scanSessions.size),
+    ),
+    statsByGamme: vi.fn(() => Promise.resolve([])),
+    statsScoreBuckets: vi.fn(() =>
+      Promise.resolve({ good: 0, warning: 0, critical: 0, unknown: 0 }),
+    ),
+    statsTopDomains: vi.fn(() => Promise.resolve([])),
+    ingestSession: vi.fn(() => Promise.resolve()),
+  };
+
+  /** Cascade `ON DELETE CASCADE` du schéma : site → sessions → pages. */
+  function cascadeDeleteSite(siteId: string): void {
+    for (const session of [...db.scanSessions.values()]) {
+      if (session.site_id !== siteId) continue;
+      for (const page of [...db.scanPages.values()]) {
+        if (page.session_id === session.id) db.scanPages.delete(page.id);
+      }
+      db.scanSessions.delete(session.id);
+    }
+    db.scanSites.delete(siteId);
+  }
+
+  const scanRetentionRepo = {
+    available: true,
+    findCompressible: vi.fn(() => Promise.resolve([])),
+    compress: vi.fn(() => Promise.resolve(0)),
+    purge: vi.fn(() => Promise.resolve(0)),
+    countPending: vi.fn(() => Promise.resolve({ compressible: 0, purgeable: 0 })),
+  };
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
@@ -208,6 +624,29 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
   // validation Zod s'exécute au chargement d'AppConfigModule, trop tôt pour être
   // configurée ici.
 
+  // ── Récupération de page ────────────────────────────────────────────────────
+  // Le double sert du HTML en mémoire : la suite E2E teste les DÉCISIONS de
+  // l'API (accès, validation, forme des réponses), pas la pile réseau — que
+  // couvrent les tests du service SSRF. Aucun test ne doit sortir sur Internet.
+  const pageFetcher = {
+    fetchPage: vi.fn((url: string) => {
+      const html = db.pages.get(url);
+      if (html === undefined) {
+        return Promise.reject(new Error(`Hôte injoignable : ${url}`));
+      }
+      return Promise.resolve({
+        url,
+        html,
+        title: 'Page de test',
+        platform: 'generic' as const,
+        headers: { 'content-type': 'text/html' },
+        statusCode: 200,
+        ttfb: 12,
+        redirectChain: [],
+      });
+    }),
+  };
+
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DatabaseService)
     .useValue(databaseStub)
@@ -219,6 +658,14 @@ export async function createTestApp(seed: SeedUser[] = []): Promise<TestApp> {
     .useValue(permissionRepo)
     .overrideProvider(AuditRepository)
     .useValue(auditRepo)
+    .overrideProvider(ProfileRepository)
+    .useValue(profileRepo)
+    .overrideProvider(ScanRepository)
+    .useValue(scanRepo)
+    .overrideProvider(ScanRetentionRepository)
+    .useValue(scanRetentionRepo)
+    .overrideProvider(PageFetcherService)
+    .useValue(pageFetcher)
     .compile();
 
   const { FastifyAdapter } = await import('@nestjs/platform-fastify');

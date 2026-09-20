@@ -7,7 +7,9 @@
     // du CommonJS, consommable par le backend Nest via `require()`.
     "module": "node16",
     "moduleResolution": "node16",
+    "types": ["node", "vitest/globals"],
     "tsBuildInfoFile": "./dist/cjs/.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
 }

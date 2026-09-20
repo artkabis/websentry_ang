@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 
 /**
@@ -11,6 +11,7 @@ import { AuthService } from '../../core/auth/auth.service';
 @Component({
   selector: 'ws-dashboard',
   standalone: true,
+  imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="mx-auto max-w-4xl px-4 py-10">
@@ -33,8 +34,47 @@ import { AuthService } from '../../core/auth/auth.service';
         </button>
       </header>
 
+      <section class="mt-8 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <h2 class="text-base font-medium text-slate-900">Profils par gamme</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Règles d'analyse appliquées selon la gamme du site audité.
+        </p>
+        <a
+          routerLink="/profils"
+          class="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+        >
+          Consulter les profils
+        </a>
+      </section>
+
+      <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <h2 class="text-base font-medium text-slate-900">Analyser une page</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Audit d'une URL, critère par critère, avec les corrections prioritaires.
+        </p>
+        <a
+          routerLink="/analyse"
+          class="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+        >
+          Lancer une analyse
+        </a>
+      </section>
+
+      <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <h2 class="text-base font-medium text-slate-900">Historique des scans</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Audits passés, site par site, et comparaison de deux analyses.
+        </p>
+        <a
+          routerLink="/historique"
+          class="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+        >
+          Consulter l'historique
+        </a>
+      </section>
+
       @if (auth.isAdmin()) {
-        <section class="mt-8 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
           <h2 class="text-base font-medium text-slate-900">Administration</h2>
           <p class="mt-1 text-sm text-slate-500">
             Section réservée aux rangs administrateur et supérieurs.
