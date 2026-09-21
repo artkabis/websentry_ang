@@ -845,3 +845,40 @@ présent en test. La contrainte est écrite ici et en tête du script qui produi
 ces fichiers. Second coût : le budget resserré refusera un build qui dépasse
 480 kio — ce qui est l'effet recherché, mais demandera d'instruire tout ajout
 lourd au lieu de le laisser passer.
+
+---
+
+## 33. Une feuille de style n'est découpée qu'une fois par worker
+
+**Décision** — Le micro-moteur CSS mémorise le découpage d'une feuille par le
+**texte** de celle-ci, ainsi que tout ce qui n'en dépend que : liste de
+sélecteurs éclatée, spécificité de chacun, clé d'index, variables de palette.
+Le cache est borné à 4 Mio de source par thread, avec éviction par ancienneté.
+Ce qui dépend de la page — filtrage `@media`, mise en correspondance avec le
+document — reste rejoué à chaque page.
+
+**Raison** — Le téléchargement d'une charte était déjà mutualisé par le moteur
+de sonde ; son **découpage** ne l'était pas. Sur une page portant une feuille de
+287 Kio, le critère de contraste coûtait 24,4 ms, dont 23,1 de reconstruction du
+CSSOM — pour un résultat rigoureusement identique d'une page à l'autre, puisque
+la charte ne change pas. Sur un lot de deux cents pages, c'était près de cinq
+secondes de travail répété par thread. La feuille de l'agent utilisateur,
+constante, était elle aussi redécoupée à chaque page. Mesure après : **5,0 ms**
+par page avec charte externe, 3,8 ms pour la seule construction du CSSOM.
+
+**Aucune régression** — Les verdicts sont inchangés : 163 tests du moteur CSS et
+du résolveur de contraste passent à l'identique, et quatre mutations vérifient
+que les propriétés neuves sont réellement tenues — filet des couches anonymes,
+ordre des couches nommées rejoué à chaque réutilisation, palette non versée par
+une règle écartée par le viewport, règles partagées non modifiables.
+
+**Coût assumé** — Trois. D'abord la mémoire : jusqu'à 4 Mio de source CSS et les
+règles correspondantes par thread, gardées jusqu'à éviction ; c'est un plafond
+choisi, pas une conséquence subie. Ensuite le partage : les règles mémorisées
+sont vues par toutes les pages, donc figées (`Readonly` au compilateur,
+`Object.freeze` à l'exécution) — une écriture en place lève désormais au lieu de
+contaminer silencieusement les pages suivantes, mais tout code futur qui voudrait
+enrichir une règle devra la recopier. Enfin les couches `@layer` **anonymes**,
+dont le nom dépend d'un compteur de page : ces feuilles ne sont pas mémorisées et
+gardent le coût d'un découpage par page. Elles sont rares ; le contraire aurait
+été de fusionner deux couches distinctes, ce qui change des verdicts.

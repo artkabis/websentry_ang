@@ -572,3 +572,75 @@ describe('feuilles externes', () => {
     expect(external.declared).toBe(0);
   });
 });
+
+describe('mémorisation des feuilles', () => {
+  // Une charte est la même sur toutes les pages d'un site : elle n'est découpée
+  // qu'une fois. Ce qui suit vérifie que la réutilisation ne transporte RIEN
+  // d'une page à l'autre.
+  const CHARTE = '.promo { color: red; } p { color: blue; }';
+
+  it('rend le même verdict sur deux pages qui partagent la feuille', () => {
+    const premiere = page(CHARTE, '<p class="promo">un</p>');
+    const seconde = page(CHARTE, '<p>deux</p>');
+
+    expect(styleOf(premiere, 'p').color).toBe('red');
+    expect(styleOf(seconde, 'p').color).toBe('blue');
+  });
+
+  it('ne laisse pas la première page figer les styles de la seconde', () => {
+    // Les règles mémorisées sont PARTAGÉES : si l'une des deux constructions
+    // les modifiait, l'autre lirait des valeurs qui ne sont pas les siennes.
+    const cssomA = buildCSSOM(page(CHARTE, '<p class="promo">un</p>'));
+    const cssomB = buildCSSOM(page(CHARTE, '<p>deux</p>'));
+
+    const lire = (cssom: ReturnType<typeof buildCSSOM>) =>
+      cssom.getComputedStyle(cssom.$('p').get(0)!).color;
+
+    expect(lire(cssomB)).toBe('blue');
+    // Relu APRÈS la seconde construction : la première doit être intacte.
+    expect(lire(cssomA)).toBe('red');
+  });
+
+  it('rejoue le filtrage @media à chaque page, jamais le verdict de la précédente', () => {
+    // Le découpage est mémorisé, pas la DÉCISION. La variable est lue sans
+    // repli : si la règle écartée par le viewport versait quand même sa
+    // palette au registre, la couleur se résoudrait au lieu de rester à sa
+    // valeur initiale — c'est précisément ce que ce test interdit.
+    const css =
+      '@media (max-width: 768px) { :root { --teinte: red; } } p { color: var(--teinte); }';
+    const html = page(css, '<p>x</p>');
+
+    expect(styleOf(html, 'p', 375).color).toBe('red');
+    expect(styleOf(html, 'p', 1400).color).toBe('rgb(0, 0, 0)');
+    expect(styleOf(html, 'p', 375).color).toBe('red');
+  });
+
+  // Deux couches anonymes, dont la PREMIÈRE est la plus spécifique : c'est le
+  // seul montage où la fusion des deux couches se voit. À couches distinctes,
+  // la dernière déclarée gagne malgré sa moindre spécificité ; fusionnées, la
+  // spécificité reprend la main et la première gagne à tort.
+  const ANONYMES = `<html><head>
+      <style>@layer { p.promo { color: red; } }</style>
+      <style>@layer { p { color: green; } }</style>
+    </head><body><p class="promo">x</p></body></html>`;
+
+  it('GARDE DISTINCTES deux couches anonymes de la même page', () => {
+    expect(styleOf(ANONYMES, 'p').color).toBe('green');
+  });
+
+  it('nomme les couches anonymes à l’identique d’une page à l’autre', () => {
+    // Deux constructions successives : la seconde ne doit pas hériter du
+    // compteur de la première, ni d'un découpage mémorisé.
+    expect(styleOf(ANONYMES, 'p').color).toBe('green');
+    expect(styleOf(ANONYMES, 'p').color).toBe('green');
+  });
+
+  it('conserve l’ordre des couches NOMMÉES au fil des réutilisations', () => {
+    const css =
+      '@layer base, theme; @layer theme { p { color: green; } } @layer base { p { color: red; } }';
+    const html = page(css, '<p>x</p>');
+
+    expect(styleOf(html, 'p').color).toBe('green');
+    expect(styleOf(html, 'p').color).toBe('green');
+  });
+});

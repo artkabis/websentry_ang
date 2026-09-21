@@ -362,6 +362,18 @@ héritage, custom properties, `@media`/`@layer`/`@supports`/`@container` — pui
 résolveur de fond effectif compose les couches semi-transparentes et remonte les
 ancêtres jusqu'à une couleur opaque.
 
+**Une feuille n'est découpée qu'une fois par worker.** La charte d'un site est
+la même sur toutes ses pages : sur un lot, la même feuille était redécoupée
+autant de fois qu'il y avait de pages, pour un résultat identique. Le découpage
+et tout ce qui n'en dépend que — liste de sélecteurs, spécificité, clé d'index,
+variables de palette — est mémorisé par TEXTE de feuille, dans un cache borné à
+4 Mio de source par thread. Ce qui dépend de la page — filtrage `@media`, mise
+en correspondance avec le document — est rejoué à chaque fois. Les règles
+mémorisées sont partagées : leurs déclarations sont `Readonly` et gelées, sans
+quoi une écriture en place se propagerait aux pages suivantes sans rien
+signaler. Seules les feuilles à couche `@layer` ANONYME échappent au cache,
+leur nom dépendant d'un compteur de page.
+
 Le moteur **n'a pas de porte de sortie à lui** : il reçoit, ou non, une fonction
 de lecture. C'est l'analyseur qui la construit sur la sonde réseau — donc sous
 politique SSRF, sous plafond de volume (512 Kio par feuille) et sur le quota du

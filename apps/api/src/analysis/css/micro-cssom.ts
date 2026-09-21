@@ -57,7 +57,7 @@ interface ParsedRule {
 }
 
 interface RuleEntry {
-  declarations: Declarations;
+  declarations: Readonly<Declarations>;
   specificity: Specificity;
   order: number;
   inline?: boolean;
@@ -246,6 +246,165 @@ const joinLayer = (parent: string | undefined, name: string): string =>
 
 function registerLayer(order: Map<string, number>, name: string): void {
   if (!order.has(name)) order.set(name, order.size);
+}
+
+/**
+ * Une même feuille n'est découpée qu'une fois par processus.
+ *
+ * La charte, le menu et le pied de page d'un site sont les mêmes sur toutes
+ * ses pages : sur un lot de deux cents pages, une feuille de 287 kio était
+ * redécoupée deux cents fois pour un résultat rigoureusement identique — 23 ms
+ * par page, soit près de cinq secondes de pur travail répété. Le
+ * TÉLÉCHARGEMENT était déjà mutualisé par le moteur de sonde ; son découpage ne
+ * l'était pas.
+ *
+ * La feuille de l'agent utilisateur, constante, en profite aussi : elle était
+ * elle aussi redécoupée à chaque page, y compris sur les pages sans feuille
+ * externe.
+ */
+interface PreparedSelector {
+  text: string;
+  spec: Specificity;
+  /** Ce que l'élément visé doit porter, `null` si le sélecteur n'en livre pas. */
+  key: SelectorKey | null;
+  /** Le sélecteur se réduit-il à sa clé ? Le panier est alors la réponse. */
+  bare: boolean;
+}
+
+/**
+ * Règle prête à être confrontée à une page.
+ *
+ * Tout ce qui ne dépend PAS du document est calculé ici, une fois pour la
+ * feuille : découpage de la liste de sélecteurs, spécificité, clé d'index,
+ * variables de palette. Ce travail était refait à chaque page, pour un
+ * résultat identique — il ne dépend que du texte de la feuille.
+ */
+interface PreparedRule {
+  /**
+   * Gelées, et le type le dit.
+   *
+   * Une règle mémorisée est PARTAGÉE par toutes les pages qui citent la même
+   * feuille. Une écriture en place n'y produirait pas d'erreur visible : elle
+   * s'appliquerait aux pages suivantes, et le défaut se lirait des heures plus
+   * tard dans un rapport qu'on ne saurait plus rattacher. L'invariant est donc
+   * porté par la structure — `Readonly` au compilateur, `Object.freeze` à
+   * l'exécution — plutôt que par un test qui devrait deviner la faute.
+   */
+  declarations: Readonly<Declarations>;
+  media: string[];
+  layer?: string;
+  selectors: PreparedSelector[];
+  /** Variables de palette déclarées par la règle (`:root`, `html`, `body`). */
+  paletteVars: [string, string][] | null;
+}
+
+interface ParsedSheet {
+  rules: PreparedRule[];
+  /** Couches déclarées, DANS L'ORDRE : l'appelant les rejoue dans son registre. */
+  layers: string[];
+}
+
+/** Seuls `:root`, `html` et `body` font autorité sur la palette du document. */
+const PALETTE_SELECTORS = new Set([':root', 'html', 'body']);
+
+function prepare(rule: ParsedRule): PreparedRule {
+  const selectors: PreparedSelector[] = [];
+  let palette = false;
+  for (const raw of splitSelectorList(rule.selectorText)) {
+    const text = raw.trim();
+    if (!text) continue;
+    if (PALETTE_SELECTORS.has(text)) palette = true;
+    selectors.push({ text, spec: specificity(text), key: keyOf(text), bare: isBareKey(text) });
+  }
+
+  let paletteVars: [string, string][] | null = null;
+  if (palette) {
+    for (const prop in rule.declarations) {
+      if (!prop.startsWith('--')) continue;
+      const declaration = rule.declarations[prop];
+      if (declaration) (paletteVars ??= []).push([prop, declaration.value]);
+    }
+  }
+
+  return {
+    declarations: Object.freeze(rule.declarations),
+    media: rule.media,
+    layer: rule.layer,
+    selectors,
+    paletteVars,
+  };
+}
+
+/** `@layer { … }` sans nom — la seule forme dont le découpage dépend de la page. */
+const ANONYMOUS_LAYER = /@layer\s*\{/;
+
+const sheetCache = new Map<string, ParsedSheet>();
+/**
+ * Plafond du cache, en caractères de source.
+ *
+ * Un worker analyse des sites entiers à la suite ; sans plafond, il garderait
+ * la charte de chacun d'eux jusqu'à la fin du processus. Quatre mébioctets
+ * couvrent largement les feuilles d'un site — et de son voisin.
+ */
+const SHEET_CACHE_MAX_CHARS = 4 * 1024 * 1024;
+let sheetCacheChars = 0;
+
+/**
+ * Découpe une feuille de PREMIER NIVEAU, en réutilisant un découpage déjà fait.
+ *
+ * Deux réserves, qui définissent exactement ce qui est mémorisable :
+ *   - une couche ANONYME (`@layer { … }`) tire son nom d'un compteur de page ;
+ *     le même découpage réutilisé ailleurs produirait des noms qui entrent en
+ *     collision avec ceux d'une autre feuille, et deux couches distinctes
+ *     fusionneraient en silence. Ces feuilles ne sont donc pas mémorisées ;
+ *   - les règles rendues sont PARTAGÉES entre appels. Rien ne les modifie — la
+ *     construction du CSSOM ne fait que les lire, et `expandShorthands` recopie
+ *     avant d'ajouter quoi que ce soit.
+ */
+function parseTopLevelSheet(
+  css: string,
+  layerOrder: Map<string, number>,
+  anon: { n: number },
+): PreparedRule[] {
+  // Raccourci, sans effet sur le résultat : une feuille à couche anonyme ne
+  // sera pas mémorisable (voir plus bas), autant ne pas la découper deux fois.
+  // Ce qui GARANTIT la justesse est le contrôle en aval, pas cette détection.
+  if (ANONYMOUS_LAYER.test(css)) return parseStylesheet(css, { layerOrder, anon }).map(prepare);
+
+  const cached = sheetCache.get(css);
+  if (cached) {
+    for (const name of cached.layers) registerLayer(layerOrder, name);
+    return cached.rules;
+  }
+
+  // Découpage dans un contexte NEUF : c'est ce qui rend le résultat
+  // indépendant de la page, donc réutilisable.
+  const ownOrder = new Map<string, number>();
+  const ownAnon = { n: 0 };
+  const parsed = parseStylesheet(css, { layerOrder: ownOrder, anon: ownAnon });
+
+  if (ownAnon.n > 0) {
+    // Une couche ANONYME (`@layer { … }`) tire son nom du compteur de la PAGE.
+    // Découpée dans son propre contexte, chaque feuille nommerait `#anon0` sa
+    // première couche : deux couches distinctes porteraient le même nom, donc
+    // le même rang, et la plus spécifique l'emporterait au lieu de la dernière
+    // déclarée. On refait le découpage dans le contexte de la page, et on ne
+    // mémorise pas.
+    return parseStylesheet(css, { layerOrder, anon }).map(prepare);
+  }
+
+  const rules = parsed.map(prepare);
+  for (const name of ownOrder.keys()) registerLayer(layerOrder, name);
+
+  sheetCache.set(css, { rules, layers: [...ownOrder.keys()] });
+  sheetCacheChars += css.length;
+  // Éviction par ancienneté : `Map` préserve l'ordre d'insertion.
+  for (const [key] of sheetCache) {
+    if (sheetCacheChars <= SHEET_CACHE_MAX_CHARS) break;
+    sheetCache.delete(key);
+    sheetCacheChars -= key.length;
+  }
+  return rules;
 }
 
 function parseStylesheet(css: string, ctx?: Partial<ParseCtx>): ParsedRule[] {
@@ -633,7 +792,7 @@ export function specificity(selector: string): Specificity {
 const COLOR_TOKEN =
   /(rgba?\([^)]*\)|hsla?\([^)]*\)|var\([^)]*\)|#[0-9a-f]{3,8}|\b(?:transparent|currentcolor)\b)/i;
 
-function expandShorthands(decls: Declarations): Declarations {
+function expandShorthands(decls: Readonly<Declarations>): Declarations {
   const out: Declarations = { ...decls };
   const bg = out['background'];
   if (bg) {
@@ -891,16 +1050,15 @@ function isBareKey(selector: string): boolean {
  * Un panier absent vaut certitude : aucun élément ne porte cette classe, cet
  * identifiant ou cette balise, donc la règle ne vise personne.
  */
-function nodesFor($: CheerioAPI, selector: string, index: DocumentIndex): unknown[] {
-  const key = keyOf(selector);
-  if (!key) return $(selector).toArray();
+function nodesFor($: CheerioAPI, selector: PreparedSelector, index: DocumentIndex): unknown[] {
+  if (!selector.key) return $(selector.text).toArray();
 
-  const bucket = index[key.bucket].get(key.name);
+  const bucket = index[selector.key.bucket].get(selector.key.name);
   if (!bucket) return [];
-  if (isBareKey(selector)) return bucket;
+  if (selector.bare) return bucket;
 
   return $(bucket as Parameters<typeof $>[0])
-    .filter(selector)
+    .filter(selector.text)
     .toArray();
 }
 
@@ -967,34 +1125,23 @@ export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {})
   let order = 0;
 
   for (const css of sheets) {
-    for (const rule of parseStylesheet(css, { layerOrder, anon })) {
+    for (const rule of parseTopLevelSheet(css, layerOrder, anon)) {
       if (viewport && rule.media.length) {
         if (!rule.media.every(cond => matchMedia(cond, viewport))) continue;
       }
-      // Registre de palette : seuls :root / html / body font autorité.
-      for (const sel of splitSelectorList(rule.selectorText)) {
-        const s = sel.trim();
-        if (s === ':root' || s === 'html' || s === 'body') {
-          for (const prop in rule.declarations) {
-            if (prop.startsWith('--')) {
-              const declaration = rule.declarations[prop];
-              if (declaration) globalCustomVars.set(prop, declaration.value);
-            }
-          }
-          break;
-        }
+      // Registre de palette : seuls :root / html / body font autorité, et une
+      // règle écartée par le viewport n'y contribue pas.
+      if (rule.paletteVars) {
+        for (const [prop, value] of rule.paletteVars) globalCustomVars.set(prop, value);
       }
       const layerIndex = rule.layer != null ? layerOrder.get(rule.layer) : undefined;
-      for (const sel of splitSelectorList(rule.selectorText)) {
-        const selector = sel.trim();
-        if (!selector) continue;
+      for (const selector of rule.selectors) {
         // L'ordre de cascade avance MÊME pour une règle écartée : il numérote
         // les règles de la feuille, pas celles qui ont trouvé preneur.
         // Un numéro par sélecteur DÉCLARÉ, qu'il vise quelqu'un ou non. Seule
         // la monotonie compte pour la cascade, et numéroter ainsi garde la
         // numérotation indépendante du contenu de la page — donc comparable
         // d'une page à l'autre en débogage.
-        const spec = specificity(selector);
         const ord = order++;
 
         let matched: unknown[];
@@ -1006,9 +1153,12 @@ export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {})
         for (const rawNode of matched) {
           const node = rawNode as object;
           if (!nodeRules.has(node)) nodeRules.set(node, []);
-          nodeRules
-            .get(node)!
-            .push({ declarations: rule.declarations, specificity: spec, order: ord, layerIndex });
+          nodeRules.get(node)!.push({
+            declarations: rule.declarations,
+            specificity: selector.spec,
+            order: ord,
+            layerIndex,
+          });
         }
       }
     }
