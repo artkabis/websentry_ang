@@ -18,25 +18,25 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
 | Historique des scans                         | ✅      | ✅       | **Livré** |
 | Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
-| Analyse (page, batch, sitemap, SSE)          | 🟨      | 🟨       | Partiel   |
+| Analyse (page, batch, sitemap, SSE)          | ✅      | ✅       | **Livré** |
 | Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
 | Messagerie in-app                            | ⬜      | ⬜       | À faire   |
 | Analytics d'usage / RGPD                     | ⬜      | ⬜       | À faire   |
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 2832 au total — 337 paquet partagé, 1698 unitaires backend,
-334 E2E + sécurité API, 428 unitaires frontend, 35 E2E navigateur.
+**Tests** : 2846 au total — 337 paquet partagé, 1698 unitaires backend,
+334 E2E + sécurité API, 442 unitaires frontend, 35 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 95,4 % lignes backend
 (100 % sur chaque module de sécurité), 98,9 % lignes frontend.
 
-> **Module 4 — partiel.** Le pipeline d'analyse est livré de bout en bout
-> (récupération SSRF-sûre, profils, pool de threads, flux SSE, sitemap,
-> historisation, suite sécurité) et les **29 analyseurs sur 29** de la v1 sont
-> portés : le rapport produit est complet et son score comparable à celui de la
-> v1. Côté interface, `/analyse` couvre **la page unitaire** — progression en
-> direct et rapport à divulgation progressive ; les écrans de lot et de sitemap
-> restent à faire. Détail dans
+> **Module 4 — livré.** Le pipeline d'analyse est complet (récupération
+> SSRF-sûre, profils, pool de threads, flux SSE, sitemap, historisation, suite
+> sécurité) et les **29 analyseurs sur 29** de la v1 sont portés : le rapport
+> produit est complet et son score comparable à celui de la v1. Côté interface,
+> `/analyse` couvre la page unitaire, `/analyse/lot` le lot en flux,
+> `/analyse/sitemap` la découverte des pages d'un site, et l'historique se
+> parcourt jusqu'au rapport d'une page archivée. Détail dans
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrages en
 > [`docs/DECISIONS.md`](docs/DECISIONS.md) §21 à §25.
 

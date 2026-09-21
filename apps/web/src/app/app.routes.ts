@@ -47,6 +47,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/analysis/batch.component').then(m => m.BatchComponent),
   },
   {
+    path: 'analyse/sitemap',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/analysis/sitemap.component').then(m => m.SitemapComponent),
+  },
+  {
     path: 'historique',
     canActivate: [authGuard],
     loadComponent: () =>

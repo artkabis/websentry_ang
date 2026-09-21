@@ -293,6 +293,16 @@ appel direct.
 Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
 les critères l'annoncent en note d'information, hors décompte et hors barème.
 
+#### Du site au lot, par son sitemap
+
+`/analyse/sitemap` cherche le sitemap d'un site — ou lit celui qu'on lui donne
+directement —, liste ses pages et en constitue une sélection. L'écran ne lance
+RIEN : il verse la sélection à `/analyse/lot`, qui sait déjà suivre un flux et
+afficher des rapports. La sélection voyage par l'état de navigation et non par
+l'adresse : deux cents URL n'y tiennent pas, et les y mettre produirait un lien
+intransmissible. L'écran de lot préremplit sa saisie, qui reste modifiable —
+c'est ce qui rend le passage de relais lisible plutôt que magique.
+
 #### Un lot s'affiche pendant qu'il tourne
 
 `POST /analyze/batch/stream` émet chaque page DÈS qu'elle est terminée, rapport
@@ -536,7 +546,7 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1698   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 104    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 230    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 428    | 80 %                            |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 442    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
@@ -590,10 +600,6 @@ Dettes identifiées sur le périmètre déjà livré :
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de
   design, à mener d'un bloc plutôt qu'au fil des modules.
-- **Sitemap dans l'interface** — `/analyse` couvre la page unitaire et
-  `/analyse/lot` le lot ; la détection et la lecture d'un sitemap sont servies
-  par l'API, sans écran. Il s'agit de choisir des URL découvertes puis de les
-  verser au lot, dont le flux existe désormais.
 - **Feuilles de style externes non mesurées** — `CONTRAST_V2` évalue les styles
   embarqués et en ligne. Un site dont toute la charte tient dans un `.css`
   distant est donc mesuré sur des valeurs par défaut. Faire passer ces feuilles

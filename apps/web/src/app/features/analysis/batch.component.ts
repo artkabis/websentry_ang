@@ -7,10 +7,11 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import type { AnalysisReport, SseBatchEvent } from '@websentry/shared';
 import { AnalysisApi } from '../../core/analysis/analysis.api';
 import { ReportViewComponent } from './report-view.component';
+import { BATCH_URLS_STATE } from './batch-handoff';
 import { DEFAULT_FILTER, type ReportFilter } from './report-view';
 
 /** Phase du parcours — une seule à l'écran à la fois. */
@@ -49,6 +50,9 @@ const MAX_URLS = 200;
         <h1 class="text-2xl font-semibold text-slate-900">Analyser un lot</h1>
         <p class="mt-1 text-sm text-slate-500">
           Une adresse par ligne, jusqu'à {{ maxUrls }}. Les pages s'affichent au fil de l'eau.
+          <a routerLink="/analyse/sitemap" class="text-brand-700 hover:underline">
+            Découvrir les pages par le sitemap
+          </a>
         </p>
       </header>
 
@@ -184,6 +188,7 @@ const MAX_URLS = 200;
 export class BatchComponent {
   private readonly api = inject(AnalysisApi);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
 
   readonly maxUrls = MAX_URLS;
   readonly raw = signal('');
@@ -200,6 +205,14 @@ export class BatchComponent {
     // Un lot en cours quand l'écran disparaît n'a plus de destinataire :
     // l'interrompre libère aussi les connexions sortantes côté serveur.
     this.destroyRef.onDestroy(() => this.controller?.abort());
+
+    // Sélection venue de l'écran de sitemap. Elle PRÉREMPLIT la saisie au lieu
+    // de partir toute seule : l'utilisateur voit ce qui va être analysé, et
+    // peut encore retirer une ligne avant de lancer.
+    const handed: unknown = this.router.getCurrentNavigation()?.extras.state?.[BATCH_URLS_STATE];
+    if (Array.isArray(handed)) {
+      this.raw.set(handed.filter((url): url is string => typeof url === 'string').join('\n'));
+    }
   }
 
   /** Adresses saisies, élaguées et dédoublonnées — l'API refuse les doublons. */

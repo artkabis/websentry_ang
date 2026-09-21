@@ -59,9 +59,24 @@ export class AnalysisApi {
     return raw.sitemapUrl;
   }
 
-  async parseSitemap(url: string, limit: number): Promise<SitemapParseResponse> {
+  /**
+   * Lit un sitemap et en extrait les URL.
+   *
+   * `filterByPriority` est transmis : l'API sait ne garder que les pages
+   * portant une `<priority>` explicite, et l'omettre privait l'interface d'un
+   * filtre déjà écrit côté serveur.
+   */
+  async parseSitemap(
+    url: string,
+    limit: number,
+    filterByPriority = false,
+  ): Promise<SitemapParseResponse> {
     const raw = await firstValueFrom(
-      this.http.post<unknown>(`${this.baseUrl}/sitemap/parse`, { url, limit }),
+      this.http.post<unknown>(`${this.baseUrl}/sitemap/parse`, {
+        url,
+        limit,
+        filterByPriority,
+      }),
     );
     return SitemapParseResponseSchema.parse(raw);
   }

@@ -249,6 +249,33 @@ describe('BatchComponent', () => {
     });
   });
 
+  it('PRÉREMPLIT la saisie avec une sélection venue du sitemap', async () => {
+    // La sélection ne part pas toute seule : l'utilisateur voit ce qui va être
+    // analysé, et peut encore retirer une ligne avant de lancer.
+    const { TestBed } = await import('@angular/core/testing');
+    const { RouterTestingHarness } = await import('@angular/router/testing');
+    const { Router } = await import('@angular/router');
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideRouter([{ path: 'analyse/lot', component: BatchComponent }]),
+        { provide: AnalysisApi, useValue: { batchStream: streamOf([]) } },
+      ],
+    });
+
+    const harness = await RouterTestingHarness.create();
+    await TestBed.inject(Router).navigate(['/analyse/lot'], {
+      state: { urls: ['https://exemple.fr/', 'https://exemple.fr/contact'] },
+    });
+    harness.detectChanges();
+    await tick();
+
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe(
+      'https://exemple.fr/\nhttps://exemple.fr/contact',
+    );
+  });
+
   it('DIT qu’une connexion interrompue n’est pas un lot terminé', async () => {
     const t = setup(streamOf([{ type: 'start', batchId: BATCH, total: 3 }]));
     await launch(t);
