@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
@@ -15,6 +16,7 @@ import {
 } from '@websentry/shared';
 import { AuthService } from '../../core/auth/auth.service';
 import { ProfileConflictError, ProfilesApi } from '../../core/profiles/profiles.api';
+import { SectionPlianteComponent } from '../../shared/section-pliante.component';
 import { TokenListComponent } from '../../shared/token-list.component';
 import { PageRulesComponent } from './page-rules.component';
 import {
@@ -42,7 +44,7 @@ import {
 @Component({
   selector: 'ws-profile-editor',
   standalone: true,
-  imports: [ReactiveFormsModule, TokenListComponent, PageRulesComponent],
+  imports: [ReactiveFormsModule, TokenListComponent, PageRulesComponent, SectionPlianteComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="mx-auto max-w-3xl px-4 py-10">
@@ -118,195 +120,227 @@ import {
           </div>
         }
 
-        <form class="mt-8 space-y-8" [formGroup]="form" (ngSubmit)="save()" novalidate>
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
-          >
-            <legend class="px-1 text-sm font-medium text-content">Métadonnées</legend>
-            <div class="mt-4 grid grid-cols-2 gap-4">
-              @for (field of metaFields; track field.key) {
-                <label class="block text-sm">
-                  <span class="text-content-muted">{{ field.label }}</span>
-                  <input
-                    type="number"
-                    [formControlName]="field.key"
-                    [attr.aria-label]="field.label"
-                    class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
-                           focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30
-                           disabled:bg-sunken"
-                  />
-                </label>
-              }
-            </div>
-          </fieldset>
+        <!--
+          Contourner le formulaire (WCAG 2.4.1) : même replié, il compte des
+          dizaines de contrôles, et rien ne doit obliger à tous les traverser
+          pour atteindre « Enregistrer ».
+        -->
+        <!--
+          Le clic est traité ICI : avec une base de document à la racine, une
+          ancre de fragment quitterait la route en cours pour « / ». Le lien
+          garde son href pour ce qu'il annonce — une destination dans la page —
+          mais c'est le code qui y place le focus.
+        -->
+        <a
+          href="#actions-profil"
+          (click)="allerAuxActions($event)"
+          class="sr-only mt-8 inline-block rounded-lg bg-brand px-3 py-2 text-sm font-medium
+                 text-on-accent focus:not-sr-only focus:outline-none focus:ring-2
+                 focus:ring-brand/40"
+        >
+          Aller aux actions
+        </a>
 
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
+        <form class="mt-8 space-y-4" [formGroup]="form" (ngSubmit)="save()" novalidate>
+          <ws-section-pliante
+            titre="Métadonnées"
+            [resume]="resumeSeuils()"
+            cle="metadonnees"
+            [ouvertParDefaut]="true"
           >
-            <legend class="px-1 text-sm font-medium text-content">Contenu et structure</legend>
-            <div class="mt-4 grid grid-cols-2 gap-4">
-              @for (field of contentFields; track field.key) {
-                <label class="block text-sm">
-                  <span class="text-content-muted">{{ field.label }}</span>
-                  <input
-                    type="number"
-                    [formControlName]="field.key"
-                    [attr.aria-label]="field.label"
-                    class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Métadonnées</legend>
+
+              <div class="mt-4 grid grid-cols-2 gap-4">
+                @for (field of metaFields; track field.key) {
+                  <label class="block text-sm">
+                    <span class="text-content-muted">{{ field.label }}</span>
+                    <input
+                      type="number"
+                      [formControlName]="field.key"
+                      [attr.aria-label]="field.label"
+                      class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
                            focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30
                            disabled:bg-sunken"
-                  />
-                </label>
-              }
-            </div>
-            <label class="mt-4 flex items-center gap-2 text-sm text-content-muted">
-              <input
-                type="checkbox"
-                formControlName="detectRegressions"
-                class="rounded border-field"
+                    />
+                  </label>
+                }
+              </div>
+            </fieldset>
+          </ws-section-pliante>
+
+          <ws-section-pliante
+            titre="Contenu et structure"
+            [resume]="resumeContenu()"
+            cle="contenu"
+            [ouvertParDefaut]="true"
+          >
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Contenu et structure</legend>
+
+              <div class="mt-4 grid grid-cols-2 gap-4">
+                @for (field of contentFields; track field.key) {
+                  <label class="block text-sm">
+                    <span class="text-content-muted">{{ field.label }}</span>
+                    <input
+                      type="number"
+                      [formControlName]="field.key"
+                      [attr.aria-label]="field.label"
+                      class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
+                           focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30
+                           disabled:bg-sunken"
+                    />
+                  </label>
+                }
+              </div>
+              <label class="mt-4 flex items-center gap-2 text-sm text-content-muted">
+                <input
+                  type="checkbox"
+                  formControlName="detectRegressions"
+                  class="rounded border-field"
+                />
+                Comparer chaque scan au précédent (détection de régressions)
+              </label>
+            </fieldset>
+          </ws-section-pliante>
+
+          <ws-section-pliante titre="Critères actifs" [resume]="resumeCriteres()" cle="criteres">
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Critères actifs</legend>
+
+              <p class="mt-1 text-xs text-content-subtle">
+                Un critère désactivé n'est ni analysé ni compté dans le score.
+              </p>
+              <div class="mt-4 grid grid-cols-2 gap-2">
+                @for (check of checks(); track check.id) {
+                  <label class="flex items-start gap-2 text-sm text-content-muted">
+                    <input
+                      type="checkbox"
+                      [checked]="isCheckEnabled(check.id)"
+                      [disabled]="!canEdit()"
+                      (change)="toggleCheck(check.id)"
+                      [attr.aria-label]="check.title"
+                      class="mt-0.5 rounded border-field"
+                    />
+                    <span>
+                      {{ check.title }}
+                      <span class="block text-xs text-content-subtle">{{ check.group }}</span>
+                    </span>
+                  </label>
+                }
+              </div>
+            </fieldset>
+          </ws-section-pliante>
+
+          <ws-section-pliante titre="Mots exclus des titres" [resume]="resumeMots()" cle="mots">
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Mots exclus des titres</legend>
+
+              <p class="mt-1 text-xs text-content-subtle">
+                Ces mots ne comptent pas dans la longueur d'un titre : articles, prépositions,
+                conjonctions. Vider la liste rend les titres plus difficiles à valider.
+              </p>
+              <ws-token-list
+                [(items)]="excludedWords"
+                addLabel="Mot à exclure"
+                emptyLabel="Aucun mot exclu — chaque mot d'un titre comptera."
+                [disabled]="!canEdit()"
+                [maxItems]="1000"
+                [maxLength]="100"
               />
-              Comparer chaque scan au précédent (détection de régressions)
-            </label>
-          </fieldset>
+            </fieldset>
+          </ws-section-pliante>
 
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
+          <ws-section-pliante
+            titre="Domaines non vérifiés"
+            [resume]="resumeDomaines()"
+            cle="domaines"
           >
-            <legend class="px-1 text-sm font-medium text-content">
-              Critères actifs ({{ enabledChecks().length }} / {{ checks().length }})
-            </legend>
-            <p class="mt-1 text-xs text-content-subtle">
-              Un critère désactivé n'est ni analysé ni compté dans le score.
-            </p>
-            <div class="mt-4 grid grid-cols-2 gap-2">
-              @for (check of checks(); track check.id) {
-                <label class="flex items-start gap-2 text-sm text-content-muted">
-                  <input
-                    type="checkbox"
-                    [checked]="isCheckEnabled(check.id)"
-                    [disabled]="!canEdit()"
-                    (change)="toggleCheck(check.id)"
-                    [attr.aria-label]="check.title"
-                    class="mt-0.5 rounded border-field"
-                  />
-                  <span>
-                    {{ check.title }}
-                    <span class="block text-xs text-content-subtle">{{ check.group }}</span>
-                  </span>
-                </label>
-              }
-            </div>
-          </fieldset>
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Domaines non vérifiés</legend>
 
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
-          >
-            <legend class="px-1 text-sm font-medium text-content">
-              Mots exclus des titres ({{ excludedWords().length }})
-            </legend>
-            <p class="mt-1 text-xs text-content-subtle">
-              Ces mots ne comptent pas dans la longueur d'un titre : articles, prépositions,
-              conjonctions. Vider la liste rend les titres plus difficiles à valider.
-            </p>
-            <ws-token-list
-              [(items)]="excludedWords"
-              addLabel="Mot à exclure"
-              emptyLabel="Aucun mot exclu — chaque mot d'un titre comptera."
-              [disabled]="!canEdit()"
-              [maxItems]="1000"
-              [maxLength]="100"
-            />
-          </fieldset>
+              <p class="mt-1 text-xs text-content-subtle">
+                Les liens vers ces domaines ne sont pas interrogés. À réserver aux services qui
+                refusent les requêtes automatiques et se déclareraient morts à tort.
+              </p>
+              <ws-token-list
+                [(items)]="excludedDomains"
+                addLabel="Domaine à ne pas vérifier"
+                emptyLabel="Aucun domaine exclu — tous les liens sont vérifiés."
+                [disabled]="!canEdit()"
+                [maxItems]="1000"
+                [maxLength]="253"
+              />
+            </fieldset>
+          </ws-section-pliante>
 
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
+          <ws-section-pliante
+            titre="Pondération des critères"
+            [resume]="resumePonderation()"
+            cle="ponderation"
           >
-            <legend class="px-1 text-sm font-medium text-content">
-              Domaines non vérifiés ({{ excludedDomains().length }})
-            </legend>
-            <p class="mt-1 text-xs text-content-subtle">
-              Les liens vers ces domaines ne sont pas interrogés. À réserver aux services qui
-              refusent les requêtes automatiques et se déclareraient morts à tort.
-            </p>
-            <ws-token-list
-              [(items)]="excludedDomains"
-              addLabel="Domaine à ne pas vérifier"
-              emptyLabel="Aucun domaine exclu — tous les liens sont vérifiés."
-              [disabled]="!canEdit()"
-              [maxItems]="1000"
-              [maxLength]="253"
-            />
-          </fieldset>
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Pondération des critères</legend>
 
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
-          >
-            <legend class="px-1 text-sm font-medium text-content">
-              Pondération des critères ({{ weightOverrides() }} sur mesure)
-            </legend>
-            <p class="mt-1 text-xs text-content-subtle">
-              Un critère « informatif » reste analysé et affiché, mais ne pèse pas dans la note. Un
-              critère désactivé plus haut n'est pas analysé du tout.
-            </p>
-            <div class="mt-4 grid gap-2 sm:grid-cols-2">
-              @for (check of checks(); track check.id) {
-                <label class="flex items-center justify-between gap-3 text-sm">
-                  <span class="min-w-0 text-content-muted">
-                    <span class="block truncate">{{ check.title }}</span>
-                    <span class="block text-xs text-content-subtle">{{ check.group }}</span>
-                  </span>
-                  <!--
+              <p class="mt-1 text-xs text-content-subtle">
+                Un critère « informatif » reste analysé et affiché, mais ne pèse pas dans la note.
+                Un critère désactivé plus haut n'est pas analysé du tout.
+              </p>
+              <div class="mt-4 grid gap-2 sm:grid-cols-2">
+                @for (check of checks(); track check.id) {
+                  <label class="flex items-center justify-between gap-3 text-sm">
+                    <span class="min-w-0 text-content-muted">
+                      <span class="block truncate">{{ check.title }}</span>
+                      <span class="block text-xs text-content-subtle">{{ check.group }}</span>
+                    </span>
+                    <!--
                     La sélection est portée par les OPTIONS et non par une
                     valeur posée sur le select : celle-ci s'applique avant que
                     la liste d'options existe, et le navigateur retombe alors
                     silencieusement sur la première — ici « Critique ».
                   -->
-                  <select
-                    [disabled]="!canEdit()"
-                    (change)="setWeight(check.id, $any($event.target).value)"
-                    [attr.aria-label]="'Pondération — ' + check.title"
-                    class="shrink-0 rounded-lg border border-field bg-panel px-2 py-1.5 text-sm
+                    <select
+                      [disabled]="!canEdit()"
+                      (change)="setWeight(check.id, $any($event.target).value)"
+                      [attr.aria-label]="'Pondération — ' + check.title"
+                      class="shrink-0 rounded-lg border border-field bg-panel px-2 py-1.5 text-sm
                            text-content focus:border-brand focus:outline-none
                            focus:ring-2 focus:ring-brand/30 disabled:bg-sunken"
-                  >
-                    @for (tier of weightTiers; track tier.id) {
-                      <option [value]="tier.factor" [selected]="weightOf(check.id) === tier.factor">
-                        {{ tier.label }} (×{{ tier.factor }})
-                      </option>
-                    }
-                    @if (isCustomWeight(check.id)) {
-                      <!-- Un profil importé peut porter un coefficient hors paliers :
+                    >
+                      @for (tier of weightTiers; track tier.id) {
+                        <option
+                          [value]="tier.factor"
+                          [selected]="weightOf(check.id) === tier.factor"
+                        >
+                          {{ tier.label }} (×{{ tier.factor }})
+                        </option>
+                      }
+                      @if (isCustomWeight(check.id)) {
+                        <!-- Un profil importé peut porter un coefficient hors paliers :
                            le forcer dans le palier voisin modifierait le score sans
                            que personne ne l'ait demandé. -->
-                      <option [value]="weightOf(check.id)" selected>
-                        Sur mesure (×{{ weightOf(check.id) }})
-                      </option>
-                    }
-                  </select>
-                </label>
-              }
-            </div>
-          </fieldset>
+                        <option [value]="weightOf(check.id)" selected>
+                          Sur mesure (×{{ weightOf(check.id) }})
+                        </option>
+                      }
+                    </select>
+                  </label>
+                }
+              </div>
+            </fieldset>
+          </ws-section-pliante>
 
-          <fieldset
-            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
-            [disabled]="!canEdit()"
-          >
-            <legend class="px-1 text-sm font-medium text-content">
-              Règles par page ({{ pageRules().length }})
-            </legend>
-            <p class="mt-1 text-xs text-content-subtle">
-              Une exception au profil, pour un gabarit de pages. Les réglages produits sont
-              éphémères : ils valent le temps d'une analyse et ne modifient jamais le profil.
-            </p>
-            <ws-page-rules [(rules)]="pageRules" [checks]="checks()" [disabled]="!canEdit()" />
-          </fieldset>
+          <ws-section-pliante titre="Règles par page" [resume]="resumeRegles()" cle="regles">
+            <fieldset [disabled]="!canEdit()">
+              <legend class="sr-only">Règles par page</legend>
+
+              <p class="mt-1 text-xs text-content-subtle">
+                Une exception au profil, pour un gabarit de pages. Les réglages produits sont
+                éphémères : ils valent le temps d'une analyse et ne modifient jamais le profil.
+              </p>
+              <ws-page-rules [(rules)]="pageRules" [checks]="checks()" [disabled]="!canEdit()" />
+            </fieldset>
+          </ws-section-pliante>
 
           @if (issues().length > 0) {
             <ul
@@ -320,7 +354,17 @@ import {
           }
 
           @if (canEdit()) {
-            <div class="flex flex-wrap items-center gap-3">
+            <!--
+              Un index de tabulation négatif rend la cible focalisable sans
+              l'insérer dans l'ordre : sans lui, le raccourci déplacerait le
+              défilement mais pas le focus, et la tabulation suivante repartirait
+              du haut du formulaire.
+            -->
+            <div
+              id="actions-profil"
+              tabindex="-1"
+              class="flex flex-wrap items-center gap-3 pt-4 focus:outline-none"
+            >
               <button
                 type="submit"
                 [disabled]="saving() || issues().length > 0"
@@ -373,6 +417,7 @@ export class ProfileEditorComponent {
   private readonly api = inject(ProfilesApi);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
+  private readonly document = inject(DOCUMENT);
 
   readonly defaultProfile = DEFAULT_PROFILE;
   readonly form = buildSettingsForm(this.fb);
@@ -388,6 +433,8 @@ export class ProfileEditorComponent {
 
   readonly canEdit = computed(() => this.auth.isAdmin());
   readonly issues = signal<RangeIssue[]>([]);
+  /** Incrémenté à chaque frappe — fait dépendre les résumés du formulaire. */
+  private readonly revision = signal(0);
 
   /**
    * Collections éditées hors formulaire réactif.
@@ -402,6 +449,61 @@ export class ProfileEditorComponent {
   readonly pageRules = signal<PageRule[]>([]);
 
   readonly weightTiers = WEIGHT_TIERS;
+
+  /**
+   * Résumés lus sur l'en-tête REPLIÉ.
+   *
+   * Un titre seul obligerait à ouvrir la section pour savoir si elle mérite
+   * d'être ouverte. Chacun de ces libellés dit ce qui s'y trouve, chiffré.
+   */
+  readonly resumeSeuils = computed(() => {
+    this.revision();
+    const v = this.form.getRawValue();
+    return `Titre ${v.metaTitleMin}–${v.metaTitleMax} · description ${v.metaDescriptionMin}–${v.metaDescriptionMax} · Hn ${v.hnMinLength}–${v.hnMaxLength}`;
+  });
+
+  readonly resumeContenu = computed(() => {
+    this.revision();
+    const v = this.form.getRawValue();
+    const regressions = v.detectRegressions ? 'comparaison au scan précédent' : 'sans comparaison';
+    return `${v.contentMinWords} mots minimum · gras ${v.boldMin}–${v.boldMax} · ${regressions}`;
+  });
+
+  readonly resumeCriteres = computed(
+    () => `${this.enabledChecks().length} actifs sur ${this.checks().length}`,
+  );
+
+  readonly resumeMots = computed(() =>
+    phrase(this.excludedWords().length, 'mot exclu', 'mots exclus', 'aucun mot exclu'),
+  );
+
+  readonly resumeDomaines = computed(() =>
+    phrase(
+      this.excludedDomains().length,
+      'domaine non vérifié',
+      'domaines non vérifiés',
+      'tous les liens vérifiés',
+    ),
+  );
+
+  readonly resumePonderation = computed(() =>
+    phrase(
+      this.weightOverrides(),
+      'critère pondéré sur mesure',
+      'critères pondérés sur mesure',
+      'tous au poids normal',
+    ),
+  );
+
+  readonly resumeRegles = computed(() => {
+    const total = this.pageRules().length;
+    if (total === 0) return 'aucune exception — le profil s’applique à toutes les pages';
+    const noms = this.pageRules()
+      .map(regle => regle.label.trim() || 'sans nom')
+      .slice(0, 3)
+      .join(', ');
+    return total > 3 ? `${total} règles : ${noms}…` : `${total} règle(s) : ${noms}`;
+  });
 
   /** Combien de critères s'écartent du poids par défaut — repère de lecture. */
   readonly weightOverrides = computed(
@@ -436,7 +538,12 @@ export class ProfileEditorComponent {
   constructor() {
     // Le formulaire recalcule ses incohérences à chaque frappe : l'utilisateur
     // est averti avant de soumettre, pas après un aller-retour réseau.
-    this.form.valueChanges.subscribe(() => this.issues.set(rangeIssues(this.form)));
+    this.form.valueChanges.subscribe(() => {
+      this.issues.set(rangeIssues(this.form));
+      // Les résumés lisent le formulaire réactif, qui n'est pas un signal :
+      // sans ce compteur, un en-tête replié afficherait des seuils périmés.
+      this.revision.update(n => n + 1);
+    });
     void this.load();
   }
 
@@ -495,6 +602,14 @@ export class ProfileEditorComponent {
     // Copie PROFONDE : l'éditeur remplace les règles une à une, et muter celles
     // du profil lu ferait croire à « aucune modification » après un changement.
     this.pageRules.set(structuredClone(settings.pageRules ?? []));
+  }
+
+  /** Place le focus sur les actions, sans quitter la route (cf. gabarit). */
+  allerAuxActions(evenement: Event): void {
+    evenement.preventDefault();
+    const cible = this.document.getElementById('actions-profil');
+    cible?.focus();
+    cible?.scrollIntoView({ block: 'center' });
   }
 
   weightOf(id: string): number {
@@ -617,4 +732,10 @@ export class ProfileEditorComponent {
   back(): void {
     void this.router.navigate(['/profils']);
   }
+}
+
+/** Accord singulier/pluriel d'un compte, ou phrase de repli quand il est nul. */
+function phrase(compte: number, singulier: string, pluriel: string, vide: string): string {
+  if (compte === 0) return vide;
+  return `${compte} ${compte === 1 ? singulier : pluriel}`;
 }

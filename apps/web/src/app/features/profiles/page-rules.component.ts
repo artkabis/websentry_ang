@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
 import type { CheckMeta, PageRule } from '@websentry/shared';
+import { SectionPlianteComponent } from '../../shared/section-pliante.component';
 import { TokenListComponent } from '../../shared/token-list.component';
 
 /**
@@ -31,7 +32,7 @@ function seuilsDe(rule: PageRule): Seuils {
 @Component({
   selector: 'ws-page-rules',
   standalone: true,
-  imports: [TokenListComponent],
+  imports: [TokenListComponent, SectionPlianteComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (rules().length === 0) {
@@ -42,99 +43,103 @@ function seuilsDe(rule: PageRule): Seuils {
 
     <ul class="mt-4 space-y-4">
       @for (rule of rules(); track $index; let iRegle = $index) {
-        <li class="rounded-xl bg-sunken p-4 ring-1 ring-line">
-          <div class="flex items-end gap-2">
-            <label class="block flex-1 text-sm">
-              <span class="text-content-muted">Nom de la règle</span>
-              <input
-                type="text"
-                [value]="rule.label"
-                [disabled]="disabled()"
-                maxlength="120"
-                [attr.aria-label]="'Nom de la règle ' + (iRegle + 1)"
-                (input)="setLabel(iRegle, $any($event.target).value)"
-                class="mt-1 w-full rounded-lg border border-field bg-panel px-3 py-2 text-sm
+        <li>
+          <ws-section-pliante [titre]="rule.label || 'Règle sans nom'" [resume]="resumeDe(rule)">
+            <div class="flex items-end gap-2">
+              <label class="block flex-1 text-sm">
+                <span class="text-content-muted">Nom de la règle</span>
+                <input
+                  type="text"
+                  [value]="rule.label"
+                  [disabled]="disabled()"
+                  maxlength="120"
+                  [attr.aria-label]="'Nom de la règle ' + (iRegle + 1)"
+                  (input)="setLabel(iRegle, $any($event.target).value)"
+                  class="mt-1 w-full rounded-lg border border-field bg-panel px-3 py-2 text-sm
                        text-content focus:border-brand focus:outline-none
                        focus:ring-2 focus:ring-brand/30 disabled:bg-sunken"
-              />
-            </label>
-            <button
-              type="button"
-              [disabled]="disabled()"
-              (click)="removeRule(iRegle)"
-              [attr.aria-label]="'Retirer la règle ' + (rule.label || iRegle + 1)"
-              class="rounded-lg border border-danger-content px-3 py-2 text-sm text-danger-content
+                />
+              </label>
+              <button
+                type="button"
+                [disabled]="disabled()"
+                (click)="removeRule(iRegle)"
+                [attr.aria-label]="'Retirer la règle ' + (rule.label || iRegle + 1)"
+                class="rounded-lg border border-danger-content px-3 py-2 text-sm text-danger-content
                      hover:bg-danger-surface disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Retirer
-            </button>
-          </div>
-
-          @if (rule.label.trim().length === 0) {
-            <p role="alert" class="mt-1 text-xs text-danger-content">
-              Nommez la règle : c'est ce nom qui l'identifie dans le rapport.
-            </p>
-          }
-
-          <ws-token-list
-            [items]="patternsOf(iRegle)"
-            (itemsChange)="setPatterns(iRegle, $event)"
-            addLabel="Motif d'adresse"
-            emptyLabel="Aucun motif — cette règle ne s'appliquera à aucune page."
-            [disabled]="disabled()"
-            [maxItems]="200"
-            [maxLength]="500"
-          />
-          <p class="mt-1 text-xs text-content-subtle">
-            Un motif est cherché dans les SEGMENTS du chemin : « contact » retient
-            <code>/nous-contacter</code> mais pas <code>/prise-de-contact/equipe</code>.
-            <code>/</code> ne désigne que l'accueil.
-          </p>
-
-          <fieldset class="mt-4" [disabled]="disabled()">
-            <legend class="text-sm text-content-muted">
-              Critères sans objet sur ces pages ({{ rule.disabledChecks?.length ?? 0 }})
-            </legend>
-            <div class="mt-2 grid gap-1 sm:grid-cols-2">
-              @for (check of checks(); track check.id) {
-                <label class="flex items-center gap-2 text-xs text-content-muted">
-                  <input
-                    type="checkbox"
-                    [checked]="isDisabled(iRegle, check.id)"
-                    [disabled]="disabled()"
-                    (change)="toggleCheck(iRegle, check.id)"
-                    [attr.aria-label]="check.title + ' — règle ' + (rule.label || iRegle + 1)"
-                    class="rounded border-field"
-                  />
-                  {{ check.title }}
-                </label>
-              }
+              >
+                Retirer
+              </button>
             </div>
-          </fieldset>
 
-          <fieldset class="mt-4" [disabled]="disabled()">
-            <legend class="text-sm text-content-muted">Seuils propres à ces pages</legend>
-            <p class="mt-1 text-xs text-content-subtle">Un champ vide garde le seuil du profil.</p>
-            <div class="mt-2 grid gap-3 sm:grid-cols-3">
-              @for (champ of NUMERIC_FIELDS; track champ.key) {
-                <label class="block text-xs">
-                  <span class="text-content-muted">{{ champ.label }}</span>
-                  <input
-                    type="number"
-                    [value]="numeric(iRegle, champ.key)"
-                    [disabled]="disabled()"
-                    [min]="champ.min"
-                    [max]="champ.max"
-                    [attr.aria-label]="champ.label + ' — règle ' + (rule.label || iRegle + 1)"
-                    (input)="setNumeric(iRegle, champ.key, $any($event.target).value)"
-                    class="mt-1 w-full rounded-lg border border-field bg-panel px-2 py-1.5 text-sm
+            @if (rule.label.trim().length === 0) {
+              <p role="alert" class="mt-1 text-xs text-danger-content">
+                Nommez la règle : c'est ce nom qui l'identifie dans le rapport.
+              </p>
+            }
+
+            <ws-token-list
+              [items]="patternsOf(iRegle)"
+              (itemsChange)="setPatterns(iRegle, $event)"
+              addLabel="Motif d'adresse"
+              emptyLabel="Aucun motif — cette règle ne s'appliquera à aucune page."
+              [disabled]="disabled()"
+              [maxItems]="200"
+              [maxLength]="500"
+            />
+            <p class="mt-1 text-xs text-content-subtle">
+              Un motif est cherché dans les SEGMENTS du chemin : « contact » retient
+              <code>/nous-contacter</code> mais pas <code>/prise-de-contact/equipe</code>.
+              <code>/</code> ne désigne que l'accueil.
+            </p>
+
+            <fieldset class="mt-4" [disabled]="disabled()">
+              <legend class="text-sm text-content-muted">
+                Critères sans objet sur ces pages ({{ rule.disabledChecks?.length ?? 0 }})
+              </legend>
+              <div class="mt-2 grid gap-1 sm:grid-cols-2">
+                @for (check of checks(); track check.id) {
+                  <label class="flex items-center gap-2 text-xs text-content-muted">
+                    <input
+                      type="checkbox"
+                      [checked]="isDisabled(iRegle, check.id)"
+                      [disabled]="disabled()"
+                      (change)="toggleCheck(iRegle, check.id)"
+                      [attr.aria-label]="check.title + ' — règle ' + (rule.label || iRegle + 1)"
+                      class="rounded border-field"
+                    />
+                    {{ check.title }}
+                  </label>
+                }
+              </div>
+            </fieldset>
+
+            <fieldset class="mt-4" [disabled]="disabled()">
+              <legend class="text-sm text-content-muted">Seuils propres à ces pages</legend>
+              <p class="mt-1 text-xs text-content-subtle">
+                Un champ vide garde le seuil du profil.
+              </p>
+              <div class="mt-2 grid gap-3 sm:grid-cols-3">
+                @for (champ of NUMERIC_FIELDS; track champ.key) {
+                  <label class="block text-xs">
+                    <span class="text-content-muted">{{ champ.label }}</span>
+                    <input
+                      type="number"
+                      [value]="numeric(iRegle, champ.key)"
+                      [disabled]="disabled()"
+                      [min]="champ.min"
+                      [max]="champ.max"
+                      [attr.aria-label]="champ.label + ' — règle ' + (rule.label || iRegle + 1)"
+                      (input)="setNumeric(iRegle, champ.key, $any($event.target).value)"
+                      class="mt-1 w-full rounded-lg border border-field bg-panel px-2 py-1.5 text-sm
                            text-content focus:border-brand focus:outline-none
                            focus:ring-2 focus:ring-brand/30 disabled:bg-sunken"
-                  />
-                </label>
-              }
-            </div>
-          </fieldset>
+                    />
+                  </label>
+                }
+              </div>
+            </fieldset>
+          </ws-section-pliante>
         </li>
       }
     </ul>
@@ -182,6 +187,28 @@ export class PageRulesComponent {
       this.rules().filter(rule => rule.label.trim().length === 0 || rule.patterns.length === 0)
         .length,
   );
+
+  /**
+   * Ce que la règle fait, lisible sur son en-tête replié.
+   *
+   * Une carte repliée qui ne dirait que son nom obligerait à l'ouvrir pour
+   * savoir si c'est la bonne — soit exactement ce que le repli évite.
+   */
+  resumeDe(rule: PageRule): string {
+    const motifs =
+      rule.patterns.length === 0
+        ? 'aucun motif — ne s’applique à aucune page'
+        : `${rule.patterns.length} motif(s) : ${rule.patterns.slice(0, 3).join(', ')}`;
+    const ecartes = rule.disabledChecks?.length ?? 0;
+    const seuils = Object.keys(seuilsDe(rule)).length;
+    return [
+      motifs,
+      ecartes > 0 ? `${ecartes} critère(s) écarté(s)` : null,
+      seuils > 0 ? `${seuils} groupe(s) de seuils` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
 
   patternsOf(index: number): string[] {
     return [...(this.rules()[index]?.patterns ?? [])];

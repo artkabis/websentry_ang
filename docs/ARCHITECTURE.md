@@ -564,6 +564,30 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
   classe utilitaire. C'est arrivé, et rien ne l'a signalé pendant quatre
   modules ; un scénario Playwright interroge désormais le rendu.
 
+### Formulaires longs — replier sans cacher
+
+L'éditeur de profil porte une centaine de contrôles : deux grilles de
+vingt-neuf lignes, deux listes, et une carte par règle de page. Déplié d'un
+bloc, il demandait **113 tabulations** pour atteindre « Enregistrer » — 230 avec
+trois règles — et 6,5 écrans de défilement.
+
+Ses sections sont désormais repliables (`ws-section-pliante`, bâti sur l'élément
+de dépliage natif : clavier, lecteurs d'écran et recherche dans la page le
+connaissent déjà). Deux règles le rendent utilisable plutôt que seulement plus
+court :
+
+1. **L'en-tête replié porte un résumé CHIFFRÉ** — « 29 actifs sur 29 », « 22
+   mots exclus », « 1 règle : Pages de contact ». Un titre seul obligerait à
+   ouvrir la section pour savoir si elle mérite d'être ouverte.
+2. **L'état est retenu par section.** Un profil se règle en plusieurs passes ;
+   refermer à chaque rechargement ce qu'on vient d'ouvrir ferait perdre le temps
+   que le repli fait gagner.
+
+Un lien d'évitement (WCAG 2.4.1) mène directement aux actions. Mesuré après :
+**27 tabulations et 1,6 écran** à l'ouverture, et une règle de page coûte une
+tabulation au lieu de trente-neuf. Le pire cas — tout ouvert — existe encore,
+mais il est désormais un choix.
+
 ### Apparence — deux thèmes, une définition
 
 Les gabarits ne nomment plus de teintes mais des RÔLES : `surface`, `panel`,
@@ -647,9 +671,11 @@ l'interface, pas au moteur.
 Dettes identifiées sur le périmètre déjà livré :
 
 - **Coquille applicative** — la barre supérieure ne porte que le nom du produit
-  et le choix d'apparence. Une vraie navigation (sections, fil d'Ariane, retour
-  contextuel) reste à proposer : chaque écran porte aujourd'hui son propre
-  en-tête, et les unifier revient à reprendre tous les écrans.
+  et le choix d'apparence, et chaque écran n'expose qu'un lien : le retour au
+  tableau de bord. Aller de `/profils` à `/analyse` coûte donc deux clics par un
+  détour. Une navigation persistante et un fil d'Ariane sur les parcours
+  profonds (`historique → site → audit → page`) restent à proposer : chaque
+  écran porte son propre en-tête, et les unifier revient à reprendre les dix.
 
 - **Tests d'intégration MariaDB** — conteneur éphémère en CI, pour valider le SQL
   réel des repositories. La dette s'alourdit à chaque module : le verrouillage

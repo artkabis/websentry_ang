@@ -998,3 +998,42 @@ de plus : deux règles au même motif, ou un H1 dont le minimum dépasse le
 maximum, sont acceptées par le schéma comme par l'écran. Inventer ici des
 contraintes que l'API n'applique pas produirait un refus côté client que le
 serveur ne confirmerait pas.
+
+---
+
+## 37. L'éditeur de profil se replie — et chaque en-tête dit ce qu'il replie
+
+**Décision** — Les sept sections de l'éditeur de profil, ainsi que chaque carte
+de règle par page, sont repliables (`ws-section-pliante`). Seules
+« Métadonnées » et « Contenu et structure » sont ouvertes d'emblée. Chaque
+en-tête porte un résumé chiffré de ce qu'il contient, l'état est retenu par
+section, et un lien d'évitement mène aux actions.
+
+**Raison** — Mesures avant, sur le bundle de production avec vingt-neuf
+critères : **113 arrêts de tabulation et 3 426 px** (3,8 écrans) pour un profil
+sans règle de page ; **230 arrêts et 5 840 px** (6,5 écrans) avec trois règles.
+Chaque règle ajoutait 39 arrêts. Ce n'est pas un inconfort : atteindre
+« Enregistrer » au clavier imposait de traverser tout le formulaire, ce que
+WCAG 2.4.1 existe précisément pour éviter.
+
+Mesures après : **27 arrêts et 1 408 px** (1,6 écran) à l'ouverture ; une règle
+coûte désormais **une** tabulation. Ces chiffres sont tenus par un scénario
+Playwright qui tabule pour de bon plutôt que de compter les éléments focusables
+du DOM — le contenu d'une section repliée y figure encore, alors que le
+navigateur ne s'y arrête pas.
+
+**Aucune régression** — Tout reste atteignable : un test vérifie qu'une section
+repliée cache bien son contenu ET qu'un clic sur l'en-tête le rend accessible.
+Le repli s'appuie sur l'élément de dépliage natif, donc la recherche dans la
+page, le clavier et les lecteurs d'écran le connaissent sans code
+supplémentaire.
+
+**Coût assumé** — Trois. Les tests unitaires ne voient pas la différence : jsdom
+n'applique pas la règle de rendu qui masque une section repliée, si bien qu'ils
+trouvent des contrôles qu'un utilisateur ne peut pas atteindre. La garantie
+d'accès repose donc entièrement sur les scénarios navigateur — c'est pourquoi
+ils mesurent le vrai parcours au clavier. Ensuite, un réglage rarement ouvert
+devient un réglage rarement vu : le résumé chiffré est ce qui l'évite, et il
+doit être tenu à jour quand une section change de contenu. Enfin, le lien
+d'évitement traite son clic en code : avec une base de document à la racine, une
+ancre de fragment quitterait la route en cours.
