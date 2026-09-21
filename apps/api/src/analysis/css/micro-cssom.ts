@@ -1158,7 +1158,23 @@ export function buildCSSOM(source: string | CheerioAPI, opts: BuildOptions = {})
 // Feuilles externes (optionnel)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type CssFetchImpl = (url: string) => Promise<{ ok: boolean; text: () => Promise<string> }>;
+export type CssFetchImpl = (url: string) => Promise<{ ok: boolean; text: () => Promise<string> }>;
+
+/**
+ * Ce qu'une page déclare en feuilles externes, et ce qu'on a pu en lire.
+ *
+ * Les deux nombres comptent : mesurer un contraste sans la feuille qui porte la
+ * charte revient à le mesurer sur des valeurs par défaut, et le rapport doit
+ * pouvoir le dire au lieu de conclure comme s'il avait tout vu.
+ */
+export interface ExternalCss {
+  sheets: Record<string, string>;
+  declared: number;
+  loaded: number;
+}
+
+/** Feuilles externes lues au plus par page — au-delà, on cesse de sortir. */
+export const MAX_EXTERNAL_SHEETS = 8;
 
 export async function fetchExternalCss(
   source: string | CheerioAPI,
@@ -1166,28 +1182,34 @@ export async function fetchExternalCss(
     baseUrl,
     // Aucun repli : sans fonction fournie, le moteur ne sort pas.
     fetchImpl,
-  }: { baseUrl?: string; fetchImpl?: CssFetchImpl } = {},
-): Promise<Record<string, string>> {
-  if (!fetchImpl) return {};
+    maxSheets = MAX_EXTERNAL_SHEETS,
+  }: { baseUrl?: string; fetchImpl?: CssFetchImpl; maxSheets?: number } = {},
+): Promise<ExternalCss> {
   const $ = typeof source === 'string' ? cheerio.load(source) : source;
-  const map: Record<string, string> = {};
+  const declared = $('link[rel~="stylesheet"][href]')
+    .toArray()
+    .map(rawNode => (rawNode as DomNode).attribs?.['href'])
+    .filter((href): href is string => Boolean(href));
+
+  if (!fetchImpl) return { sheets: {}, declared: declared.length, loaded: 0 };
+
+  const sheets: Record<string, string> = {};
+  // Les feuilles sont lues dans l'ORDRE du document, et le plafond s'applique
+  // aux premières : une page qui en déclare trente met sa charte au début, pas
+  // à la fin.
   await Promise.all(
-    $('link[rel~="stylesheet"][href]')
-      .toArray()
-      .map(async (rawNode: unknown) => {
-        const node = rawNode as DomNode;
-        const href = node.attribs?.['href'];
-        if (!href) return;
-        try {
-          const url = new URL(href, baseUrl).href;
-          const res = await fetchImpl(url);
-          if (res.ok) map[href] = await res.text();
-        } catch {
-          /* feuille injoignable ou cible interdite (SSRF) — ignoré */
-        }
-      }),
+    declared.slice(0, maxSheets).map(async href => {
+      try {
+        const url = new URL(href, baseUrl).href;
+        const res = await fetchImpl(url);
+        if (res.ok) sheets[href] = await res.text();
+      } catch {
+        /* feuille injoignable ou cible interdite (SSRF) — ignoré */
+      }
+    }),
   );
-  return map;
+
+  return { sheets, declared: declared.length, loaded: Object.keys(sheets).length };
 }
 
 /*

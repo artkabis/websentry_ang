@@ -317,10 +317,50 @@ describe('audit d’une page', () => {
     });
   });
 
+  describe('feuilles externes', () => {
+    function linked(body: string): string {
+      return `<html><head><link rel="stylesheet" href="/charte.css"></head><body>${body}</body></html>`;
+    }
+
+    it('MESURE le contraste imposé par une feuille externe', async () => {
+      // Sans elle, le texte serait mesuré en noir sur blanc — conforme par
+      // défaut — alors que la charte du site le rend illisible.
+      const { elements } = await auditPageContrast(linked('<p>Texte pâle par la charte</p>'), {
+        baseUrl: 'https://x.fr/',
+        fetchCss: () =>
+          Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve('p { color: #ddd; background: #fff; }'),
+          }),
+      });
+
+      expect(elements[0]?.AA).toBe(false);
+    });
+
+    it('DIT ce qu’il a déclaré et ce qu’il a lu', async () => {
+      const result = await auditPageContrast(linked('<p>Texte</p>'), {
+        baseUrl: 'https://x.fr/',
+        fetchCss: () => Promise.resolve({ ok: false, text: () => Promise.resolve('') }),
+      });
+
+      expect(result.externalSheets).toEqual({ declared: 1, loaded: 0 });
+    });
+
+    it('ne sort pas sans lecteur — et conclut sur les seuls styles embarqués', async () => {
+      const result = await auditPageContrast(linked('<p>Texte</p>'), { baseUrl: 'https://x.fr/' });
+
+      expect(result.externalSheets).toEqual({ declared: 1, loaded: 0 });
+      // Noir sur blanc par défaut : le verdict porte sur ce qui a été vu, et
+      // le compte ci-dessus dit ce qui ne l'a pas été.
+      expect(result.elements[0]?.AA).toBe(true);
+    });
+  });
+
   it('rend une liste vide pour une page sans texte', async () => {
     const result = await auditPageContrast('<html><body><img src="/a.png"></body></html>');
 
     expect(result.elements).toEqual([]);
     expect(result.truncated).toBe(false);
+    expect(result.externalSheets).toEqual({ declared: 0, loaded: 0 });
   });
 });

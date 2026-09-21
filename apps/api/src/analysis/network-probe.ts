@@ -73,6 +73,8 @@ export const CHECK_QUOTAS: Readonly<Record<string, number>> = {
   IMAGES: 80,
   MENTIONS_LEGALES: 10,
   ROBOTS_META: 4,
+  /** Les feuilles de style d'une page : une charte, parfois deux ou trois. */
+  CONTRAST_V2: 8,
 };
 
 /** Quota d'un critère qui n'en déclare pas. */

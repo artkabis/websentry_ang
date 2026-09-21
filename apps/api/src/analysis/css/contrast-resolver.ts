@@ -7,6 +7,7 @@
 
 import type { CheerioAPI } from 'cheerio';
 import { buildCSSOM, fetchExternalCss } from './micro-cssom.js';
+import type { CssFetchImpl } from './micro-cssom.js';
 import type { CSSOMInstance } from './micro-cssom.js';
 import {
   parseColor as parseColorImpl,
@@ -79,8 +80,14 @@ export interface AuditElementResult extends ContrastElementResult {
 
 export interface AuditPageOptions {
   baseUrl?: string;
-  /** Télécharger les feuilles CSS externes. Défaut : false (évite les appels réseau). */
-  fetchExternal?: boolean;
+  /**
+   * Lecture des feuilles externes.
+   *
+   * La PRÉSENCE de la fonction vaut autorisation : un drapeau séparé pourrait
+   * dire « oui » sans que personne ne sache sortir, ou l'inverse. Sans elle, le
+   * moteur reste sur les styles embarqués et en ligne.
+   */
+  fetchCss?: CssFetchImpl;
   /** Sélecteur CSS des éléments à auditer. */
   selector?: string;
   /**
@@ -93,6 +100,8 @@ export interface AuditPageOptions {
 /** Ce que l'audit d'une page rend : ses éléments, et s'il s'est arrêté avant la fin. */
 export interface AuditPageResult {
   elements: AuditElementResult[];
+  /** Feuilles externes déclarées par la page, et nombre réellement lu. */
+  externalSheets: { declared: number; loaded: number };
   /**
    * Vrai quand le plafond d'éléments a été atteint.
    *
@@ -422,11 +431,11 @@ export async function auditPageContrast(
   source: string | CheerioAPI,
   opts: AuditPageOptions = {},
 ): Promise<AuditPageResult> {
-  const { baseUrl, fetchExternal = false, selector = DEFAULT_SELECTOR, maxElements = 400 } = opts;
+  const { baseUrl, fetchCss, selector = DEFAULT_SELECTOR, maxElements = 400 } = opts;
 
-  const externalCss = fetchExternal ? await fetchExternalCss(source, { baseUrl }) : {};
+  const external = await fetchExternalCss(source, { baseUrl, fetchImpl: fetchCss });
 
-  const cssom = buildCSSOM(source, { externalCss });
+  const cssom = buildCSSOM(source, { externalCss: external.sheets });
 
   // Axe 6 : un thème sombre déclaré bascule le fond par défaut sur le noir,
   // sans quoi un texte clair parfaitement lisible serait rapporté illisible.
@@ -495,7 +504,11 @@ export async function auditPageContrast(
     return true;
   });
 
-  return { elements: results, truncated };
+  return {
+    elements: results,
+    truncated,
+    externalSheets: { declared: external.declared, loaded: external.loaded },
+  };
 }
 
 /**

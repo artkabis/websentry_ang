@@ -774,3 +774,36 @@ de page (`realPageFetcher`). C'est une porte vers un test qui sortirait sur
 Internet : elle est réservée aux adresses refusées avant toute connexion, et
 l'option le dit à l'endroit où on la lit. Un test qui viserait un hôte public
 ferait sortir la suite — la contrainte est documentée, pas mécanique.
+
+---
+
+## 31. Le contraste lit les feuilles de style externes — par la sonde, et il dit ce qu'il n'a pas lu
+
+**Décision** — `CONTRAST_V2` mesure désormais aussi les règles portées par les
+feuilles `<link rel="stylesheet">`. Le micro-moteur CSS ne gagne pas pour autant
+de porte de sortie : il reçoit une **fonction de lecture** ou rien, et c'est
+l'analyseur qui la construit sur la sonde réseau. Trois bornes l'encadrent : la
+politique SSRF, un plafond de 512 Kio par feuille, et un quota de huit requêtes
+par page (`CHECK_QUOTAS.CONTRAST_V2`), les feuilles étant lues dans l'ordre du
+document. Ce qui est **déclaré** et ce qui a été **lu** sont comptés séparément,
+et tout écart devient un item `info` du rapport.
+
+**Raison** — La v2 évaluait les seuls styles embarqués et en ligne. Sur un site
+dont la charte tient dans un `.css` distant — c'est-à-dire la quasi-totalité des
+sites — le critère mesurait du noir sur blanc par défaut et rendait un « pass »
+qui ne portait sur rien. Un verdict rendu sans avoir vu les couleurs de la page
+est pire qu'une absence de verdict : il rassure.
+
+**Aucune régression** — Sans sonde, le comportement est exactement l'ancien :
+styles embarqués et en ligne, rien de plus. La différence est qu'il est
+désormais **annoncé** au lieu d'être tu. Le moteur reste testable sans réseau,
+et la seule porte de sortie du système demeure la sonde.
+
+**Coût assumé** — Jusqu'à huit requêtes sortantes de plus par page analysée,
+prises sur le budget global (300). Sur un lot, le cache du moteur de sonde les
+absorbe presque entièrement : la charte d'un site est la même d'une page à
+l'autre, donc lue une seule fois et remboursée ensuite. Deuxième coût : au-delà
+de huit feuilles déclarées, ou au-delà de 512 Kio, la mesure est partielle — le
+rapport le dit, il ne le devine pas. Troisième coût : le temps d'analyse d'une
+page isolée augmente de la latence de ses feuilles, bornée par le délai de la
+sonde.

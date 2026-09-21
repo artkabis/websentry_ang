@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildCSSOM, matchMedia, specificity, substituteVars } from './micro-cssom.js';
+import {
+  MAX_EXTERNAL_SHEETS,
+  buildCSSOM,
+  fetchExternalCss,
+  matchMedia,
+  specificity,
+  substituteVars,
+} from './micro-cssom.js';
 
 /** Style calculé du premier élément correspondant au sélecteur. */
 function styleOf(html: string, selector: string, viewportWidth?: number) {
@@ -465,5 +472,103 @@ describe('robustesse', () => {
 
   it('survit à un document sans style', () => {
     expect(() => buildCSSOM('<html><body><p>x</p></body></html>')).not.toThrow();
+  });
+});
+
+describe('feuilles externes', () => {
+  /** Lecteur simulé : rend le texte associé à l’URL, ou échoue. */
+  function reader(sheets: Record<string, string>) {
+    const seen: string[] = [];
+    const impl = (url: string) => {
+      seen.push(url);
+      const css = sheets[url];
+      return Promise.resolve({ ok: css !== undefined, text: () => Promise.resolve(css ?? '') });
+    };
+    return { impl, seen };
+  }
+
+  function linked(...hrefs: string[]): string {
+    const links = hrefs.map(href => `<link rel="stylesheet" href="${href}">`).join('');
+    return `<html><head>${links}</head><body><p>x</p></body></html>`;
+  }
+
+  it('NE SORT PAS sans lecteur fourni, mais compte ce qui est déclaré', async () => {
+    // Le moteur n'a pas de porte de sortie à lui : l'absence de lecteur est un
+    // refus de sortir, pas une absence de feuilles. Confondre les deux ferait
+    // conclure sur des valeurs par défaut sans le signaler.
+    const external = await fetchExternalCss(linked('/charte.css'), { baseUrl: 'https://x.fr/' });
+
+    expect(external.sheets).toEqual({});
+    expect(external.declared).toBe(1);
+    expect(external.loaded).toBe(0);
+  });
+
+  it('résout une URL relative contre l’adresse de la page', async () => {
+    const { impl, seen } = reader({ 'https://x.fr/pages/css/charte.css': 'p { color: red; }' });
+
+    const external = await fetchExternalCss(linked('css/charte.css'), {
+      baseUrl: 'https://x.fr/pages/',
+      fetchImpl: impl,
+    });
+
+    expect(seen).toEqual(['https://x.fr/pages/css/charte.css']);
+    // La clé reste le href TEL QUE DÉCLARÉ : c'est par lui que la cascade
+    // retrouve la feuille dans le document.
+    expect(external.sheets['css/charte.css']).toBe('p { color: red; }');
+    expect(external.loaded).toBe(1);
+  });
+
+  it('compte comme NON LUE une feuille que le lecteur refuse', async () => {
+    const { impl } = reader({});
+
+    const external = await fetchExternalCss(linked('/charte.css'), {
+      baseUrl: 'https://x.fr/',
+      fetchImpl: impl,
+    });
+
+    expect(external.declared).toBe(1);
+    expect(external.loaded).toBe(0);
+  });
+
+  it('ne laisse pas une URL illisible emporter les feuilles suivantes', async () => {
+    const { impl } = reader({ 'https://x.fr/charte.css': 'p { color: red; }' });
+
+    const external = await fetchExternalCss(linked('http://[invalide', '/charte.css'), {
+      baseUrl: 'https://x.fr/',
+      fetchImpl: impl,
+    });
+
+    expect(external.declared).toBe(2);
+    expect(external.loaded).toBe(1);
+  });
+
+  it('PLAFONNE le nombre de sorties, et garde les premières déclarées', async () => {
+    // Une page qui déclare trente feuilles met sa charte au début : c'est là
+    // que se joue le contraste, pas dans la trentième surcharge.
+    const hrefs = Array.from({ length: MAX_EXTERNAL_SHEETS + 4 }, (_, i) => `/f${i}.css`);
+    const sheets = Object.fromEntries(hrefs.map(href => [`https://x.fr${href}`, 'p{color:red}']));
+    const { impl, seen } = reader(sheets);
+
+    const external = await fetchExternalCss(linked(...hrefs), {
+      baseUrl: 'https://x.fr/',
+      fetchImpl: impl,
+    });
+
+    expect(seen).toHaveLength(MAX_EXTERNAL_SHEETS);
+    expect(seen).toContain('https://x.fr/f0.css');
+    expect(seen).not.toContain(`https://x.fr/f${MAX_EXTERNAL_SHEETS}.css`);
+    expect(external.declared).toBe(MAX_EXTERNAL_SHEETS + 4);
+    expect(external.loaded).toBe(MAX_EXTERNAL_SHEETS);
+  });
+
+  it('ignore un lien qui n’est pas une feuille de style', async () => {
+    const { impl, seen } = reader({});
+    const html =
+      '<html><head><link rel="icon" href="/favicon.ico"><link rel="preload" href="/a.css"></head><body><p>x</p></body></html>';
+
+    const external = await fetchExternalCss(html, { baseUrl: 'https://x.fr/', fetchImpl: impl });
+
+    expect(seen).toEqual([]);
+    expect(external.declared).toBe(0);
   });
 });

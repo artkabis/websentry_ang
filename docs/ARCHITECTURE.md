@@ -360,9 +360,16 @@ renonce et la requête normale reprend la main.
 Un micro-moteur CSS embarqué (`analysis/css/`) calcule les styles — spécificité,
 héritage, custom properties, `@media`/`@layer`/`@supports`/`@container` — puis un
 résolveur de fond effectif compose les couches semi-transparentes et remonte les
-ancêtres jusqu'à une couleur opaque. Ce moteur **n'a aucune porte de sortie** :
-les feuilles externes ne sont pas chargées, la mesure porte sur les styles
-embarqués et en ligne.
+ancêtres jusqu'à une couleur opaque.
+
+Le moteur **n'a pas de porte de sortie à lui** : il reçoit, ou non, une fonction
+de lecture. C'est l'analyseur qui la construit sur la sonde réseau — donc sous
+politique SSRF, sous plafond de volume (512 Kio par feuille) et sur le quota du
+critère (`CONTRAST_V2: 8`). Au plus huit feuilles sont lues, dans l'ordre du
+document. Ce qui est déclaré et ce qui a été lu sont comptés séparément : toute
+feuille manquante devient un item `info` du rapport, parce qu'une mesure faite
+sans la charte du site est une mesure faite sur des valeurs par défaut, et que
+le rapport ne doit pas conclure comme s'il avait tout vu.
 
 ### Règles par page
 
@@ -600,11 +607,6 @@ Dettes identifiées sur le périmètre déjà livré :
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de
   design, à mener d'un bloc plutôt qu'au fil des modules.
-- **Feuilles de style externes non mesurées** — `CONTRAST_V2` évalue les styles
-  embarqués et en ligne. Un site dont toute la charte tient dans un `.css`
-  distant est donc mesuré sur des valeurs par défaut. Faire passer ces feuilles
-  par la sonde réseau est possible sans changement de structure ; le coût est un
-  budget de requêtes supplémentaire par page.
 - **Suppressions depuis l'interface** — l'API expose les quatre portées (pages,
   session, site, domaine) et la suite sécurité les couvre ; l'interface ne les
   propose pas encore. Elles attendent la corbeille : offrir une suppression

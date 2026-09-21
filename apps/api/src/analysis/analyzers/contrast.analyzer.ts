@@ -1,8 +1,10 @@
 import type { CheckItem, CheckResult } from '@websentry/shared';
 import { BaseAnalyzer } from '../base.analyzer.js';
 import { auditPageContrast, type AuditElementResult } from '../css/contrast-resolver.js';
+import type { CssFetchImpl } from '../css/micro-cssom.js';
 import type { EffectiveSettings } from '../effective-settings.js';
 import { locateFromText } from '../locate.js';
+import type { NetworkProbe } from '../network-probe.js';
 import type { HtmlPage } from '../page.model.js';
 
 /**
@@ -17,6 +19,15 @@ import type { HtmlPage } from '../page.model.js';
  * même faute cent fois, et cent lignes identiques dans un rapport reviennent à
  * n'en avoir aucune.
  */
+
+/**
+ * Plafond de lecture d'une feuille externe.
+ *
+ * Une charte tient largement dans ce volume ; au-delà, on a affaire à une
+ * feuille d'utilitaires concaténée, dont la fin ne change rien au contraste des
+ * textes de la page.
+ */
+const MAX_CSS_BYTES = 512 * 1024;
 
 /** Nombre d'extraits de texte cités par groupe de couleurs. */
 const MAX_EXCERPTS = 3;
@@ -37,18 +48,23 @@ export class ContrastAnalyzer extends BaseAnalyzer {
   readonly id = 'CONTRAST_V2';
   readonly title = 'Contraste des couleurs (WCAG)';
 
-  async analyze(page: HtmlPage, settings: EffectiveSettings): Promise<CheckResult> {
+  async analyze(
+    page: HtmlPage,
+    settings: EffectiveSettings,
+    net?: NetworkProbe,
+  ): Promise<CheckResult> {
     if (!this.isEnabled(settings)) return this.na();
 
     // Le document DÉJÀ analysé est passé au moteur : le reparser coûterait un
     // second `cheerio.load` complet, le poste le plus cher de ce critère.
     //
-    // `fetchExternal` reste FAUX : le moteur n'a pas de porte de sortie, et les
-    // feuilles externes passeraient hors de la sonde SSRF. Le contraste est
-    // donc évalué sur les styles embarqués et en ligne.
-    const { elements, truncated } = await auditPageContrast(page.$, {
+    // Les feuilles externes passent par la SONDE, seule porte de sortie : la
+    // politique SSRF s'y applique, le volume lu est borné, et le budget de
+    // requêtes du critère est décompté comme pour tout le reste. Sans sonde, le
+    // moteur reste sur les styles embarqués et en ligne — et le rapport le dit.
+    const { elements, truncated, externalSheets } = await auditPageContrast(page.$, {
       baseUrl: page.url,
-      fetchExternal: false,
+      fetchCss: net ? cssFetcherOf(net) : undefined,
     });
 
     if (elements.length === 0) {
@@ -66,6 +82,20 @@ export class ContrastAnalyzer extends BaseAnalyzer {
     const failingCount = countOf(failing);
     const passingCount = countOf(passing);
     const scored = failingCount + passingCount;
+
+    const unread = externalSheets.declared - externalSheets.loaded;
+    if (unread > 0) {
+      // Sans clé, donc hors décompte : ce n'est pas un défaut de la page, c'est
+      // une part de la charte que la mesure n'a pas vue. La taire laisserait
+      // conclure sur des valeurs par défaut sans le dire.
+      items.push({
+        label: `${unread} feuille(s) de style externe(s) non mesurée(s)`,
+        status: 'info',
+        detail: net
+          ? 'Feuille injoignable, refusée par la politique de sécurité, ou au-delà du plafond de lecture.'
+          : 'Aucune sortie réseau disponible : seuls les styles embarqués et en ligne ont été mesurés.',
+      });
+    }
 
     if (truncated) {
       // Sans clé, donc hors décompte : une limite de l'analyse n'est pas un
@@ -211,6 +241,21 @@ function excerptOf(element: AuditElementResult): string {
 function locationOf(element: AuditElementResult): string {
   const parts = [element.id ? `#${element.id}` : '', element.classes ?? ''].filter(Boolean);
   return parts.length > 0 ? ` [${parts.join('')}]` : '';
+}
+
+/**
+ * Lecture d'une feuille, branchée sur la sonde.
+ *
+ * Le moteur CSS ne connaît ni la sonde ni la politique SSRF : il reçoit une
+ * fonction qui rend un texte, et rien d'autre. C'est ce qui lui garde sa
+ * testabilité sans réseau.
+ */
+function cssFetcherOf(net: NetworkProbe): CssFetchImpl {
+  return async (url: string) => {
+    const { result, body } = await net.fetchText(url, MAX_CSS_BYTES);
+    const text = result.ok && body !== null ? body : '';
+    return { ok: text.length > 0, text: () => Promise.resolve(text) };
+  };
 }
 
 function toHex(color: { r: number; g: number; b: number }): string {

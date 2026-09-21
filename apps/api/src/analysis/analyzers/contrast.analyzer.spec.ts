@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { NetworkProbe, ProbeResult } from '../network-probe.js';
 import { makePage, makeSettings } from '../testing/page.factory.js';
+import { asProbe } from '../testing/probe.factory.js';
 import { ContrastAnalyzer } from './contrast.analyzer.js';
 
 const analyzer = new ContrastAnalyzer();
@@ -243,6 +245,92 @@ describe('ContrastAnalyzer', () => {
     );
 
     expect(result.status).toBe('pass');
+  });
+
+  describe('feuilles de style externes', () => {
+    function linked(body: string, href = '/charte.css') {
+      return makePage(
+        `<html><head><link rel="stylesheet" href="${href}"></head><body>${body}</body></html>`,
+      );
+    }
+
+    /** Sonde simulée : rend le texte de la feuille, ou un échec réseau. */
+    function cssProbe(body: string | null): NetworkProbe & { fetchText: ReturnType<typeof vi.fn> } {
+      const result: ProbeResult = {
+        url: 'https://exemple.fr/charte.css',
+        status: body === null ? null : 200,
+        ok: body !== null,
+        redirected: false,
+        finalUrl: 'https://exemple.fr/charte.css',
+        contentLength: null,
+        contentType: 'text/css',
+      };
+      const fetchText = vi.fn().mockResolvedValue({ result, body });
+      return Object.assign(
+        asProbe({
+          check: vi.fn(),
+          checkMany: vi.fn(),
+          fetchText,
+          remaining: 8,
+        }),
+        { fetchText },
+      );
+    }
+
+    it('MESURE le contraste que seule la feuille externe impose', async () => {
+      // Sans lecture de la charte, ce texte serait mesuré noir sur blanc et
+      // déclaré conforme : un verdict rendu sur une page qu'on n'a pas vue.
+      const probe = cssProbe('p { color: #ddd; background: #fff; }');
+
+      const result = await analyzer.analyze(
+        linked('<p>Texte pâle par la charte</p>'),
+        settings,
+        probe,
+      );
+
+      expect(result.status).toBe('fail');
+      expect(probe.fetchText).toHaveBeenCalledWith('https://exemple.fr/charte.css', 512 * 1024);
+    });
+
+    it('SIGNALE une feuille déclarée qu’il n’a pas pu lire', async () => {
+      const result = await analyzer.analyze(linked('<p>Texte</p>'), settings, cssProbe(null));
+
+      const notice = result.items.find(item => item.label.includes('non mesurée'));
+      expect(notice?.status).toBe('info');
+      expect(notice?.detail).toContain('politique de sécurité');
+      // Un constat sur NOTRE mesure, pas sur la page : il ne pèse pas la note.
+      expect(notice?.key).toBeUndefined();
+    });
+
+    it('SIGNALE aussi l’absence de sortie réseau, sans l’imputer au site', async () => {
+      const result = await analyzer.analyze(linked('<p>Texte</p>'), settings);
+
+      const notice = result.items.find(item => item.label.includes('non mesurée'));
+      expect(notice?.status).toBe('info');
+      expect(notice?.detail).toContain('Aucune sortie réseau');
+    });
+
+    it('ne signale rien quand tout ce qui est déclaré a été lu', async () => {
+      const result = await analyzer.analyze(
+        linked('<p>Texte</p>'),
+        settings,
+        cssProbe('p { color: #000; background: #fff; }'),
+      );
+
+      expect(result.items.some(item => item.label.includes('non mesurée'))).toBe(false);
+    });
+
+    it('ne sort pas pour une page sans feuille externe', async () => {
+      const probe = cssProbe('p { color: #000; }');
+
+      await analyzer.analyze(
+        styled('p { color: #000; background: #fff; }', '<p>Texte</p>'),
+        settings,
+        probe,
+      );
+
+      expect(probe.fetchText).not.toHaveBeenCalled();
+    });
   });
 
   it('ne rend rien quand le critère est désactivé', async () => {
