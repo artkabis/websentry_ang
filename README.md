@@ -69,6 +69,25 @@ pnpm dev:web                             # http://localhost:4200  (autre termina
 `pnpm dev:api` compile en continu et relance le serveur à chaque écriture ; le
 premier démarrage attend la fin de la compilation initiale, quelques secondes.
 
+### Créer un compte pour se connecter
+
+Il n'existe **aucun accès sans identifiant** : les écrans sont derrière une
+session, et un contournement d'authentification n'est pas une commodité de
+développement. Il faut donc une base et un compte — `DB_ENABLED=false` permet de
+démarrer l'API, mais pas de s'y connecter.
+
+```bash
+# MariaDB doit tourner, et .env porter DB_ENABLED=true + les accès
+pnpm --filter @websentry/api build        # le hachage du mot de passe vient du code compilé
+pnpm --filter @websentry/api db:init      # applique src/database/sql/*.sql
+pnpm --filter @websentry/api db:user alice 'un-mot-de-passe-solide' admin
+```
+
+Rangs acceptés : `tester` (10), `editor` (30), `admin` (50), `super_admin`
+(100) — ou leur valeur numérique. Rejouer `db:user` sur un identifiant existant
+**réinitialise son mot de passe** et invalide les sessions ouvertes : c'est le
+geste prévu quand on l'a oublié.
+
 ### Si ça ne démarre pas
 
 | Symptôme                                                         | Cause                                                                                                                                          |
