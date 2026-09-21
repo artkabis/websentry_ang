@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+// @ts-expect-error — script de développement en JavaScript simple, hors du
+// programme TypeScript : il s'exécute avant toute compilation.
+import { ENV_FILES as ENV_FILES_SCRIPT } from '../../scripts/env-files.mjs';
 import { ENV_FILES } from './config.module.js';
 
 describe('emplacement du fichier d’environnement', () => {
@@ -15,5 +18,12 @@ describe('emplacement du fichier d’environnement', () => {
     // dépôt, jamais l'inverse.
     expect(ENV_FILES.indexOf('.env')).toBeLessThan(ENV_FILES.indexOf('../../.env'));
     expect(ENV_FILES.indexOf('.env.local')).toBeLessThan(ENV_FILES.indexOf('.env'));
+  });
+
+  it('reste IDENTIQUE à la liste du script de développement', () => {
+    // Le script s'exécute avant toute compilation et ne peut pas importer ce
+    // module : il en garde une copie, qui annoncerait des emplacements faux si
+    // elle prenait du retard.
+    expect(ENV_FILES_SCRIPT).toEqual([...ENV_FILES]);
   });
 });

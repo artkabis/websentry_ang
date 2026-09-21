@@ -19,9 +19,23 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ENV_FILES } from './env-files.mjs';
 
 const racine = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sortie = resolve(racine, 'dist/main.js');
+
+// Dire OÙ le fichier d'environnement est cherché, avant que le serveur ne
+// tombe sur « JWT_SECRET manquant ». Sans ces chemins, l'erreur est exacte mais
+// muette sur sa cause la plus fréquente : un .env au mauvais endroit, ou nommé
+// `.env.txt` par un explorateur qui masque les extensions connues.
+const trouves = ENV_FILES.map(chemin => resolve(racine, chemin)).filter(existsSync);
+if (trouves.length === 0) {
+  console.warn('\nAucun fichier d’environnement trouvé. Emplacements cherchés :');
+  for (const chemin of ENV_FILES) console.warn(`  - ${resolve(racine, chemin)}`);
+  console.warn('Copiez .env.example en .env à la racine du dépôt, puis renseignez JWT_SECRET.\n');
+} else {
+  console.log(`Environnement lu depuis : ${trouves.join(', ')}`);
+}
 
 /** Lance une commande en héritant des flux — les journaux restent lisibles. */
 const lancer = (commande, args) =>
