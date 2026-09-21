@@ -25,8 +25,8 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 2889 au total — 337 paquet partagé, 1718 unitaires backend,
-334 E2E + sécurité API, 458 unitaires frontend, 42 E2E navigateur.
+**Tests** : 2912 au total — 337 paquet partagé, 1718 unitaires backend,
+334 E2E + sécurité API, 481 unitaires frontend, 42 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 95,8 % lignes backend
 (100 % sur chaque module de sécurité), 98,6 % lignes frontend.
 

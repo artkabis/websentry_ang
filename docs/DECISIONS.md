@@ -924,3 +924,40 @@ qu'avant, donc plus présentes : c'est le prix de 1.4.11, et il se voit. Enfin,
 le choix d'apparence a fallu le loger quelque part : une barre supérieure mince
 apparaît sur tous les écrans, alors que chacun porte déjà son propre en-tête.
 Ce n'est pas une coquille applicative — elle reste à proposer.
+
+---
+
+## 35. Les listes longues s'éditent par jetons, la pondération par paliers
+
+**Décision** — L'éditeur de profil couvre désormais les mots exclus des titres,
+les domaines non vérifiés et la pondération des critères. Les deux listes
+passent par un composant partagé (`ws-token-list`) : une valeur, un jeton qu'on
+retire d'un geste. La pondération se choisit par PALIER (`WEIGHT_TIERS` :
+critique ×2, important ×1,5, normal ×1, mineur ×0,5, informatif ×0) plutôt
+qu'au coefficient libre, et seules les valeurs qui s'écartent du défaut sont
+écrites dans le profil.
+
+**Raison** — Ces réglages étaient conservés mais invisibles : un administrateur
+ne pouvait ni les lire ni les corriger depuis l'interface, alors que la v1 les
+expose. Une zone de texte séparée par des virgules aurait été plus vite écrite,
+mais elle reporte sur l'utilisateur tout ce qu'une liste doit garantir — pas de
+doublon, pas de valeur vide, plafond du schéma respecté — et ne le lui dit
+qu'après le refus du serveur.
+
+Le poids affiché est celui que `resolveCheckWeight` calcule, et non la seule
+entrée de `checkWeights` : un critère listé « informatif » pèse zéro sans
+figurer dans le dictionnaire, et afficher « Normal » mentirait sur le score.
+
+**Aucune régression** — Ce qui n'est éditable nulle part — règles par page,
+polarité des sous-critères, exclusions d'orphelins — continue d'être reporté
+tel quel depuis le profil lu, et un test le vérifie. Un coefficient hors
+paliers, tel qu'un profil importé peut en porter, est conservé et proposé
+comme « sur mesure » au lieu d'être arrondi au palier voisin.
+
+**Coût assumé** — Deux. Les paliers couvrent les cas usuels mais pas la
+granularité fine : régler un critère à 1,25 demande d'importer un profil, ce
+qui est assumé — cinq paliers nommés valent mieux qu'un champ libre dont
+personne ne sait ce qu'il change. Ensuite, l'écran s'allonge : vingt-neuf
+sélecteurs de pondération s'ajoutent aux vingt-neuf cases de critères actifs.
+Un regroupement par famille serait plus lisible ; il suppose une refonte de
+l'écran, qui se propose avant de se coder.

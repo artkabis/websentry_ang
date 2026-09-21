@@ -201,6 +201,10 @@ test.describe('Thème sombre', () => {
     '/analyse/sitemap',
     '/historique',
     '/profils',
+    // L'éditeur ouvre sur les valeurs par défaut quand la gamme n'existe pas :
+    // sans API, il rend donc son formulaire complet — listes, pondérations,
+    // boutons — ce qui en fait l'écran le plus dense à vérifier.
+    '/profils/premium',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {

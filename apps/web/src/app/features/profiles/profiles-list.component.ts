@@ -38,19 +38,41 @@ import { ProfilesApi } from '../../core/profiles/profiles.api';
         }
       </header>
 
-      @if (error(); as message) {
-        <p
-          role="alert"
-          class="mt-6 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger-content"
-        >
-          {{ message }}
-        </p>
-      }
-
+      <!--
+        Les quatre états s'excluent. Montrer « Aucun profil enregistré » sous un
+        message d'échec affirmait deux choses contradictoires : que la liste est
+        vide, et qu'on n'a pas pu la lire. Une liste qu'on n'a pas lue n'est pas
+        vide — elle est inconnue.
+      -->
       @if (loading()) {
         <p class="mt-6 text-sm text-content-subtle" role="status">Chargement des profils…</p>
+      } @else if (error(); as message) {
+        <div
+          role="alert"
+          class="mt-6 rounded-lg bg-danger-surface px-4 py-3 text-sm text-danger-content"
+        >
+          <p>{{ message }}</p>
+          <button
+            type="button"
+            (click)="reload()"
+            class="mt-2 rounded-lg border border-danger-content px-3 py-1.5 text-xs font-medium
+                   hover:bg-panel"
+          >
+            Réessayer
+          </button>
+        </div>
       } @else if (profiles().length === 0) {
-        <p class="mt-6 text-sm text-content-subtle">Aucun profil enregistré.</p>
+        <div class="mt-6 rounded-xl bg-panel p-6 text-center shadow-sm ring-1 ring-line">
+          <p class="text-sm text-content-muted">Aucun profil enregistré.</p>
+          <p class="mt-1 text-xs text-content-subtle">
+            Un profil porte les règles d'analyse d'une gamme de sites.
+            @if (auth.isAdmin()) {
+              Créez-en un pour commencer.
+            } @else {
+              Un administrateur peut en créer.
+            }
+          </p>
+        </div>
       } @else {
         <ul class="mt-6 divide-y divide-line rounded-xl bg-panel shadow-sm ring-1 ring-line">
           @for (profile of profiles(); track profile.profile) {
@@ -112,10 +134,15 @@ export class ProfilesListComponent {
     try {
       this.profiles.set(await this.api.list());
     } catch {
-      this.error.set('Chargement des profils impossible — réessayez');
+      this.error.set('Chargement des profils impossible.');
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Relance la lecture après un échec — le bouton de reprise du bloc d'erreur. */
+  async reload(): Promise<void> {
+    await this.load();
   }
 
   /**

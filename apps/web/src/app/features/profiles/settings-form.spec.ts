@@ -7,8 +7,20 @@ import {
   patchFormFromSettings,
   rangeIssues,
   settingsFromForm,
+  type EditedCollections,
   type SettingsFormGroup,
 } from './settings-form';
+
+/** Collections éditées hors formulaire — vides sauf mention contraire. */
+function editees(over: Partial<EditedCollections> = {}): EditedCollections {
+  return {
+    enabledChecks: [],
+    excludedWords: [],
+    excludedDomains: [],
+    checkWeights: {},
+    ...over,
+  };
+}
 
 describe('formulaire des réglages', () => {
   let form: SettingsFormGroup;
@@ -38,7 +50,7 @@ describe('formulaire des réglages', () => {
   describe('reconstruction', () => {
     it('produit des réglages acceptés par le schéma partagé', () => {
       const base = defaultAnalysisSettings();
-      const rebuilt = settingsFromForm(form, base, ['METAS']);
+      const rebuilt = settingsFromForm(form, base, editees({ enabledChecks: ['METAS'] }));
       // Le contrat client et le contrat serveur sont le même schéma : ce qui
       // sort du formulaire doit passer la validation du serveur.
       expect(() => structuredClone(rebuilt)).not.toThrow();
@@ -46,33 +58,64 @@ describe('formulaire des réglages', () => {
       expect(rebuilt.enabledChecks).toEqual(['METAS']);
     });
 
-    it('CONSERVE les réglages que le formulaire n’édite pas', () => {
-      // Sans cela, ouvrir puis enregistrer un profil l'amputerait de ses listes
-      // et de ses règles par page.
+    it('CONSERVE ce qui n’est éditable NULLE PART', () => {
+      // Règles par page et exclusions d'orphelins n'ont pas encore d'écran :
+      // sans ce report, ouvrir puis enregistrer un profil les effacerait.
       const base: AnalysisSettings = {
         ...defaultAnalysisSettings(),
         pageRules: [{ label: 'Produits', patterns: ['/p/*'] }],
-        checkWeights: { METAS: 2 },
         orphanExclusions: ['/mentions-legales'],
+        subCheckPolarity: { 'METAS.title': 'absent' },
       };
 
-      const rebuilt = settingsFromForm(form, base, []);
+      const rebuilt = settingsFromForm(form, base, editees());
 
       expect(rebuilt.pageRules).toEqual(base.pageRules);
-      expect(rebuilt.checkWeights).toEqual({ METAS: 2 });
       expect(rebuilt.orphanExclusions).toEqual(['/mentions-legales']);
+      expect(rebuilt.subCheckPolarity).toEqual({ 'METAS.title': 'absent' });
     });
 
-    it('conserve les listes de mots et de domaines exclus', () => {
+    it('reprend les listes ÉDITÉES, et non celles d’origine', () => {
+      // La liste vient désormais de l'écran : réinjecter celle de `base`
+      // annulerait en silence chaque retrait fait par l'utilisateur.
       const base = defaultAnalysisSettings();
-      const rebuilt = settingsFromForm(form, base, []);
-      expect(rebuilt.hn.excludedWords).toEqual(base.hn.excludedWords);
-      expect(rebuilt.links.excludedDomains).toEqual(base.links.excludedDomains);
+
+      const rebuilt = settingsFromForm(
+        form,
+        base,
+        editees({ excludedWords: ['le'], excludedDomains: ['exemple.fr'] }),
+      );
+
+      expect(rebuilt.hn.excludedWords).toEqual(['le']);
+      expect(rebuilt.links.excludedDomains).toEqual(['exemple.fr']);
+    });
+
+    it('N’ÉCRIT que les pondérations qui s’écartent du défaut', () => {
+      // Écrire un coefficient 1 pour les vingt-neuf critères gonflerait le
+      // profil d'un dictionnaire qui ne dit rien, et masquerait les trois
+      // réglages qui, eux, veulent dire quelque chose.
+      const rebuilt = settingsFromForm(
+        form,
+        defaultAnalysisSettings(),
+        editees({ checkWeights: { METAS: 2, LINKS: 1, IMAGES: 0 } }),
+      );
+
+      expect(rebuilt.checkWeights).toEqual({ METAS: 2, IMAGES: 0 });
+    });
+
+    it('n’écrit aucune clé de pondération quand rien ne s’écarte du défaut', () => {
+      const rebuilt = settingsFromForm(
+        form,
+        defaultAnalysisSettings(),
+        editees({ checkWeights: { METAS: 1, LINKS: 1 } }),
+      );
+
+      expect('checkWeights' in rebuilt).toBe(false);
     });
 
     it('reprend les valeurs saisies', () => {
       form.patchValue({ contentMinWords: 120, contentWarningWords: 400, boldMin: 1, boldMax: 9 });
-      const rebuilt = settingsFromForm(form, defaultAnalysisSettings(), []);
+      const rebuilt = settingsFromForm(form, defaultAnalysisSettings(), editees());
       expect(rebuilt.content).toEqual({ minWords: 120, warningWords: 400 });
       expect(rebuilt.bold.min).toBe(1);
       expect(rebuilt.bold.max).toBe(9);
@@ -118,7 +161,7 @@ describe('formulaire des réglages', () => {
       // Une divergence produirait soit un refus serveur incompréhensible, soit
       // une permissivité trompeuse côté client.
       form.patchValue({ metaTitleMin: 90, metaTitleMax: 10 });
-      const rebuilt = settingsFromForm(form, defaultAnalysisSettings(), []);
+      const rebuilt = settingsFromForm(form, defaultAnalysisSettings(), editees());
 
       expect(rangeIssues(form).length).toBeGreaterThan(0);
       expect(rebuilt.meta.title.min).toBeGreaterThan(rebuilt.meta.title.max);

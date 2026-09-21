@@ -338,4 +338,138 @@ describe('ProfileEditorComponent', () => {
       expect(await screen.findByRole('alert')).toBeDefined();
     });
   });
+
+  describe('listes longues et pondérations', () => {
+    const user = userEvent.setup();
+
+    it('montre les mots et domaines exclus du profil', async () => {
+      // Ils étaient CONSERVÉS mais invisibles : l'administrateur ne pouvait
+      // ni les lire ni les corriger depuis l'interface.
+      const t = setup({
+        api: {
+          get: vi.fn().mockResolvedValue(
+            profile({
+              settings: {
+                ...defaultAnalysisSettings(),
+                hn: { minLength: 50, maxLength: 90, excludedWords: ['le', 'la'] },
+                links: { timeout: 10_000, excludedDomains: ['linkedin.com'] },
+              },
+            }),
+          ),
+        },
+      });
+      await mount(t);
+
+      expect(await screen.findByRole('button', { name: 'Retirer le' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Retirer linkedin.com' })).toBeDefined();
+    });
+
+    it('ENREGISTRE un mot ajouté', async () => {
+      const t = setup();
+      await mount(t);
+
+      await user.type(await screen.findByLabelText('Mot à exclure'), 'donc{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+      const envoye = t.api.save.mock.calls[0]?.[1] as {
+        settings: { hn: { excludedWords: string[] } };
+      };
+      expect(envoye.settings.hn.excludedWords).toContain('donc');
+    });
+
+    it('ENREGISTRE un domaine retiré', async () => {
+      const t = setup({
+        api: {
+          get: vi.fn().mockResolvedValue(
+            profile({
+              settings: {
+                ...defaultAnalysisSettings(),
+                links: { timeout: 10_000, excludedDomains: ['linkedin.com', 'x.com'] },
+              },
+            }),
+          ),
+        },
+      });
+      await mount(t);
+
+      await user.click(await screen.findByRole('button', { name: 'Retirer linkedin.com' }));
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+      const envoye = t.api.save.mock.calls[0]?.[1] as {
+        settings: { links: { excludedDomains: string[] } };
+      };
+      expect(envoye.settings.links.excludedDomains).toEqual(['x.com']);
+    });
+
+    it('propose un palier de pondération par critère', async () => {
+      const t = setup();
+      await mount(t);
+
+      const select = await screen.findByLabelText<HTMLSelectElement>('Pondération — Métadonnées');
+      expect(select.value).toBe('1');
+      expect(Array.from(select.options).map(o => o.text)).toContain('Informatif (×0)');
+    });
+
+    it('ENREGISTRE la pondération choisie, et elle seule', async () => {
+      // Écrire un coefficient 1 pour tous les critères gonflerait le profil
+      // d'un dictionnaire qui ne dit rien.
+      const t = setup();
+      await mount(t);
+
+      await user.selectOptions(await screen.findByLabelText('Pondération — Métadonnées'), '2');
+      await user.click(screen.getByRole('button', { name: 'Enregistrer' }));
+
+      const envoye = t.api.save.mock.calls[0]?.[1] as {
+        settings: { checkWeights?: Record<string, number> };
+      };
+      expect(envoye.settings.checkWeights).toEqual({ METAS: 2 });
+    });
+
+    it('montre le poids RÉELLEMENT appliqué, pas la seule surcharge écrite', async () => {
+      // Un critère listé « informatif » pèse zéro sans figurer dans
+      // `checkWeights` : afficher « Normal » mentirait sur le score.
+      const t = setup({
+        api: {
+          get: vi.fn().mockResolvedValue(
+            profile({
+              settings: { ...defaultAnalysisSettings(), informationalChecks: ['LOGO'] },
+            }),
+          ),
+        },
+      });
+      await mount(t);
+
+      const select = await screen.findByLabelText<HTMLSelectElement>('Pondération — Logo');
+      expect(select.value).toBe('0');
+    });
+
+    it('CONSERVE un coefficient hors paliers au lieu de l’arrondir', async () => {
+      // Un profil importé peut porter 1,25 : le forcer au palier voisin
+      // changerait le score sans que personne ne l'ait demandé.
+      const t = setup({
+        api: {
+          get: vi.fn().mockResolvedValue(
+            profile({
+              settings: { ...defaultAnalysisSettings(), checkWeights: { METAS: 1.25 } },
+            }),
+          ),
+        },
+      });
+      await mount(t);
+
+      const select = await screen.findByLabelText<HTMLSelectElement>('Pondération — Métadonnées');
+      expect(select.value).toBe('1.25');
+      expect(Array.from(select.options).map(o => o.text)).toContain('Sur mesure (×1.25)');
+    });
+
+    it('N’ÉDITE PAS les listes sans les droits', async () => {
+      const t = setup({ rank: RANKS.TESTER });
+      await mount(t);
+
+      const ajouter = await screen.findByRole<HTMLButtonElement>('button', {
+        name: 'Ajouter : Mot à exclure',
+      });
+      expect(ajouter.disabled).toBe(true);
+    });
+  });
 });

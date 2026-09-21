@@ -662,9 +662,11 @@ Dettes identifiées sur le périmètre déjà livré :
   d'une version à l'autre.
 - **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
   et les charger en base au moment de la bascule.
-- **Édition des listes longues** — l'éditeur couvre les seuils numériques et les
-  critères actifs ; les mots exclus, domaines exclus, règles par page et
-  pondérations sont CONSERVÉS mais pas encore éditables dans l'interface.
+- **Règles par page** — l'éditeur de profil couvre désormais les seuils, les
+  critères actifs, les mots et domaines exclus et la pondération. Les règles par
+  page (motif d'URL, réglages et critères propres à un gabarit) et la polarité
+  des sous-critères restent CONSERVÉES mais non éditables : ce sont des objets
+  imbriqués, qui appellent leur propre écran.
 - **Journal d'audit append-only en base** — l'absence de méthode `UPDATE`/`DELETE`
   est garantie côté applicatif et testée ; la verrouiller aussi par des droits
   MariaDB (`GRANT INSERT, SELECT` uniquement) serait plus robuste.

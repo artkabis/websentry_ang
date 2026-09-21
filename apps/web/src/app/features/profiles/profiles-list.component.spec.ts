@@ -138,4 +138,37 @@ describe('ProfilesListComponent', () => {
       expect(await screen.findByRole('alert')).toBeDefined();
     });
   });
+
+  describe('états', () => {
+    it('N’AFFICHE PAS « aucun profil » quand la lecture a ÉCHOUÉ', async () => {
+      // Les deux messages ensemble affirmaient deux choses contradictoires :
+      // que la liste est vide, et qu'on n'a pas pu la lire.
+      const t = setup({ list: vi.fn().mockRejectedValue(new Error('réseau')) });
+      await render(ProfilesListComponent, { providers: t.providers });
+
+      expect(await screen.findByRole('alert')).toBeDefined();
+      expect(screen.queryByText(/Aucun profil enregistré/)).toBeNull();
+    });
+
+    it('PROPOSE une reprise plutôt que de dire « réessayez »', async () => {
+      const t = setup({ list: vi.fn().mockRejectedValue(new Error('réseau')) });
+      await render(ProfilesListComponent, { providers: t.providers });
+
+      await screen.findByRole('alert');
+      t.list.mockResolvedValue([meta()]);
+      await userEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+
+      expect(await screen.findByRole('link', { name: 'Premium' })).toBeDefined();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('dit quoi faire ensuite devant une liste vide', async () => {
+      // « Aucun résultat » laisse l'utilisateur devant une impasse.
+      const t = setup({ list: vi.fn().mockResolvedValue([]) });
+      await render(ProfilesListComponent, { providers: t.providers });
+
+      expect(await screen.findByText(/Aucun profil enregistré/)).toBeDefined();
+      expect(screen.getByText(/Créez-en un pour commencer/)).toBeDefined();
+    });
+  });
 });

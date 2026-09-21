@@ -1,5 +1,5 @@
 import { FormBuilder, Validators, type FormGroup } from '@angular/forms';
-import type { AnalysisSettings } from '@websentry/shared';
+import { DEFAULT_CHECK_WEIGHT, type AnalysisSettings } from '@websentry/shared';
 
 /**
  * Formulaire réactif des réglages d'analyse.
@@ -9,10 +9,12 @@ import type { AnalysisSettings } from '@websentry/shared';
  * faire diverger produirait soit un refus incompréhensible côté serveur, soit
  * une permissivité trompeuse côté client.
  *
- * Toutes les clés des réglages ne sont pas éditables ici : les listes longues
- * (mots exclus, domaines exclus, règles par page) et les dictionnaires de
- * pondération sont conservés TELS QUELS et réinjectés à l'enregistrement.
- * Sans cela, ouvrir puis enregistrer un profil l'amputerait silencieusement.
+ * Les listes longues et les pondérations ne sont pas des contrôles de ce
+ * formulaire : elles sont éditées par des composants dédiés et passées ici au
+ * moment de reconstruire les réglages. Tout ce qui n'est éditable NULLE PART —
+ * règles par page, polarité des sous-critères, exclusions d'orphelins — est
+ * conservé tel quel depuis `base` : sans cela, ouvrir puis enregistrer un
+ * profil l'amputerait silencieusement.
  */
 
 export type SettingsFormGroup = ReturnType<typeof buildSettingsForm>;
@@ -78,16 +80,27 @@ export function patchFormFromSettings(form: SettingsFormGroup, settings: Analysi
 /**
  * Reconstruit des réglages complets à partir du formulaire.
  *
- * `base` fournit tout ce que le formulaire n'édite pas — listes, règles par
- * page, pondérations. Repartir d'un objet vide effacerait ces réglages à la
- * première sauvegarde.
+ * `base` fournit tout ce qui n'est éditable nulle part — règles par page,
+ * polarité des sous-critères. Repartir d'un objet vide effacerait ces réglages
+ * à la première sauvegarde.
  */
+export interface EditedCollections {
+  enabledChecks: readonly string[];
+  excludedWords: readonly string[];
+  excludedDomains: readonly string[];
+  /** Surcharges de pondération ; une entrée au poids par défaut est omise. */
+  checkWeights: Readonly<Record<string, number>>;
+}
+
 export function settingsFromForm(
   form: SettingsFormGroup,
   base: AnalysisSettings,
-  enabledChecks: readonly string[],
+  edited: EditedCollections,
 ): AnalysisSettings {
   const v = form.getRawValue();
+  const checkWeights = Object.fromEntries(
+    Object.entries(edited.checkWeights).filter(([, poids]) => poids !== DEFAULT_CHECK_WEIGHT),
+  );
 
   return {
     ...base,
@@ -99,6 +112,7 @@ export function settingsFromForm(
       ...base.hn,
       minLength: v.hnMinLength,
       maxLength: v.hnMaxLength,
+      excludedWords: [...edited.excludedWords],
     },
     bold: {
       min: v.boldMin,
@@ -113,13 +127,17 @@ export function settingsFromForm(
     links: {
       ...base.links,
       timeout: v.linksTimeout,
+      excludedDomains: [...edited.excludedDomains],
     },
     content: {
       minWords: v.contentMinWords,
       warningWords: v.contentWarningWords,
     },
     detectRegressions: v.detectRegressions,
-    enabledChecks: [...enabledChecks],
+    enabledChecks: [...edited.enabledChecks],
+    // Un dictionnaire vide n'est pas la même chose qu'une absence de
+    // surcharges : la clé disparaît plutôt que de porter un objet creux.
+    ...(Object.keys(checkWeights).length > 0 ? { checkWeights } : {}),
   };
 }
 

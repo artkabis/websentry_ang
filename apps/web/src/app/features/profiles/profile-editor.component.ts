@@ -2,14 +2,19 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
+  DEFAULT_CHECK_WEIGHT,
   DEFAULT_PROFILE,
+  WEIGHT_TIERS,
   defaultAnalysisSettings,
+  resolveCheckWeight,
+  tierForWeight,
   type AnalysisSettings,
   type CheckMeta,
   type SettingsProfile,
 } from '@websentry/shared';
 import { AuthService } from '../../core/auth/auth.service';
 import { ProfileConflictError, ProfilesApi } from '../../core/profiles/profiles.api';
+import { TokenListComponent } from '../../shared/token-list.component';
 import {
   buildSettingsForm,
   patchFormFromSettings,
@@ -35,7 +40,7 @@ import {
 @Component({
   selector: 'ws-profile-editor',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, TokenListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="mx-auto max-w-3xl px-4 py-10">
@@ -91,12 +96,24 @@ import {
           </p>
         }
         @if (error(); as e) {
-          <p
+          <!--
+            Un message d'échec sans reprise oblige à recharger la page — et à
+            perdre au passage ce qui avait été saisi.
+          -->
+          <div
             role="alert"
-            class="mt-6 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger-content"
+            class="mt-6 rounded-lg bg-danger-surface px-4 py-3 text-sm text-danger-content"
           >
-            {{ e }}
-          </p>
+            <p>{{ e }}</p>
+            <button
+              type="button"
+              (click)="reload()"
+              class="mt-2 rounded-lg border border-danger-content px-3 py-1.5 text-xs font-medium
+                     hover:bg-panel"
+            >
+              Réessayer
+            </button>
+          </div>
         }
 
         <form class="mt-8 space-y-8" [formGroup]="form" (ngSubmit)="save()" novalidate>
@@ -177,6 +194,99 @@ import {
                     {{ check.title }}
                     <span class="block text-xs text-content-subtle">{{ check.group }}</span>
                   </span>
+                </label>
+              }
+            </div>
+          </fieldset>
+
+          <fieldset
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
+            [disabled]="!canEdit()"
+          >
+            <legend class="px-1 text-sm font-medium text-content">
+              Mots exclus des titres ({{ excludedWords().length }})
+            </legend>
+            <p class="mt-1 text-xs text-content-subtle">
+              Ces mots ne comptent pas dans la longueur d'un titre : articles, prépositions,
+              conjonctions. Vider la liste rend les titres plus difficiles à valider.
+            </p>
+            <ws-token-list
+              [(items)]="excludedWords"
+              addLabel="Mot à exclure"
+              emptyLabel="Aucun mot exclu — chaque mot d'un titre comptera."
+              [disabled]="!canEdit()"
+              [maxItems]="1000"
+              [maxLength]="100"
+            />
+          </fieldset>
+
+          <fieldset
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
+            [disabled]="!canEdit()"
+          >
+            <legend class="px-1 text-sm font-medium text-content">
+              Domaines non vérifiés ({{ excludedDomains().length }})
+            </legend>
+            <p class="mt-1 text-xs text-content-subtle">
+              Les liens vers ces domaines ne sont pas interrogés. À réserver aux services qui
+              refusent les requêtes automatiques et se déclareraient morts à tort.
+            </p>
+            <ws-token-list
+              [(items)]="excludedDomains"
+              addLabel="Domaine à ne pas vérifier"
+              emptyLabel="Aucun domaine exclu — tous les liens sont vérifiés."
+              [disabled]="!canEdit()"
+              [maxItems]="1000"
+              [maxLength]="253"
+            />
+          </fieldset>
+
+          <fieldset
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
+            [disabled]="!canEdit()"
+          >
+            <legend class="px-1 text-sm font-medium text-content">
+              Pondération des critères ({{ weightOverrides() }} sur mesure)
+            </legend>
+            <p class="mt-1 text-xs text-content-subtle">
+              Un critère « informatif » reste analysé et affiché, mais ne pèse pas dans la note. Un
+              critère désactivé plus haut n'est pas analysé du tout.
+            </p>
+            <div class="mt-4 grid gap-2 sm:grid-cols-2">
+              @for (check of checks(); track check.id) {
+                <label class="flex items-center justify-between gap-3 text-sm">
+                  <span class="min-w-0 text-content-muted">
+                    <span class="block truncate">{{ check.title }}</span>
+                    <span class="block text-xs text-content-subtle">{{ check.group }}</span>
+                  </span>
+                  <!--
+                    La sélection est portée par les OPTIONS et non par une
+                    valeur posée sur le select : celle-ci s'applique avant que
+                    la liste d'options existe, et le navigateur retombe alors
+                    silencieusement sur la première — ici « Critique ».
+                  -->
+                  <select
+                    [disabled]="!canEdit()"
+                    (change)="setWeight(check.id, $any($event.target).value)"
+                    [attr.aria-label]="'Pondération — ' + check.title"
+                    class="shrink-0 rounded-lg border border-field bg-panel px-2 py-1.5 text-sm
+                           text-content focus:border-brand focus:outline-none
+                           focus:ring-2 focus:ring-brand/30 disabled:bg-sunken"
+                  >
+                    @for (tier of weightTiers; track tier.id) {
+                      <option [value]="tier.factor" [selected]="weightOf(check.id) === tier.factor">
+                        {{ tier.label }} (×{{ tier.factor }})
+                      </option>
+                    }
+                    @if (isCustomWeight(check.id)) {
+                      <!-- Un profil importé peut porter un coefficient hors paliers :
+                           le forcer dans le palier voisin modifierait le score sans
+                           que personne ne l'ait demandé. -->
+                      <option [value]="weightOf(check.id)" selected>
+                        Sur mesure (×{{ weightOf(check.id) }})
+                      </option>
+                    }
+                  </select>
                 </label>
               }
             </div>
@@ -263,6 +373,24 @@ export class ProfileEditorComponent {
   readonly canEdit = computed(() => this.auth.isAdmin());
   readonly issues = signal<RangeIssue[]>([]);
 
+  /**
+   * Collections éditées hors formulaire réactif.
+   *
+   * Un `FormArray` par liste conviendrait mal : ces valeurs ne se saisissent
+   * pas champ par champ mais s'ajoutent et se retirent, et leur validation
+   * (doublon, plafond) est celle de la liste entière, pas d'un contrôle.
+   */
+  readonly excludedWords = signal<string[]>([]);
+  readonly excludedDomains = signal<string[]>([]);
+  readonly checkWeights = signal<Record<string, number>>({});
+
+  readonly weightTiers = WEIGHT_TIERS;
+
+  /** Combien de critères s'écartent du poids par défaut — repère de lecture. */
+  readonly weightOverrides = computed(
+    () => Object.values(this.checkWeights()).filter(poids => poids !== DEFAULT_CHECK_WEIGHT).length,
+  );
+
   /** Réglages non édités par le formulaire, conservés tels quels. */
   private baseSettings: AnalysisSettings = defaultAnalysisSettings();
 
@@ -313,9 +441,10 @@ export class ProfileEditorComponent {
         this.baseSettings = defaultAnalysisSettings();
         patchFormFromSettings(this.form, this.baseSettings);
         this.enabledChecks.set(this.checks().map(c => c.id));
+        this.applyCollections(this.baseSettings);
       }
     } catch {
-      this.error.set('Chargement impossible — réessayez');
+      this.error.set('Chargement impossible.');
     } finally {
       this.issues.set(rangeIssues(this.form));
       this.loading.set(false);
@@ -327,6 +456,40 @@ export class ProfileEditorComponent {
     this.baseSettings = profile.settings;
     patchFormFromSettings(this.form, profile.settings);
     this.enabledChecks.set([...(profile.settings.enabledChecks ?? this.checks().map(c => c.id))]);
+    this.applyCollections(profile.settings);
+  }
+
+  /**
+   * Alimente les collections éditées hors formulaire.
+   *
+   * Le poids est lu par `resolveCheckWeight` et non dans `checkWeights` : un
+   * critère listé « informatif » pèse zéro sans figurer dans le dictionnaire,
+   * et l'éditeur doit montrer le poids RÉELLEMENT appliqué, pas la seule
+   * surcharge écrite.
+   */
+  private applyCollections(settings: AnalysisSettings): void {
+    this.excludedWords.set([...settings.hn.excludedWords]);
+    this.excludedDomains.set([...settings.links.excludedDomains]);
+    this.checkWeights.set(
+      Object.fromEntries(
+        this.checks().map(check => [check.id, resolveCheckWeight(check.id, settings)]),
+      ),
+    );
+  }
+
+  weightOf(id: string): number {
+    return this.checkWeights()[id] ?? DEFAULT_CHECK_WEIGHT;
+  }
+
+  /** Vrai quand le coefficient ne correspond à aucun palier prédéfini. */
+  isCustomWeight(id: string): boolean {
+    return tierForWeight(this.weightOf(id)) === null;
+  }
+
+  setWeight(id: string, valeur: string): void {
+    const poids = Number(valeur);
+    if (!Number.isFinite(poids)) return;
+    this.checkWeights.update(courant => ({ ...courant, [id]: poids }));
   }
 
   isCheckEnabled(id: string): boolean {
@@ -353,7 +516,12 @@ export class ProfileEditorComponent {
     this.conflict.set(null);
 
     try {
-      const settings = settingsFromForm(this.form, this.baseSettings, this.enabledChecks());
+      const settings = settingsFromForm(this.form, this.baseSettings, {
+        enabledChecks: this.enabledChecks(),
+        excludedWords: this.excludedWords(),
+        excludedDomains: this.excludedDomains(),
+        checkWeights: this.checkWeights(),
+      });
       const saved = await this.api.save(this.gamme(), {
         settings,
         // La version lue est renvoyée : l'API refuse si quelqu'un a écrit entre-temps.
