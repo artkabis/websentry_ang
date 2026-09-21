@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error — script de développement en JavaScript simple, hors du
 // programme TypeScript : il s'exécute avant toute compilation.
 import { ENV_FILES as ENV_FILES_SCRIPT } from '../../scripts/env-files.mjs';
-import { ENV_FILES } from './config.module.js';
+import { ENV_FILES } from './env-files.js';
 
 describe('emplacement du fichier d’environnement', () => {
   it('cherche à la RACINE du dépôt autant que dans le paquet', () => {
