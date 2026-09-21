@@ -41,10 +41,10 @@ import {
     <main class="mx-auto max-w-3xl px-4 py-10">
       <header class="flex items-start justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">
+          <h1 class="text-2xl font-semibold text-content">
             {{ profile()?.label ?? gamme() }}
           </h1>
-          <p class="mt-1 text-sm text-slate-500">
+          <p class="mt-1 text-sm text-content-subtle">
             <code>{{ gamme() }}</code>
             @if (profile(); as p) {
               · version {{ p.version }}
@@ -56,17 +56,20 @@ import {
         <button
           type="button"
           (click)="back()"
-          class="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          class="shrink-0 rounded-lg border border-field px-3 py-2 text-sm text-content-muted hover:bg-sunken"
         >
           Retour
         </button>
       </header>
 
       @if (loading()) {
-        <p class="mt-8 text-sm text-slate-500" role="status">Chargement…</p>
+        <p class="mt-8 text-sm text-content-subtle" role="status">Chargement…</p>
       } @else {
         @if (conflict(); as c) {
-          <div role="alert" class="mt-6 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div
+            role="alert"
+            class="mt-6 rounded-lg bg-warn-surface px-4 py-3 text-sm text-warn-content"
+          >
             <p class="font-medium">Ce profil a été modifié par quelqu'un d'autre</p>
             <p class="mt-1">
               Version en base : {{ c.currentVersion }} — la vôtre : {{ c.expectedVersion }}.
@@ -75,7 +78,7 @@ import {
             <button
               type="button"
               (click)="reload()"
-              class="mt-2 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+              class="mt-2 rounded-lg bg-warn-solid px-3 py-1.5 text-xs font-medium text-on-accent hover:bg-warn-solid-hover"
             >
               Recharger le profil
             </button>
@@ -83,33 +86,36 @@ import {
         }
 
         @if (message(); as m) {
-          <p role="status" class="mt-6 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <p role="status" class="mt-6 rounded-lg bg-ok-surface px-3 py-2 text-sm text-ok-content">
             {{ m }}
           </p>
         }
         @if (error(); as e) {
-          <p role="alert" class="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p
+            role="alert"
+            class="mt-6 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger-content"
+          >
             {{ e }}
           </p>
         }
 
         <form class="mt-8 space-y-8" [formGroup]="form" (ngSubmit)="save()" novalidate>
           <fieldset
-            class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
             [disabled]="!canEdit()"
           >
-            <legend class="px-1 text-sm font-medium text-slate-900">Métadonnées</legend>
+            <legend class="px-1 text-sm font-medium text-content">Métadonnées</legend>
             <div class="mt-4 grid grid-cols-2 gap-4">
               @for (field of metaFields; track field.key) {
                 <label class="block text-sm">
-                  <span class="text-slate-700">{{ field.label }}</span>
+                  <span class="text-content-muted">{{ field.label }}</span>
                   <input
                     type="number"
                     [formControlName]="field.key"
                     [attr.aria-label]="field.label"
-                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
-                           focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30
-                           disabled:bg-slate-50"
+                    class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
+                           focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30
+                           disabled:bg-sunken"
                   />
                 </label>
               }
@@ -117,59 +123,59 @@ import {
           </fieldset>
 
           <fieldset
-            class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
             [disabled]="!canEdit()"
           >
-            <legend class="px-1 text-sm font-medium text-slate-900">Contenu et structure</legend>
+            <legend class="px-1 text-sm font-medium text-content">Contenu et structure</legend>
             <div class="mt-4 grid grid-cols-2 gap-4">
               @for (field of contentFields; track field.key) {
                 <label class="block text-sm">
-                  <span class="text-slate-700">{{ field.label }}</span>
+                  <span class="text-content-muted">{{ field.label }}</span>
                   <input
                     type="number"
                     [formControlName]="field.key"
                     [attr.aria-label]="field.label"
-                    class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
-                           focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30
-                           disabled:bg-slate-50"
+                    class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
+                           focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30
+                           disabled:bg-sunken"
                   />
                 </label>
               }
             </div>
-            <label class="mt-4 flex items-center gap-2 text-sm text-slate-700">
+            <label class="mt-4 flex items-center gap-2 text-sm text-content-muted">
               <input
                 type="checkbox"
                 formControlName="detectRegressions"
-                class="rounded border-slate-300"
+                class="rounded border-field"
               />
               Comparer chaque scan au précédent (détection de régressions)
             </label>
           </fieldset>
 
           <fieldset
-            class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
             [disabled]="!canEdit()"
           >
-            <legend class="px-1 text-sm font-medium text-slate-900">
+            <legend class="px-1 text-sm font-medium text-content">
               Critères actifs ({{ enabledChecks().length }} / {{ checks().length }})
             </legend>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-content-subtle">
               Un critère désactivé n'est ni analysé ni compté dans le score.
             </p>
             <div class="mt-4 grid grid-cols-2 gap-2">
               @for (check of checks(); track check.id) {
-                <label class="flex items-start gap-2 text-sm text-slate-700">
+                <label class="flex items-start gap-2 text-sm text-content-muted">
                   <input
                     type="checkbox"
                     [checked]="isCheckEnabled(check.id)"
                     [disabled]="!canEdit()"
                     (change)="toggleCheck(check.id)"
                     [attr.aria-label]="check.title"
-                    class="mt-0.5 rounded border-slate-300"
+                    class="mt-0.5 rounded border-field"
                   />
                   <span>
                     {{ check.title }}
-                    <span class="block text-xs text-slate-400">{{ check.group }}</span>
+                    <span class="block text-xs text-content-subtle">{{ check.group }}</span>
                   </span>
                 </label>
               }
@@ -177,7 +183,10 @@ import {
           </fieldset>
 
           @if (issues().length > 0) {
-            <ul role="alert" class="space-y-1 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            <ul
+              role="alert"
+              class="space-y-1 rounded-lg bg-danger-surface px-4 py-3 text-sm text-danger-content"
+            >
               @for (issue of issues(); track issue.field) {
                 <li>{{ issue.message }}</li>
               }
@@ -189,8 +198,8 @@ import {
               <button
                 type="submit"
                 [disabled]="saving() || issues().length > 0"
-                class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white
-                       hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+                class="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-on-accent
+                       hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
               </button>
@@ -198,14 +207,14 @@ import {
                 type="button"
                 (click)="resetToDefaults()"
                 [disabled]="saving()"
-                class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                class="rounded-lg border border-field px-4 py-2 text-sm text-content-muted hover:bg-sunken"
               >
                 Réinitialiser
               </button>
               <button
                 type="button"
                 (click)="exportProfile()"
-                class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                class="rounded-lg border border-field px-4 py-2 text-sm text-content-muted hover:bg-sunken"
               >
                 Exporter
               </button>
@@ -214,14 +223,14 @@ import {
                   type="button"
                   (click)="remove()"
                   [disabled]="saving()"
-                  class="ml-auto rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                  class="ml-auto rounded-lg border border-danger-content px-4 py-2 text-sm text-danger-content hover:bg-danger-surface"
                 >
                   Supprimer
                 </button>
               }
             </div>
           } @else {
-            <p class="text-sm text-slate-500">
+            <p class="text-sm text-content-subtle">
               Consultation seule — l'édition des profils est réservée aux administrateurs.
             </p>
           }

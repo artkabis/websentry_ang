@@ -21,8 +21,8 @@ import { ProfilesApi } from '../../core/profiles/profiles.api';
     <main class="mx-auto max-w-4xl px-4 py-10">
       <header class="flex items-start justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">Profils par gamme</h1>
-          <p class="mt-1 text-sm text-slate-500">
+          <h1 class="text-2xl font-semibold text-content">Profils par gamme</h1>
+          <p class="mt-1 text-sm text-content-subtle">
             Chaque gamme porte ses propres règles d'analyse.
             <strong>default</strong> s'applique quand aucune gamme n'est détectée.
           </p>
@@ -31,7 +31,7 @@ import { ProfilesApi } from '../../core/profiles/profiles.api';
           <button
             type="button"
             (click)="createProfile()"
-            class="shrink-0 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+            class="shrink-0 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong"
           >
             Nouveau profil
           </button>
@@ -39,29 +39,30 @@ import { ProfilesApi } from '../../core/profiles/profiles.api';
       </header>
 
       @if (error(); as message) {
-        <p role="alert" class="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          class="mt-6 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger-content"
+        >
           {{ message }}
         </p>
       }
 
       @if (loading()) {
-        <p class="mt-6 text-sm text-slate-500" role="status">Chargement des profils…</p>
+        <p class="mt-6 text-sm text-content-subtle" role="status">Chargement des profils…</p>
       } @else if (profiles().length === 0) {
-        <p class="mt-6 text-sm text-slate-500">Aucun profil enregistré.</p>
+        <p class="mt-6 text-sm text-content-subtle">Aucun profil enregistré.</p>
       } @else {
-        <ul
-          class="mt-6 divide-y divide-slate-200 rounded-xl bg-white shadow-sm ring-1 ring-slate-200"
-        >
+        <ul class="mt-6 divide-y divide-line rounded-xl bg-panel shadow-sm ring-1 ring-line">
           @for (profile of profiles(); track profile.profile) {
             <li class="flex items-center justify-between gap-4 px-4 py-3">
               <div class="min-w-0">
                 <a
                   [routerLink]="['/profils', profile.profile]"
-                  class="text-sm font-medium text-brand-700 hover:underline"
+                  class="text-sm font-medium text-brand-text hover:underline"
                 >
                   {{ profile.label }}
                 </a>
-                <p class="truncate text-xs text-slate-500">
+                <p class="truncate text-xs text-content-subtle">
                   <code>{{ profile.profile }}</code>
                   · version {{ profile.version }} · modifié le
                   {{ profile.updatedAt | date: 'dd/MM/yyyy HH:mm' }}
@@ -70,14 +71,18 @@ import { ProfilesApi } from '../../core/profiles/profiles.api';
                   }
                 </p>
                 @if (profile.description) {
-                  <p class="mt-0.5 truncate text-xs text-slate-400">{{ profile.description }}</p>
+                  <p class="mt-0.5 truncate text-xs text-content-subtle">
+                    {{ profile.description }}
+                  </p>
                 }
               </div>
 
               @if (profile.profile === 'default') {
                 <!-- Le repli universel n'est pas supprimable : sans lui, une
                      gamme non détectée n'aurait plus aucun réglage. -->
-                <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                <span
+                  class="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-xs text-content-subtle"
+                >
                   Repli
                 </span>
               }

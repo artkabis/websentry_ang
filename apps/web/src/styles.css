@@ -1,12 +1,108 @@
 @import 'tailwindcss';
 
 /*
- * Tailwind CSS 4 — configuration par directives CSS, sans fichier de config JS.
- * Les jetons de couleur reprennent la charte de la v1.
+ * Jetons de design — une seule définition, deux thèmes.
+ *
+ * Chaque jeton porte un RÔLE, jamais une teinte : `surface`, `panel`,
+ * `content-muted`, `danger-surface`. Une classe qui dit `bg-slate-100` fige un
+ * gris clair dans le gabarit et se retrouve illisible sur fond sombre ; une
+ * classe qui dit `bg-sunken` décrit ce qu'on veut, et les deux thèmes y
+ * répondent chacun à leur façon.
+ *
+ * La bascule passe par `light-dark()` et `color-scheme`, et non par un doublon
+ * de tout le bloc sous `@media (prefers-color-scheme: dark)` : une valeur, un
+ * endroit. Le navigateur choisit selon le `color-scheme` de la racine, ce qui
+ * accorde du même coup les contrôles natifs, les barres de défilement et les
+ * champs de formulaire — qu'aucune feuille de style ne repeint proprement.
+ *
+ * Tous les couples réellement employés — texte sur fond, bordure de contrôle
+ * sur son entourage — tiennent WCAG 2.2 AA dans LES DEUX thèmes ; c'est vérifié
+ * dans le navigateur par la suite Playwright, sur les couleurs calculées et non
+ * sur les valeurs déclarées ici.
  */
+
+:root {
+  /* Aucun thème imposé : la préférence du système décide. */
+  color-scheme: light dark;
+}
+
+:root[data-theme='clair'] {
+  color-scheme: light;
+}
+
+:root[data-theme='sombre'] {
+  color-scheme: dark;
+}
+
 @theme {
-  --color-brand-50: oklch(0.97 0.02 250);
-  --color-brand-500: oklch(0.58 0.18 250);
-  --color-brand-600: oklch(0.51 0.18 250);
-  --color-brand-700: oklch(0.44 0.16 250);
+  /* ── Fonds, du plus lointain au plus proche ───────────────────────────── */
+  --color-surface: light-dark(#f8fafc, oklch(0.19 0.02 250));
+  --color-panel: light-dark(#ffffff, oklch(0.235 0.022 250));
+  --color-sunken: light-dark(#f1f5f9, oklch(0.28 0.022 250));
+
+  /* ── Texte, du plus affirmé au plus discret ───────────────────────────── */
+  --color-content: light-dark(#0f172a, oklch(0.97 0.01 250));
+  --color-content-muted: light-dark(#475569, oklch(0.8 0.02 250));
+  --color-content-subtle: light-dark(#5b6a7d, oklch(0.7 0.02 250));
+  /* Texte posé sur un aplat de couleur : bouton, badge plein. */
+  --color-on-accent: #ffffff;
+
+  /* ── Traits ───────────────────────────────────────────────────────────── */
+  /* Décoratif : sépare sans rien signifier. Aucun seuil de contraste. */
+  --color-line: light-dark(#e2e8f0, oklch(0.34 0.02 250));
+  /* Bordure de CONTRÔLE : elle dit où commence un champ. WCAG 1.4.11 → 3:1. */
+  --color-field: light-dark(#78879a, oklch(0.55 0.03 250));
+
+  /* ── Marque ───────────────────────────────────────────────────────────── */
+  --color-brand: light-dark(oklch(0.51 0.18 250), oklch(0.54 0.19 250));
+  --color-brand-strong: light-dark(oklch(0.44 0.16 250), oklch(0.48 0.18 250));
+  /* Marque en TEXTE sur un fond neutre — un lien, jamais un aplat. */
+  --color-brand-text: light-dark(oklch(0.44 0.16 250), oklch(0.8 0.12 250));
+  --color-brand-surface: light-dark(oklch(0.97 0.02 250), oklch(0.27 0.05 250));
+
+  /* ── États ────────────────────────────────────────────────────────────── */
+  --color-danger-surface: light-dark(#fef2f2, oklch(0.27 0.05 25));
+  --color-danger-content: light-dark(#b91c1c, oklch(0.8 0.12 25));
+  --color-danger-solid: light-dark(#b91c1c, oklch(0.55 0.19 25));
+
+  --color-warn-surface: light-dark(#fffbeb, oklch(0.28 0.05 75));
+  --color-warn-content: light-dark(#92400e, oklch(0.85 0.11 75));
+  --color-warn-solid: light-dark(#a16207, oklch(0.55 0.13 75));
+  --color-warn-solid-hover: light-dark(#854d0e, oklch(0.49 0.12 75));
+
+  --color-ok-surface: light-dark(#ecfdf5, oklch(0.27 0.05 160));
+  --color-ok-content: light-dark(#065f46, oklch(0.82 0.12 160));
+
+  --color-info-surface: light-dark(#f0f9ff, oklch(0.27 0.05 230));
+  --color-info-content: light-dark(#075985, oklch(0.83 0.09 230));
+}
+
+/*
+ * Le focus reste visible, sur les deux thèmes.
+ *
+ * L'anneau par défaut de Tailwind s'appuie sur une couleur fixe : sur fond
+ * sombre, il disparaît. Celui-ci suit la marque, et double d'un liseré de la
+ * couleur du fond pour rester lisible même posé sur un aplat coloré.
+ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-brand-text);
+    outline-offset: 2px;
+  }
+
+  /*
+   * Une animation qui ne peut pas être coupée est une animation subie.
+   * `prefers-reduced-motion` est un réglage système, pas une préférence de
+   * confort : on le respecte partout, sans exception à décider écran par écran.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

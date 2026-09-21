@@ -40,10 +40,19 @@ export default defineConfig({
 
   // Le serveur de développement est démarré par Playwright lui-même : aucun
   // enchaînement manuel à tenir dans la CI.
-  webServer: {
-    command: 'pnpm exec ng serve --port 4200',
-    url: 'http://localhost:4200',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  //
+  // Sauf si `E2E_BASE_URL` désigne une application DÉJÀ servie — le bundle de
+  // production, typiquement. Démarrer alors le serveur de développement ferait
+  // attendre une compilation dont aucun scénario ne se sert, et surtout ferait
+  // vérifier autre chose que ce qui sera livré.
+  ...(process.env.E2E_BASE_URL
+    ? {}
+    : {
+        webServer: {
+          command: 'pnpm exec ng serve --port 4200',
+          url: 'http://localhost:4200',
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+      }),
 });

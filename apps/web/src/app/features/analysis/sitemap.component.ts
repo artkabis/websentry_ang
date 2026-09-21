@@ -29,10 +29,10 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
   template: `
     <main class="mx-auto max-w-4xl px-4 py-10">
       <header>
-        <h1 class="text-2xl font-semibold text-slate-900">Découvrir les pages d'un site</h1>
-        <p class="mt-1 text-sm text-slate-500">
+        <h1 class="text-2xl font-semibold text-content">Découvrir les pages d'un site</h1>
+        <p class="mt-1 text-sm text-content-subtle">
           Le sitemap est lu, les pages sont listées, et la sélection part vers
-          <a routerLink="/analyse/lot" class="text-brand-700 hover:underline">l'analyse de lot</a>.
+          <a routerLink="/analyse/lot" class="text-brand-text hover:underline">l'analyse de lot</a>.
         </p>
       </header>
 
@@ -46,19 +46,19 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
             (ngModelChange)="url.set($event)"
             placeholder="https://exemple.fr/ ou https://exemple.fr/sitemap.xml"
             required
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            class="w-full rounded-lg border border-field px-3 py-2 text-sm"
           />
         </label>
         <button
           type="submit"
           [disabled]="!canDetect()"
-          class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
         >
           {{ phase() === 'detecting' || phase() === 'parsing' ? 'Lecture…' : 'Lire le sitemap' }}
         </button>
       </form>
 
-      <fieldset class="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+      <fieldset class="mt-3 flex flex-wrap items-center gap-4 text-sm text-content-muted">
         <legend class="sr-only">Options de lecture</legend>
         <label class="flex items-center gap-2">
           <input
@@ -66,7 +66,7 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
             name="priority"
             [ngModel]="onlyPrioritized()"
             (ngModelChange)="onlyPrioritized.set($event)"
-            class="size-4 rounded border-slate-300"
+            class="size-4 rounded border-field"
           />
           N'afficher que les pages portant une priorité déclarée
         </label>
@@ -79,22 +79,22 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
             [max]="maxUrls"
             [ngModel]="limit()"
             (ngModelChange)="limit.set($event)"
-            class="w-20 rounded-lg border border-slate-300 px-2 py-1"
+            class="w-20 rounded-lg border border-field px-2 py-1"
           />
         </label>
       </fieldset>
 
-      <p role="status" aria-live="polite" class="mt-4 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-4 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       @if (error(); as message) {
-        <div class="mt-3 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-3 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="detect()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
@@ -102,13 +102,13 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
       } @else if (phase() === 'detecting' || phase() === 'parsing') {
         <div class="mt-3 space-y-2" aria-hidden="true">
           @for (row of skeleton; track row) {
-            <div class="h-10 animate-pulse rounded-lg bg-slate-100"></div>
+            <div class="h-10 animate-pulse rounded-lg bg-sunken"></div>
           }
         </div>
       } @else if (phase() === 'ready') {
         @if (entries().length === 0) {
-          <div class="mt-3 rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
-            <p class="text-sm text-slate-600">
+          <div class="mt-3 rounded-xl bg-panel p-8 text-center ring-1 ring-line">
+            <p class="text-sm text-content-muted">
               Ce sitemap ne contient aucune page exploitable.
               @if (onlyPrioritized()) {
                 Le filtre sur la priorité déclarée en écarte peut-être la totalité.
@@ -116,14 +116,14 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
             </p>
             <a
               routerLink="/analyse"
-              class="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+              class="mt-3 inline-block text-sm font-medium text-brand-text hover:underline"
             >
               Analyser une page précise
             </a>
           </div>
         } @else {
           @if (truncated()) {
-            <p class="mt-3 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            <p class="mt-3 rounded-lg bg-warn-surface px-4 py-2 text-sm text-warn-content">
               {{ discovered() }} page(s) découverte(s), {{ entries().length }} retenue(s) par le
               plafond. Augmentez-le pour en voir davantage.
             </p>
@@ -133,22 +133,22 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
             <button
               type="button"
               (click)="toggleAll()"
-              class="rounded-lg px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50"
+              class="rounded-lg px-3 py-1.5 text-sm text-content-muted ring-1 ring-field hover:bg-sunken"
             >
               {{ allSelected() ? 'Tout désélectionner' : 'Tout sélectionner' }}
             </button>
-            <span class="text-sm text-slate-500">{{ selectionHint() }}</span>
+            <span class="text-sm text-content-subtle">{{ selectionHint() }}</span>
             <button
               type="button"
               (click)="sendToBatch()"
               [disabled]="selected().size === 0"
-              class="ml-auto rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+              class="ml-auto rounded-lg bg-brand px-4 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
             >
               Analyser la sélection
             </button>
           </div>
 
-          <ul class="mt-3 divide-y divide-slate-100 rounded-xl bg-white ring-1 ring-slate-200">
+          <ul class="mt-3 divide-y divide-line rounded-xl bg-panel ring-1 ring-line">
             @for (entry of entries(); track entry.url) {
               <li class="flex items-center gap-3 px-4 py-2">
                 <input
@@ -156,11 +156,11 @@ type Phase = 'idle' | 'detecting' | 'parsing' | 'ready' | 'error';
                   [id]="'url-' + entry.url"
                   [checked]="selected().has(entry.url)"
                   (change)="toggle(entry.url)"
-                  class="size-4 rounded border-slate-300"
+                  class="size-4 rounded border-field"
                 />
                 <label [for]="'url-' + entry.url" class="min-w-0 flex-1 cursor-pointer">
-                  <span class="block truncate text-sm text-slate-800">{{ entry.url }}</span>
-                  <span class="block text-xs text-slate-500">
+                  <span class="block truncate text-sm text-content">{{ entry.url }}</span>
+                  <span class="block text-xs text-content-subtle">
                     @if (entry.priority !== null) {
                       priorité {{ entry.priority }}
                     }

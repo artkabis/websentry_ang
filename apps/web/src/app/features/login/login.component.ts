@@ -16,14 +16,14 @@ import { AuthService } from '../../core/auth/auth.service';
   imports: [ReactiveFormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <main class="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <section class="w-full max-w-sm rounded-xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
-        <h1 class="text-xl font-semibold text-slate-900">WebSentry</h1>
-        <p class="mt-1 text-sm text-slate-500">Connectez-vous pour accéder à vos audits.</p>
+    <main class="flex min-h-screen items-center justify-center bg-sunken px-4">
+      <section class="w-full max-w-sm rounded-xl bg-panel p-8 shadow-sm ring-1 ring-line">
+        <h1 class="text-xl font-semibold text-content">WebSentry</h1>
+        <p class="mt-1 text-sm text-content-subtle">Connectez-vous pour accéder à vos audits.</p>
 
         <form class="mt-6 space-y-4" [formGroup]="form" (ngSubmit)="submit()" novalidate>
           <div>
-            <label for="username" class="block text-sm font-medium text-slate-700">
+            <label for="username" class="block text-sm font-medium text-content-muted">
               Identifiant
             </label>
             <input
@@ -32,20 +32,20 @@ import { AuthService } from '../../core/auth/auth.service';
               formControlName="username"
               autocomplete="username"
               maxlength="64"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
-                     focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
+                     focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
               [attr.aria-invalid]="isInvalid('username')"
               [attr.aria-describedby]="isInvalid('username') ? 'username-error' : null"
             />
             @if (isInvalid('username')) {
-              <p id="username-error" class="mt-1 text-xs text-red-600">
+              <p id="username-error" class="mt-1 text-xs text-danger-content">
                 L'identifiant est requis (64 caractères maximum).
               </p>
             }
           </div>
 
           <div>
-            <label for="password" class="block text-sm font-medium text-slate-700">
+            <label for="password" class="block text-sm font-medium text-content-muted">
               Mot de passe
             </label>
             <input
@@ -54,13 +54,13 @@ import { AuthService } from '../../core/auth/auth.service';
               formControlName="password"
               autocomplete="current-password"
               maxlength="256"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm
-                     focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm
+                     focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
               [attr.aria-invalid]="isInvalid('password')"
               [attr.aria-describedby]="isInvalid('password') ? 'password-error' : null"
             />
             @if (isInvalid('password')) {
-              <p id="password-error" class="mt-1 text-xs text-red-600">
+              <p id="password-error" class="mt-1 text-xs text-danger-content">
                 Le mot de passe est requis.
               </p>
             }
@@ -71,7 +71,10 @@ import { AuthService } from '../../core/auth/auth.service';
               Message rendu par interpolation Angular, donc échappé : même si l'API
               renvoyait du balisage, il s'afficherait comme du texte.
             -->
-            <p role="alert" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p
+              role="alert"
+              class="rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger-content"
+            >
               {{ serverError() }}
             </p>
           }
@@ -79,8 +82,8 @@ import { AuthService } from '../../core/auth/auth.service';
           <button
             type="submit"
             [disabled]="submitting()"
-            class="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white
-                   hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
+            class="w-full rounded-lg bg-brand px-3 py-2 text-sm font-medium text-on-accent
+                   hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-60"
           >
             {{ submitting() ? 'Connexion…' : 'Se connecter' }}
           </button>

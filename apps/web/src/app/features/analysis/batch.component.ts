@@ -47,10 +47,10 @@ const MAX_URLS = 200;
   template: `
     <main class="mx-auto max-w-4xl px-4 py-10">
       <header>
-        <h1 class="text-2xl font-semibold text-slate-900">Analyser un lot</h1>
-        <p class="mt-1 text-sm text-slate-500">
+        <h1 class="text-2xl font-semibold text-content">Analyser un lot</h1>
+        <p class="mt-1 text-sm text-content-subtle">
           Une adresse par ligne, jusqu'à {{ maxUrls }}. Les pages s'affichent au fil de l'eau.
-          <a routerLink="/analyse/sitemap" class="text-brand-700 hover:underline">
+          <a routerLink="/analyse/sitemap" class="text-brand-text hover:underline">
             Découvrir les pages par le sitemap
           </a>
         </p>
@@ -58,14 +58,14 @@ const MAX_URLS = 200;
 
       <form class="mt-6" (ngSubmit)="start()">
         <label class="block">
-          <span class="text-sm font-medium text-slate-700">Adresses à analyser</span>
+          <span class="text-sm font-medium text-content-muted">Adresses à analyser</span>
           <textarea
             name="urls"
             rows="6"
             [ngModel]="raw()"
             (ngModelChange)="raw.set($event)"
             placeholder="https://exemple.fr/&#10;https://exemple.fr/contact"
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+            class="mt-1 w-full rounded-lg border border-field px-3 py-2 font-mono text-sm"
           ></textarea>
         </label>
 
@@ -73,7 +73,7 @@ const MAX_URLS = 200;
           <button
             type="submit"
             [disabled]="!canStart()"
-            class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             {{ phase() === 'running' ? 'Analyse en cours…' : 'Analyser le lot' }}
           </button>
@@ -81,26 +81,26 @@ const MAX_URLS = 200;
             <button
               type="button"
               (click)="cancel()"
-              class="rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
+              class="rounded-lg px-3 py-2 text-sm text-content-muted hover:bg-sunken"
             >
               Interrompre
             </button>
           }
-          <span class="text-sm text-slate-500">{{ countHint() }}</span>
+          <span class="text-sm text-content-subtle">{{ countHint() }}</span>
         </div>
       </form>
 
-      <p role="status" aria-live="polite" class="mt-4 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-4 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       @if (error(); as message) {
-        <div class="mt-3 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-3 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="start()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
@@ -108,11 +108,11 @@ const MAX_URLS = 200;
       }
 
       @if (phase() === 'running') {
-        <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div class="mt-4 h-2 overflow-hidden rounded-full bg-sunken">
           <!-- La barre mesure des pages TERMINÉES : une barre estimée ment dès
                que le site analysé est lent. -->
           <div
-            class="h-full rounded-full bg-brand-600 transition-[width] duration-300"
+            class="h-full rounded-full bg-brand transition-[width] duration-300"
             role="progressbar"
             [attr.aria-valuenow]="rows().length"
             [attr.aria-valuemin]="0"
@@ -125,46 +125,46 @@ const MAX_URLS = 200;
 
       @if (rows().length > 0) {
         <dl class="mt-4 grid grid-cols-3 gap-3">
-          <div class="rounded-lg bg-white p-3 text-center ring-1 ring-slate-200">
-            <dt class="text-xs text-slate-500">Analysées</dt>
-            <dd class="mt-1 text-lg font-semibold text-slate-900">{{ rows().length }}</dd>
+          <div class="rounded-lg bg-panel p-3 text-center ring-1 ring-line">
+            <dt class="text-xs text-content-subtle">Analysées</dt>
+            <dd class="mt-1 text-lg font-semibold text-content">{{ rows().length }}</dd>
           </div>
-          <div class="rounded-lg bg-white p-3 text-center ring-1 ring-slate-200">
-            <dt class="text-xs text-slate-500">En échec</dt>
-            <dd class="mt-1 text-lg font-semibold text-slate-900">{{ failed() }}</dd>
+          <div class="rounded-lg bg-panel p-3 text-center ring-1 ring-line">
+            <dt class="text-xs text-content-subtle">En échec</dt>
+            <dd class="mt-1 text-lg font-semibold text-content">{{ failed() }}</dd>
           </div>
-          <div class="rounded-lg bg-white p-3 text-center ring-1 ring-slate-200">
-            <dt class="text-xs text-slate-500">Score moyen</dt>
-            <dd class="mt-1 text-lg font-semibold text-slate-900">{{ averageScore() }}</dd>
+          <div class="rounded-lg bg-panel p-3 text-center ring-1 ring-line">
+            <dt class="text-xs text-content-subtle">Score moyen</dt>
+            <dd class="mt-1 text-lg font-semibold text-content">{{ averageScore() }}</dd>
           </div>
         </dl>
 
-        <ul class="mt-4 divide-y divide-slate-100 rounded-xl bg-white ring-1 ring-slate-200">
+        <ul class="mt-4 divide-y divide-line rounded-xl bg-panel ring-1 ring-line">
           @for (row of rows(); track row.url) {
             <li>
               <button
                 type="button"
-                class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-sunken"
                 [attr.aria-expanded]="isOpen(row.url)"
                 [disabled]="!row.report"
                 (click)="toggle(row.url)"
               >
                 <span [class]="badgeClass(row)">{{ rowScore(row) }}</span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm text-slate-800">{{ row.url }}</span>
+                  <span class="block truncate text-sm text-content">{{ row.url }}</span>
                   @if (!row.ok) {
-                    <span class="block text-xs text-red-600">Analyse impossible</span>
+                    <span class="block text-xs text-danger-content">Analyse impossible</span>
                   }
                 </span>
                 @if (row.report) {
-                  <span class="text-xs text-slate-400" aria-hidden="true">
+                  <span class="text-xs text-content-subtle" aria-hidden="true">
                     {{ isOpen(row.url) ? 'replier' : 'voir le rapport' }}
                   </span>
                 }
               </button>
 
               @if (isOpen(row.url) && row.report; as report) {
-                <div class="border-t border-slate-100 bg-slate-50 px-4 py-4">
+                <div class="border-t border-line bg-sunken px-4 py-4">
                   <ws-report-view
                     [report]="report"
                     [filter]="filter()"
@@ -176,9 +176,9 @@ const MAX_URLS = 200;
           }
         </ul>
 
-        <p class="mt-4 text-xs text-slate-400">
+        <p class="mt-4 text-xs text-content-subtle">
           Les pages analysées rejoignent
-          <a routerLink="/historique" class="text-brand-700 hover:underline">l'historique</a>
+          <a routerLink="/historique" class="text-brand-text hover:underline">l'historique</a>
           au fil du lot.
         </p>
       }
@@ -344,9 +344,9 @@ export class BatchComponent {
 
   badgeClass(row: BatchRow): string {
     const base = 'inline-flex size-9 items-center justify-center rounded-lg text-sm font-semibold ';
-    if (!row.report) return `${base}bg-slate-100 text-slate-500`;
-    if (row.report.globalScore >= 4) return `${base}bg-emerald-100 text-emerald-800`;
-    if (row.report.globalScore >= 3) return `${base}bg-amber-100 text-amber-800`;
-    return `${base}bg-red-100 text-red-800`;
+    if (!row.report) return `${base}bg-sunken text-content-subtle`;
+    if (row.report.globalScore >= 4) return `${base}bg-ok-surface text-ok-content`;
+    if (row.report.globalScore >= 3) return `${base}bg-warn-surface text-warn-content`;
+    return `${base}bg-danger-surface text-danger-content`;
   }
 }

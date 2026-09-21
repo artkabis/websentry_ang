@@ -17,9 +17,9 @@ import { AuthService } from '../../core/auth/auth.service';
     <main class="mx-auto max-w-4xl px-4 py-10">
       <header class="flex items-center justify-between">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">Tableau de bord</h1>
+          <h1 class="text-2xl font-semibold text-content">Tableau de bord</h1>
           @if (auth.user(); as user) {
-            <p class="mt-1 text-sm text-slate-500">
+            <p class="mt-1 text-sm text-content-subtle">
               Connecté en tant que <strong>{{ user.username }}</strong> — {{ auth.role() }}
             </p>
           }
@@ -27,73 +27,73 @@ import { AuthService } from '../../core/auth/auth.service';
         <button
           type="button"
           (click)="logout()"
-          class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700
-                 hover:bg-slate-50"
+          class="rounded-lg border border-field px-3 py-2 text-sm font-medium text-content-muted
+                 hover:bg-sunken"
         >
           Se déconnecter
         </button>
       </header>
 
-      <section class="mt-8 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-        <h2 class="text-base font-medium text-slate-900">Profils par gamme</h2>
-        <p class="mt-1 text-sm text-slate-500">
+      <section class="mt-8 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
+        <h2 class="text-base font-medium text-content">Profils par gamme</h2>
+        <p class="mt-1 text-sm text-content-subtle">
           Règles d'analyse appliquées selon la gamme du site audité.
         </p>
         <a
           routerLink="/profils"
-          class="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+          class="mt-3 inline-block text-sm font-medium text-brand-text hover:underline"
         >
           Consulter les profils
         </a>
       </section>
 
-      <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-        <h2 class="text-base font-medium text-slate-900">Analyser une page</h2>
-        <p class="mt-1 text-sm text-slate-500">
+      <section class="mt-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
+        <h2 class="text-base font-medium text-content">Analyser une page</h2>
+        <p class="mt-1 text-sm text-content-subtle">
           Audit d'une URL, critère par critère, avec les corrections prioritaires.
         </p>
         <a
           routerLink="/analyse"
-          class="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+          class="mt-3 inline-block text-sm font-medium text-brand-text hover:underline"
         >
           Lancer une analyse
         </a>
       </section>
 
-      <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-        <h2 class="text-base font-medium text-slate-900">Historique des scans</h2>
-        <p class="mt-1 text-sm text-slate-500">
+      <section class="mt-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
+        <h2 class="text-base font-medium text-content">Historique des scans</h2>
+        <p class="mt-1 text-sm text-content-subtle">
           Audits passés, site par site, et comparaison de deux analyses.
         </p>
         <a
           routerLink="/historique"
-          class="mt-3 inline-block text-sm font-medium text-brand-600 hover:underline"
+          class="mt-3 inline-block text-sm font-medium text-brand-text hover:underline"
         >
           Consulter l'historique
         </a>
       </section>
 
       @if (auth.isAdmin()) {
-        <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <h2 class="text-base font-medium text-slate-900">Administration</h2>
-          <p class="mt-1 text-sm text-slate-500">
+        <section class="mt-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
+          <h2 class="text-base font-medium text-content">Administration</h2>
+          <p class="mt-1 text-sm text-content-subtle">
             Section réservée aux rangs administrateur et supérieurs.
           </p>
         </section>
       }
 
       @if (auth.user(); as user) {
-        <section class="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <h2 class="text-base font-medium text-slate-900">Permissions accordées</h2>
+        <section class="mt-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
+          <h2 class="text-base font-medium text-content">Permissions accordées</h2>
           @if (user.permissions.length === 0) {
-            <p class="mt-1 text-sm text-slate-500">Aucune permission fine accordée.</p>
+            <p class="mt-1 text-sm text-content-subtle">Aucune permission fine accordée.</p>
           } @else {
-            <ul class="mt-2 space-y-1 text-sm text-slate-600">
+            <ul class="mt-2 space-y-1 text-sm text-content-muted">
               @for (permission of user.permissions; track permission.permission) {
                 <li>
                   <code>{{ permission.permission }}</code>
                   @if (permission.gammes) {
-                    <span class="text-slate-400">
+                    <span class="text-content-subtle">
                       — gammes : {{ permission.gammes.join(', ') }}</span
                     >
                   }

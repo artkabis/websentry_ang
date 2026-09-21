@@ -50,8 +50,8 @@ const SKELETON_ROWS = 6;
     <main class="mx-auto max-w-6xl px-4 py-10">
       <header class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 class="text-2xl font-semibold text-slate-900">Historique des scans</h1>
-          <p class="mt-1 text-sm text-slate-500">
+          <h1 class="text-2xl font-semibold text-content">Historique des scans</h1>
+          <p class="mt-1 text-sm text-content-subtle">
             Un site par ligne, résumé par son audit le plus récent.
           </p>
         </div>
@@ -59,54 +59,54 @@ const SKELETON_ROWS = 6;
 
       <!-- ── Filtres ─────────────────────────────────────────────────────── -->
       <form
-        class="mt-6 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200"
+        class="mt-6 rounded-xl bg-panel p-4 shadow-sm ring-1 ring-line"
         (ngSubmit)="applyDraft()"
       >
         <fieldset class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <legend class="sr-only">Filtres de recherche</legend>
 
           <label class="block">
-            <span class="text-xs font-medium text-slate-600">Recherche</span>
+            <span class="text-xs font-medium text-content-muted">Recherche</span>
             <input
               type="search"
               name="q"
               [ngModel]="draftQ()"
               (ngModelChange)="draftQ.set($event)"
               placeholder="domaine ou EPJ"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm"
             />
           </label>
 
           <label class="block">
-            <span class="text-xs font-medium text-slate-600">Gamme</span>
+            <span class="text-xs font-medium text-content-muted">Gamme</span>
             <input
               type="text"
               name="gamme"
               [ngModel]="draftGamme()"
               (ngModelChange)="draftGamme.set($event)"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm"
             />
           </label>
 
           <label class="block">
-            <span class="text-xs font-medium text-slate-600">Analysé depuis le</span>
+            <span class="text-xs font-medium text-content-muted">Analysé depuis le</span>
             <input
               type="date"
               name="dateFrom"
               [ngModel]="draftDateFrom()"
               (ngModelChange)="draftDateFrom.set($event)"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm"
             />
           </label>
 
           <label class="block">
-            <span class="text-xs font-medium text-slate-600">Jusqu'au</span>
+            <span class="text-xs font-medium text-content-muted">Jusqu'au</span>
             <input
               type="date"
               name="dateTo"
               [ngModel]="draftDateTo()"
               (ngModelChange)="draftDateTo.set($event)"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-field px-3 py-2 text-sm"
             />
           </label>
         </fieldset>
@@ -114,7 +114,7 @@ const SKELETON_ROWS = 6;
         @if (issues().length > 0) {
           <ul class="mt-3 space-y-1" role="alert">
             @for (issue of issues(); track issue) {
-              <li class="text-sm text-red-700">{{ issue }}</li>
+              <li class="text-sm text-danger-content">{{ issue }}</li>
             }
           </ul>
         }
@@ -123,7 +123,7 @@ const SKELETON_ROWS = 6;
           <button
             type="submit"
             [disabled]="issues().length > 0"
-            class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             Filtrer
           </button>
@@ -131,7 +131,7 @@ const SKELETON_ROWS = 6;
             <button
               type="button"
               (click)="resetFilters()"
-              class="rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
+              class="rounded-lg px-3 py-2 text-sm text-content-muted hover:bg-sunken"
             >
               Réinitialiser
             </button>
@@ -140,17 +140,17 @@ const SKELETON_ROWS = 6;
       </form>
 
       <!-- ── Résultats ───────────────────────────────────────────────────── -->
-      <p role="status" aria-live="polite" class="mt-6 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-6 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       @if (error(); as message) {
-        <div class="mt-3 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-3 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="reload()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
@@ -160,29 +160,29 @@ const SKELETON_ROWS = 6;
              ne saute pas quand les données arrivent. -->
         <div class="mt-3 space-y-2" aria-hidden="true">
           @for (row of skeleton; track row) {
-            <div class="h-14 animate-pulse rounded-lg bg-slate-100"></div>
+            <div class="h-14 animate-pulse rounded-lg bg-sunken"></div>
           }
         </div>
       } @else if (sites().length === 0) {
-        <div class="mt-3 rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
+        <div class="mt-3 rounded-xl bg-panel p-8 text-center ring-1 ring-line">
           @if (filtersActive()) {
-            <p class="text-sm text-slate-600">Aucun site ne correspond à ces filtres.</p>
+            <p class="text-sm text-content-muted">Aucun site ne correspond à ces filtres.</p>
             <button
               type="button"
               (click)="resetFilters()"
-              class="mt-3 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+              class="mt-3 rounded-lg bg-brand px-3 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong"
             >
               Effacer les filtres
             </button>
           } @else {
-            <p class="text-sm text-slate-600">L'historique est vide.</p>
-            <p class="mt-1 text-sm text-slate-500">
+            <p class="text-sm text-content-muted">L'historique est vide.</p>
+            <p class="mt-1 text-sm text-content-subtle">
               Les audits apparaîtront ici dès le premier scan enregistré.
             </p>
           }
         </div>
       } @else {
-        <div class="mt-3 overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+        <div class="mt-3 overflow-x-auto rounded-xl bg-panel shadow-sm ring-1 ring-line">
           <table class="w-full text-left text-sm">
             <caption class="sr-only">
               Sites audités,
@@ -191,14 +191,14 @@ const SKELETON_ROWS = 6;
               }}
               au total
             </caption>
-            <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+            <thead class="border-b border-line text-xs uppercase text-content-subtle">
               <tr>
                 @for (column of columns; track column.key) {
                   <th scope="col" class="px-4 py-2" [attr.aria-sort]="ariaSort(column.key)">
                     <button
                       type="button"
                       (click)="sortBy(column.key)"
-                      class="inline-flex items-center gap-1 font-medium hover:text-slate-900"
+                      class="inline-flex items-center gap-1 font-medium hover:text-content"
                     >
                       {{ column.label }}
                       <span aria-hidden="true">{{ sortIndicator(column.key) }}</span>
@@ -209,24 +209,24 @@ const SKELETON_ROWS = 6;
                 <th scope="col" class="px-4 py-2">Dernier audit</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody class="divide-y divide-line">
               @for (site of sites(); track site.siteId) {
-                <tr class="hover:bg-slate-50">
+                <tr class="hover:bg-sunken">
                   <td class="px-4 py-3">
                     <a
                       routerLink="/historique/site"
                       [queryParams]="linkParams(site)"
                       [attr.aria-label]="summaryOf(site)"
-                      class="font-medium text-brand-700 hover:underline"
+                      class="font-medium text-brand-text hover:underline"
                     >
                       {{ site.domain }}
                     </a>
                     @if (site.epj) {
-                      <span class="ml-2 text-xs text-slate-400">{{ site.epj }}</span>
+                      <span class="ml-2 text-xs text-content-subtle">{{ site.epj }}</span>
                     }
                   </td>
                   <td class="px-4 py-3">
-                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                    <span class="rounded-full bg-sunken px-2 py-0.5 text-xs text-content-muted">
                       {{ site.gamme ?? 'sans gamme' }}
                     </span>
                   </td>
@@ -238,10 +238,10 @@ const SKELETON_ROWS = 6;
                          un lecteur d'écran et ambiguë en cas de daltonisme. -->
                     <span class="sr-only">sur 5, {{ scoreLabel(site.avgScore) }}</span>
                   </td>
-                  <td class="px-4 py-3 text-slate-600">{{ site.pageCount }}</td>
-                  <td class="px-4 py-3 text-slate-600">
+                  <td class="px-4 py-3 text-content-muted">{{ site.pageCount }}</td>
+                  <td class="px-4 py-3 text-content-muted">
                     {{ site.lastScan | date: 'dd/MM/yyyy HH:mm' }}
-                    <span class="block text-xs text-slate-400">
+                    <span class="block text-xs text-content-subtle">
                       {{ site.sessionCount }} audit(s)
                     </span>
                   </td>
@@ -257,18 +257,18 @@ const SKELETON_ROWS = 6;
               type="button"
               (click)="goToPage(filters().page - 1)"
               [disabled]="filters().page <= 1"
-              class="rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              class="rounded-lg px-3 py-2 text-sm text-content-muted hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
             >
               Page précédente
             </button>
-            <span class="text-sm text-slate-500">
+            <span class="text-sm text-content-subtle">
               Page {{ filters().page }} sur {{ totalPages() }}
             </span>
             <button
               type="button"
               (click)="goToPage(filters().page + 1)"
               [disabled]="filters().page >= totalPages()"
-              class="rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+              class="rounded-lg px-3 py-2 text-sm text-content-muted hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-40"
             >
               Page suivante
             </button>

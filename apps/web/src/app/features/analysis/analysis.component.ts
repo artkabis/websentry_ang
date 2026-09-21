@@ -47,10 +47,10 @@ const FILTER_ALL_VALUE = 'tous';
   template: `
     <main class="mx-auto max-w-4xl px-4 py-10">
       <header>
-        <h1 class="text-2xl font-semibold text-slate-900">Analyser une page</h1>
-        <p class="mt-1 text-sm text-slate-500">
+        <h1 class="text-2xl font-semibold text-content">Analyser une page</h1>
+        <p class="mt-1 text-sm text-content-subtle">
           Les critères sont évalués un par un ; le rapport s'affiche au fil de l'eau.
-          <a routerLink="/analyse/lot" class="text-brand-700 hover:underline">
+          <a routerLink="/analyse/lot" class="text-brand-text hover:underline">
             Analyser plusieurs pages
           </a>
         </p>
@@ -67,13 +67,13 @@ const FILTER_ALL_VALUE = 'tous';
             (ngModelChange)="url.set($event)"
             placeholder="https://exemple.fr/"
             required
-            class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            class="w-full rounded-lg border border-field px-3 py-2 text-sm"
           />
         </label>
         <button
           type="submit"
           [disabled]="!canStart()"
-          class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-on-accent hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
         >
           {{ phase() === 'running' ? 'Analyse en cours…' : 'Analyser' }}
         </button>
@@ -81,22 +81,22 @@ const FILTER_ALL_VALUE = 'tous';
           <button
             type="button"
             (click)="cancel()"
-            class="rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-100"
+            class="rounded-lg px-3 py-2 text-sm text-content-muted hover:bg-sunken"
           >
             Interrompre
           </button>
         }
       </form>
 
-      <p role="status" aria-live="polite" class="mt-4 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-4 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       <!-- ── Progression ─────────────────────────────────────────────────── -->
       @if (phase() === 'running') {
-        <div class="mt-4 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <div class="mt-4 rounded-xl bg-panel p-4 shadow-sm ring-1 ring-line">
           <div
-            class="h-2 overflow-hidden rounded-full bg-slate-100"
+            class="h-2 overflow-hidden rounded-full bg-sunken"
             role="progressbar"
             [attr.aria-valuenow]="completed()"
             [attr.aria-valuemin]="0"
@@ -106,7 +106,7 @@ const FILTER_ALL_VALUE = 'tous';
             <!-- La barre mesure des critères TERMINÉS, pas une minuterie : une
                  barre estimée ment dès que le site analysé est lent. -->
             <div
-              class="h-full rounded-full bg-brand-600 transition-[width] duration-300"
+              class="h-full rounded-full bg-brand transition-[width] duration-300"
               [style.width.%]="percent()"
             ></div>
           </div>
@@ -116,7 +116,7 @@ const FILTER_ALL_VALUE = 'tous';
               @for (check of liveChecks(); track check.checkId) {
                 <li class="flex items-center gap-2 text-sm">
                   <ws-status-badge [status]="check.status" />
-                  <span class="text-slate-700">{{ check.checkTitle }}</span>
+                  <span class="text-content-muted">{{ check.checkTitle }}</span>
                 </li>
               }
             </ul>
@@ -125,12 +125,12 @@ const FILTER_ALL_VALUE = 'tous';
       }
 
       @if (error(); as message) {
-        <div class="mt-4 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-4 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="start()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
@@ -141,9 +141,9 @@ const FILTER_ALL_VALUE = 'tous';
       @if (report(); as result) {
         <div class="mt-8">
           <ws-report-view [report]="result" [filter]="filter()" (filterChange)="setFilter($event)">
-            <p class="mt-6 text-xs text-slate-400">
+            <p class="mt-6 text-xs text-content-subtle">
               Analyse du {{ result.analyzedAt }} · {{ result.durationMs }} ms ·
-              <a routerLink="/historique" class="text-brand-700 hover:underline">
+              <a routerLink="/historique" class="text-brand-text hover:underline">
                 retrouver ce scan dans l'historique
               </a>
             </p>

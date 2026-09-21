@@ -33,15 +33,15 @@ import { formatScore, reportAvailable, reportStateLabel, scoreBadgeClass } from 
   template: `
     <main class="mx-auto max-w-5xl px-4 py-10">
       <nav class="text-sm">
-        <a routerLink="/historique" class="text-brand-700 hover:underline">
+        <a routerLink="/historique" class="text-brand-text hover:underline">
           ← Retour à l'historique
         </a>
       </nav>
 
       @if (session(); as audit) {
         <header class="mt-4">
-          <h1 class="text-2xl font-semibold text-slate-900">{{ audit.domain }}</h1>
-          <p class="mt-1 text-sm text-slate-500">
+          <h1 class="text-2xl font-semibold text-content">{{ audit.domain }}</h1>
+          <p class="mt-1 text-sm text-content-subtle">
             Audit du {{ audit.analyzedAt | date: 'dd/MM/yyyy HH:mm' }} ·
             {{ audit.pageCount }} page(s) · score moyen {{ score(audit.avgScore) }}
             @if (audit.gamme) {
@@ -51,17 +51,17 @@ import { formatScore, reportAvailable, reportStateLabel, scoreBadgeClass } from 
         </header>
       }
 
-      <p role="status" aria-live="polite" class="mt-6 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-6 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       @if (error(); as message) {
-        <div class="mt-3 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-3 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="reload()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
@@ -69,39 +69,39 @@ import { formatScore, reportAvailable, reportStateLabel, scoreBadgeClass } from 
       } @else if (loading()) {
         <div class="mt-3 space-y-2" aria-hidden="true">
           @for (row of skeleton; track row) {
-            <div class="h-14 animate-pulse rounded-lg bg-slate-100"></div>
+            <div class="h-14 animate-pulse rounded-lg bg-sunken"></div>
           }
         </div>
       } @else if (pages().length === 0) {
-        <div class="mt-3 rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
-          <p class="text-sm text-slate-600">Cet audit ne contient aucune page.</p>
+        <div class="mt-3 rounded-xl bg-panel p-8 text-center ring-1 ring-line">
+          <p class="text-sm text-content-muted">Cet audit ne contient aucune page.</p>
           <a
             routerLink="/analyse"
-            class="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline"
+            class="mt-3 inline-block text-sm font-medium text-brand-text hover:underline"
           >
             Lancer une nouvelle analyse
           </a>
         </div>
       } @else {
         @if (session()?.truncated) {
-          <p class="mt-3 rounded-lg bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <p class="mt-3 rounded-lg bg-warn-surface px-4 py-2 text-sm text-warn-content">
             Cet audit compte plus de pages que l'affichage n'en restitue : seules les
             {{ pages().length }} premières sont listées.
           </p>
         }
 
-        <ul class="mt-3 divide-y divide-slate-100 rounded-xl bg-white ring-1 ring-slate-200">
+        <ul class="mt-3 divide-y divide-line rounded-xl bg-panel ring-1 ring-line">
           @for (page of pages(); track page.id) {
             <li>
               <a
                 [routerLink]="['/historique/page', page.id]"
-                class="flex items-center gap-4 px-4 py-3 hover:bg-slate-50 focus-visible:bg-slate-50"
+                class="flex items-center gap-4 px-4 py-3 hover:bg-sunken focus-visible:bg-sunken"
                 [attr.aria-label]="rowSummary(page)"
               >
                 <span [class]="badge(page.globalScore)">{{ score(page.globalScore) }}</span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm text-slate-800">{{ page.url }}</span>
-                  <span class="block text-xs text-slate-500">
+                  <span class="block truncate text-sm text-content">{{ page.url }}</span>
+                  <span class="block text-xs text-content-subtle">
                     {{ page.analyzedAt | date: 'dd/MM/yyyy HH:mm' }}
                     @if (page.statusCode !== null) {
                       · HTTP {{ page.statusCode }}
@@ -114,7 +114,9 @@ import { formatScore, reportAvailable, reportStateLabel, scoreBadgeClass } from 
                     }
                   </span>
                 </span>
-                <span class="text-xs text-slate-400" aria-hidden="true">voir le rapport →</span>
+                <span class="text-xs text-content-subtle" aria-hidden="true"
+                  >voir le rapport →</span
+                >
               </a>
             </li>
           }

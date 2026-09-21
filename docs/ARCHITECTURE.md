@@ -554,9 +554,43 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
      obtenu par la première.
 - **Résolution de session au démarrage** : les cookies étant httpOnly, `/auth/me`
   est le seul moyen de savoir si une session existe.
-- **Chargement différé par route** : seul le noyau part d'emblée (423 kio bruts,
+- **Chargement différé par route** : seul le noyau part d'emblée (427 kio bruts,
   113 kio transférés). Le budget de bundle est calé juste au-dessus, avec une
-  marge d'erreur de 57 kio : il **échoue le build**, il n'avertit pas.
+  marge d'erreur de 53 kio : il **échoue le build**, il n'avertit pas.
+- **La configuration PostCSS s'appelle `.postcssrc.json`** — le constructeur
+  Angular ne lit que ce nom ou `postcss.config.json`. Sous tout autre nom, elle
+  est ignorée EN SILENCE : Tailwind ne tourne pas, la feuille part avec sa
+  directive `@tailwind` intacte, et l'application est livrée sans une seule
+  classe utilitaire. C'est arrivé, et rien ne l'a signalé pendant quatre
+  modules ; un scénario Playwright interroge désormais le rendu.
+
+### Apparence — deux thèmes, une définition
+
+Les gabarits ne nomment plus de teintes mais des RÔLES : `surface`, `panel`,
+`sunken` pour les fonds ; `content`, `content-muted`, `content-subtle` pour le
+texte ; `line` pour un filet décoratif et `field` pour la bordure d'un contrôle ;
+`brand`, `danger`, `warn`, `ok`, `info` pour la marque et les états. Une classe
+qui dirait `bg-slate-100` fige un gris clair dans le gabarit et devient illisible
+sur fond sombre ; `bg-sunken` décrit l'intention, et chaque thème y répond.
+
+Chaque jeton est défini UNE fois, avec `light-dark(clair, sombre)`. Le choix se
+fait par `color-scheme` sur la racine — `light dark` par défaut, forcé par
+`data-theme="clair"` ou `"sombre"`. Trois conséquences : pas de doublon de tout
+le bloc sous `@media (prefers-color-scheme: dark)` ; la préférence du système
+s'applique AVANT que le JavaScript démarre, donc sans écran clair qui clignote
+(la politique de sécurité interdit tout script en ligne, un script bloquant est
+donc exclu) ; et les contrôles natifs, barres de défilement et champs de
+formulaire s'accordent seuls.
+
+`ThemeService` ne peint rien : il pose l'attribut et conserve le choix. Trois
+états, pas deux — « système » est l'absence de choix, donc la décision rendue à
+la machine, ce qui n'est pas la même chose que « clair ».
+
+**Tous les couples texte/fond tiennent WCAG 2.2 AA dans les DEUX thèmes**, et
+c'est vérifié sur les couleurs calculées : la suite Playwright balaie chaque
+élément portant du texte sur six écrans, résout les couleurs en sRGB par le
+navigateur lui-même, et applique la formule de contraste. Un échantillon choisi
+à la main ne prouverait que ce qu'on a pensé à y mettre.
 
 ### Ce qui garde le chargement initial mince
 
@@ -612,6 +646,11 @@ l'interface, pas au moteur.
 
 Dettes identifiées sur le périmètre déjà livré :
 
+- **Coquille applicative** — la barre supérieure ne porte que le nom du produit
+  et le choix d'apparence. Une vraie navigation (sections, fil d'Ariane, retour
+  contextuel) reste à proposer : chaque écran porte aujourd'hui son propre
+  en-tête, et les unifier revient à reprendre tous les écrans.
+
 - **Tests d'intégration MariaDB** — conteneur éphémère en CI, pour valider le SQL
   réel des repositories. La dette s'alourdit à chaque module : le verrouillage
   optimiste du module 2 repose sur `UPDATE ... WHERE version`, et le module 3
@@ -634,10 +673,6 @@ Dettes identifiées sur le périmètre déjà livré :
   et export. Le module 3 livre les suppressions **sans** ce filet. La table
   existe et n'est pas touchée ; le module qui la réexpose reste à faire, et
   d'ici là une suppression est définitive — ce que l'interface annonce.
-- **Thème sombre** — le cap UX (`CLAUDE.md` §2) le demande dès la conception.
-  Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
-  serait pire que rien. La bascule est un passage transverse sur les jetons de
-  design, à mener d'un bloc plutôt qu'au fil des modules.
 - **Suppressions depuis l'interface** — l'API expose les quatre portées (pages,
   session, site, domaine) et la suite sécurité les couvre ; l'interface ne les
   propose pas encore. Elles attendent la corbeille : offrir une suppression

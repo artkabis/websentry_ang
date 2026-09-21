@@ -40,22 +40,22 @@ import {
   template: `
     <section aria-labelledby="titre-verdict">
       <div
-        class="flex flex-wrap items-center gap-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
+        class="flex flex-wrap items-center gap-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
       >
         <ws-score-dial [score]="report().globalScore" [qualifier]="verdict().headline" />
         <div class="min-w-0 flex-1">
-          <h2 id="titre-verdict" class="text-lg font-semibold text-slate-900">
+          <h2 id="titre-verdict" class="text-lg font-semibold text-content">
             {{ verdict().headline }}
           </h2>
-          <p class="mt-1 text-sm text-slate-600">{{ verdict().detail }}</p>
-          <p class="mt-2 truncate text-xs text-slate-400">{{ report().url }}</p>
+          <p class="mt-1 text-sm text-content-muted">{{ verdict().detail }}</p>
+          <p class="mt-2 truncate text-xs text-content-subtle">{{ report().url }}</p>
         </div>
       </div>
 
       @if (actions().length > 0) {
-        <div class="mt-4 rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <h3 class="text-sm font-semibold text-slate-900">À corriger en priorité</h3>
-          <p class="mt-0.5 text-xs text-slate-500">
+        <div class="mt-4 rounded-xl bg-panel p-5 shadow-sm ring-1 ring-line">
+          <h3 class="text-sm font-semibold text-content">À corriger en priorité</h3>
+          <p class="mt-0.5 text-xs text-content-subtle">
             Classé par gravité et par poids du critère dans le score.
           </p>
           <ol class="mt-3 space-y-3">
@@ -63,8 +63,8 @@ import {
               <li class="flex items-start gap-3">
                 <ws-status-badge [status]="action.status" />
                 <span class="min-w-0 flex-1">
-                  <span class="block text-sm text-slate-800">{{ action.action }}</span>
-                  <span class="block text-xs text-slate-500">
+                  <span class="block text-sm text-content">{{ action.action }}</span>
+                  <span class="block text-xs text-content-subtle">
                     {{ action.checkTitle }}
                     @if (action.weight !== 1) {
                       · poids {{ action.weight }}
@@ -79,9 +79,9 @@ import {
 
       <!-- ── Niveau 2 : critères par famille ───────────────────────── -->
       <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <h3 class="text-sm font-semibold text-slate-900">Détail des critères</h3>
+        <h3 class="text-sm font-semibold text-content">Détail des critères</h3>
         <div
-          class="flex items-center gap-1 rounded-lg bg-slate-100 p-1"
+          class="flex items-center gap-1 rounded-lg bg-sunken p-1"
           role="group"
           aria-label="Filtrer les critères"
         >
@@ -105,18 +105,18 @@ import {
       </div>
 
       @if (hiddenTotal() > 0) {
-        <p class="mt-2 text-xs text-slate-500">
+        <p class="mt-2 text-xs text-content-subtle">
           {{ hiddenTotal() }} critère(s) conforme(s) ou non applicable(s) masqué(s) par le filtre.
         </p>
       }
 
       @if (visibleGroups().length === 0) {
-        <div class="mt-3 rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
-          <p class="text-sm text-slate-600">Aucun critère ne demande d'action.</p>
+        <div class="mt-3 rounded-xl bg-panel p-8 text-center ring-1 ring-line">
+          <p class="text-sm text-content-muted">Aucun critère ne demande d'action.</p>
           <button
             type="button"
             (click)="filterChange.emit('all')"
-            class="mt-3 text-sm font-medium text-brand-700 hover:underline"
+            class="mt-3 text-sm font-medium text-brand-text hover:underline"
           >
             Afficher les {{ totalChecks() }} critères évalués
           </button>
@@ -125,14 +125,14 @@ import {
         @for (group of visibleGroups(); track group.group) {
           <section class="mt-4" [attr.aria-label]="group.group">
             <h4
-              class="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+              class="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wide text-content-subtle"
             >
               {{ group.group }}
               <span class="font-normal normal-case tracking-normal">
                 {{ groupSummary(group.counts) }}
               </span>
             </h4>
-            <div class="mt-2 rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+            <div class="mt-2 rounded-xl bg-panel shadow-sm ring-1 ring-line">
               @for (check of group.visible; track check.checkId) {
                 <ws-check-card [check]="check" [pageUrl]="report().url" />
               }
@@ -187,8 +187,8 @@ export class ReportViewComponent {
   filterClass(value: ReportFilter): string {
     const base = 'rounded-md px-3 py-1 text-xs font-medium transition-colors ';
     return this.filter() === value
-      ? `${base}bg-white text-slate-900 shadow-sm`
-      : `${base}text-slate-600 hover:text-slate-900`;
+      ? `${base}bg-panel text-content shadow-sm`
+      : `${base}text-content-muted hover:text-content`;
   }
 
   /** Résumé chiffré d'un groupe — la couleur ne porte jamais seule l'information. */

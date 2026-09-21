@@ -122,10 +122,10 @@ describe('siteRowSummary', () => {
 
 describe('scoreBadgeClass', () => {
   it.each([
-    [4.5, 'emerald'],
-    [3.5, 'amber'],
-    [1, 'red'],
-    [null, 'slate'],
+    [4.5, 'ok'],
+    [3.5, 'warn'],
+    [1, 'danger'],
+    [null, 'sunken'],
   ])('colore %s en %s', (score, hue) => {
     expect(scoreBadgeClass(score)).toContain(hue);
   });
@@ -161,9 +161,9 @@ describe('changeBadgeClass', () => {
 
 describe('trendBadgeClass', () => {
   it('SIGNALE la dégradation en rouge, le reste en vert', () => {
-    expect(trendBadgeClass('degraded')).toContain('red');
-    expect(trendBadgeClass('improved')).toContain('emerald');
-    expect(trendBadgeClass('stable')).toContain('emerald');
-    expect(trendBadgeClass('ignored')).toContain('emerald');
+    expect(trendBadgeClass('degraded')).toContain('danger');
+    expect(trendBadgeClass('improved')).toContain('ok');
+    expect(trendBadgeClass('stable')).toContain('ok');
+    expect(trendBadgeClass('ignored')).toContain('ok');
   });
 });

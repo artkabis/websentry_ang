@@ -11,11 +11,11 @@ const STATUS_LABELS: Readonly<Record<CheckStatus, string>> = {
 };
 
 const STATUS_CLASSES: Readonly<Record<CheckStatus, string>> = {
-  pass: 'bg-emerald-100 text-emerald-800',
-  info: 'bg-sky-100 text-sky-800',
-  warning: 'bg-amber-100 text-amber-800',
-  fail: 'bg-red-100 text-red-800',
-  na: 'bg-slate-100 text-slate-500',
+  pass: 'bg-ok-surface text-ok-content',
+  info: 'bg-info-surface text-info-content',
+  warning: 'bg-warn-surface text-warn-content',
+  fail: 'bg-danger-surface text-danger-content',
+  na: 'bg-sunken text-content-subtle',
 };
 
 /**

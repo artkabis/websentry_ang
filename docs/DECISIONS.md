@@ -882,3 +882,45 @@ enrichir une règle devra la recopier. Enfin les couches `@layer` **anonymes**,
 dont le nom dépend d'un compteur de page : ces feuilles ne sont pas mémorisées et
 gardent le coût d'un découpage par page. Elles sont rares ; le contraire aurait
 été de fusionner deux couches distinctes, ce qui change des verdicts.
+
+---
+
+## 34. Le thème s'écrit une fois, avec `light-dark()` — et les jetons nomment des rôles, jamais des teintes
+
+**Décision** — Les gabarits n'emploient plus de couleur de palette (`bg-white`,
+`text-slate-500`, `bg-red-50`) mais des jetons de RÔLE : `panel`, `content-subtle`,
+`danger-surface`. Chaque jeton est défini une seule fois sous la forme
+`light-dark(clair, sombre)` ; le thème est choisi par `color-scheme` sur la
+racine, forcé au besoin par `data-theme="clair"` ou `"sombre"`. Trois
+préférences : clair, sombre, et **système** — l'absence de choix.
+
+**Raison** — Le cap UX (`CLAUDE.md` §2) demande le thème sombre dès la
+conception, et la dette s'alourdissait à chaque écran. Quatre cent soixante-dix
+classes de palette étaient dispersées dans dix-huit gabarits : chacune fige une
+teinte claire, et aucune ne peut répondre à un fond sombre. Le détour par les
+rôles était de toute façon exigé — « des jetons définis une fois et réutilisés,
+pas de valeurs arbitraires dispersées dans les gabarits ».
+
+`light-dark()` plutôt qu'un doublon sous `@media (prefers-color-scheme: dark)` :
+une valeur, un endroit, aucune chance que les deux blocs divergent. Et surtout,
+la préférence du système s'applique **avant** que le JavaScript démarre — la
+politique de sécurité interdisant tout script en ligne, un script bloquant qui
+poserait la classe au plus tôt est exclu, et sans `color-scheme` un utilisateur
+en thème sombre verrait un écran blanc clignoter à chaque chargement.
+
+**Aucune régression** — Les 458 tests de composants passent, et l'interface
+gagne deux garanties qu'elle n'avait pas. D'abord la conformité : tous les
+couples texte/fond tiennent AA dans les deux thèmes, y compris ceux qui
+échouaient **avant** ce travail — `text-slate-400` sur blanc plafonnait à 3,05
+et les bordures de champs à 1,48 là où WCAG 1.4.11 en demande 3. Ensuite la
+vérification : la suite Playwright balaie chaque texte de six écrans, dans les
+deux thèmes, sur les couleurs calculées par le navigateur.
+
+**Coût assumé** — Trois. `light-dark()` demande un navigateur de 2024 ou plus
+récent (Chrome 123, Safari 17.5, Firefox 120) ; sur plus ancien, la valeur est
+invalide et le jeton n'est pas servi — dégradation visible, pas silencieuse,
+mais dégradation. Ensuite, les bordures de contrôle sont plus contrastées
+qu'avant, donc plus présentes : c'est le prix de 1.4.11, et il se voit. Enfin,
+le choix d'apparence a fallu le loger quelque part : une barre supérieure mince
+apparaît sur tous les écrans, alors que chacun porte déjà son propre en-tête.
+Ce n'est pas une coquille applicative — elle reste à proposer.

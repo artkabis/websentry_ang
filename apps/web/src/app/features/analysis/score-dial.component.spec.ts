@@ -29,11 +29,11 @@ describe('ScoreDialComponent', () => {
   });
 
   it.each([
-    [5, 'emerald'],
-    [4, 'emerald'],
-    [3.5, 'amber'],
-    [3, 'amber'],
-    [1, 'red'],
+    [5, 'ok'],
+    [4, 'ok'],
+    [3.5, 'warn'],
+    [3, 'warn'],
+    [1, 'danger'],
   ])('colore l’arc selon le palier (%s)', async (score, hue) => {
     await mountDial(score);
     const arc = document.querySelectorAll('circle')[1];

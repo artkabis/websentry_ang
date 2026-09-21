@@ -45,29 +45,29 @@ const COMPARE_ARITY = 2;
   template: `
     <main class="mx-auto max-w-5xl px-4 py-10">
       <nav class="text-sm">
-        <a routerLink="/historique" class="text-brand-700 hover:underline">
+        <a routerLink="/historique" class="text-brand-text hover:underline">
           ← Retour à l'historique
         </a>
       </nav>
 
       <header class="mt-4">
-        <h1 class="text-2xl font-semibold text-slate-900">{{ domain() }}</h1>
-        <p class="mt-1 text-sm text-slate-500">
+        <h1 class="text-2xl font-semibold text-content">{{ domain() }}</h1>
+        <p class="mt-1 text-sm text-content-subtle">
           {{ gamme() ? 'Gamme ' + gamme() : 'Sans gamme' }}
         </p>
       </header>
 
-      <p role="status" aria-live="polite" class="mt-6 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-6 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       @if (error(); as message) {
-        <div class="mt-3 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-3 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="reload()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
@@ -75,24 +75,24 @@ const COMPARE_ARITY = 2;
       } @else if (loading()) {
         <div class="mt-3 space-y-2" aria-hidden="true">
           @for (row of skeleton; track row) {
-            <div class="h-16 animate-pulse rounded-lg bg-slate-100"></div>
+            <div class="h-16 animate-pulse rounded-lg bg-sunken"></div>
           }
         </div>
       } @else if (sessions().length === 0) {
-        <div class="mt-3 rounded-xl bg-white p-8 text-center ring-1 ring-slate-200">
-          <p class="text-sm text-slate-600">Aucun audit enregistré pour ce site.</p>
+        <div class="mt-3 rounded-xl bg-panel p-8 text-center ring-1 ring-line">
+          <p class="text-sm text-content-muted">Aucun audit enregistré pour ce site.</p>
         </div>
       } @else {
         <!-- ── Barre de comparaison ──────────────────────────────────────── -->
         <div
-          class="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200"
+          class="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-sunken px-4 py-3 ring-1 ring-line"
         >
-          <p class="text-sm text-slate-600">{{ selectionHint() }}</p>
+          <p class="text-sm text-content-muted">{{ selectionHint() }}</p>
           <button
             type="button"
             (click)="compare()"
             [disabled]="!canCompare() || comparing()"
-            class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             {{ comparing() ? 'Comparaison…' : 'Comparer' }}
           </button>
@@ -100,16 +100,14 @@ const COMPARE_ARITY = 2;
             <button
               type="button"
               (click)="clearSelection()"
-              class="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-200"
+              class="rounded-lg px-3 py-1.5 text-sm text-content-muted hover:bg-line"
             >
               Effacer la sélection
             </button>
           }
         </div>
 
-        <ul
-          class="mt-3 divide-y divide-slate-100 rounded-xl bg-white shadow-sm ring-1 ring-slate-200"
-        >
+        <ul class="mt-3 divide-y divide-line rounded-xl bg-panel shadow-sm ring-1 ring-line">
           @for (session of sessions(); track session.sessionId) {
             <li class="flex items-center gap-4 px-4 py-3">
               <input
@@ -118,13 +116,13 @@ const COMPARE_ARITY = 2;
                 [checked]="isSelected(session.sessionId)"
                 [disabled]="isSelectionFull() && !isSelected(session.sessionId)"
                 (change)="toggleSelection(session.sessionId)"
-                class="size-4 rounded border-slate-300"
+                class="size-4 rounded border-field"
               />
               <label [for]="'session-' + session.sessionId" class="min-w-0 flex-1 cursor-pointer">
-                <span class="text-sm font-medium text-slate-900">
+                <span class="text-sm font-medium text-content">
                   {{ session.analyzedAt | date: 'dd/MM/yyyy HH:mm' }}
                 </span>
-                <span class="block text-xs text-slate-500">
+                <span class="block text-xs text-content-subtle">
                   {{ session.pageCount }} page(s)
                   @if (session.launchedBy) {
                     · lancé par {{ session.launchedBy }}
@@ -137,7 +135,7 @@ const COMPARE_ARITY = 2;
               <span class="sr-only">sur 5, {{ scoreLabel(session.avgScore) }}</span>
               <a
                 [routerLink]="['/historique/audit', session.sessionId]"
-                class="text-xs font-medium text-brand-700 hover:underline"
+                class="text-xs font-medium text-brand-text hover:underline"
                 [attr.aria-label]="'Voir les pages de l’audit du ' + session.analyzedAt"
               >
                 Voir les pages
@@ -149,17 +147,20 @@ const COMPARE_ARITY = 2;
 
       <!-- ── Résultat de la comparaison ──────────────────────────────────── -->
       @if (comparisonError(); as message) {
-        <p role="alert" class="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          role="alert"
+          class="mt-6 rounded-lg bg-danger-surface px-3 py-2 text-sm text-danger-content"
+        >
           {{ message }}
         </p>
       }
 
       @if (comparison(); as diff) {
         <section class="mt-8" aria-labelledby="titre-comparaison">
-          <h2 id="titre-comparaison" class="text-lg font-semibold text-slate-900">
+          <h2 id="titre-comparaison" class="text-lg font-semibold text-content">
             Évolution entre deux audits
           </h2>
-          <p class="mt-1 text-sm text-slate-500">
+          <p class="mt-1 text-sm text-content-subtle">
             Du {{ diff.base.analyzedAt | date: 'dd/MM/yyyy HH:mm' }} au
             {{ diff.target.analyzedAt | date: 'dd/MM/yyyy HH:mm' }} · score moyen
             {{ delta(diff.scoreDelta) }}
@@ -167,21 +168,23 @@ const COMPARE_ARITY = 2;
 
           <dl class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
             @for (tile of summaryTiles(diff); track tile.label) {
-              <div class="rounded-lg bg-white p-3 text-center ring-1 ring-slate-200">
-                <dt class="text-xs text-slate-500">{{ tile.label }}</dt>
-                <dd class="mt-1 text-lg font-semibold text-slate-900">{{ tile.value }}</dd>
+              <div class="rounded-lg bg-panel p-3 text-center ring-1 ring-line">
+                <dt class="text-xs text-content-subtle">{{ tile.label }}</dt>
+                <dd class="mt-1 text-lg font-semibold text-content">{{ tile.value }}</dd>
               </div>
             }
           </dl>
 
           @if (diff.pages.length === 0) {
-            <p class="mt-4 text-sm text-slate-500">Aucune page comparable entre ces deux audits.</p>
+            <p class="mt-4 text-sm text-content-subtle">
+              Aucune page comparable entre ces deux audits.
+            </p>
           } @else {
-            <ul class="mt-4 divide-y divide-slate-100 rounded-xl bg-white ring-1 ring-slate-200">
+            <ul class="mt-4 divide-y divide-line rounded-xl bg-panel ring-1 ring-line">
               @for (page of diff.pages; track page.url) {
                 <li class="px-4 py-3">
                   <div class="flex items-start justify-between gap-4">
-                    <p class="min-w-0 truncate text-sm text-slate-800">{{ page.url }}</p>
+                    <p class="min-w-0 truncate text-sm text-content">{{ page.url }}</p>
                     <span [class]="changeClass(page.change)">{{ changeLabel(page.change) }}</span>
                   </div>
                   @if (page.checks.length > 0) {
@@ -194,7 +197,7 @@ const COMPARE_ARITY = 2;
                     </ul>
                   }
                   @if (page.scoreDelta !== null) {
-                    <p class="mt-1 text-xs text-slate-500">
+                    <p class="mt-1 text-xs text-content-subtle">
                       Score {{ score(page.baseScore) }} → {{ score(page.targetScore) }} ({{
                         delta(page.scoreDelta)
                       }})

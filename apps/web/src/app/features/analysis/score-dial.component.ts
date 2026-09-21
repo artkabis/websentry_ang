@@ -26,7 +26,7 @@ const CIRCUMFERENCE = 2 * Math.PI * 42;
       [attr.aria-label]="ariaLabel()"
     >
       <svg viewBox="0 0 100 100" class="size-28 -rotate-90" aria-hidden="true">
-        <circle cx="50" cy="50" r="42" fill="none" stroke-width="8" class="stroke-slate-200" />
+        <circle cx="50" cy="50" r="42" fill="none" stroke-width="8" class="stroke-line" />
         <circle
           cx="50"
           cy="50"
@@ -40,8 +40,8 @@ const CIRCUMFERENCE = 2 * Math.PI * 42;
         />
       </svg>
       <span class="absolute text-center">
-        <span class="block text-2xl font-semibold text-slate-900">{{ formatted() }}</span>
-        <span class="block text-xs text-slate-500">sur 5</span>
+        <span class="block text-2xl font-semibold text-content">{{ formatted() }}</span>
+        <span class="block text-xs text-content-subtle">sur 5</span>
       </span>
     </div>
   `,
@@ -62,9 +62,9 @@ export class ScoreDialComponent {
 
   readonly strokeClass = computed(() => {
     const score = this.score();
-    if (score >= SCORE_GOOD) return 'stroke-emerald-500';
-    if (score >= SCORE_WARNING) return 'stroke-amber-500';
-    return 'stroke-red-500';
+    if (score >= SCORE_GOOD) return 'stroke-ok-content';
+    if (score >= SCORE_WARNING) return 'stroke-warn-content';
+    return 'stroke-danger-solid';
   });
 
   readonly ariaLabel = computed(() => {

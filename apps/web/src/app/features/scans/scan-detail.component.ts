@@ -38,36 +38,36 @@ const FILTER_ALL_VALUE = 'tous';
   template: `
     <main class="mx-auto max-w-4xl px-4 py-10">
       <nav class="text-sm">
-        <a routerLink="/historique" class="text-brand-700 hover:underline">
+        <a routerLink="/historique" class="text-brand-text hover:underline">
           ← Retour à l'historique
         </a>
       </nav>
 
-      <p role="status" aria-live="polite" class="mt-4 text-sm text-slate-500">
+      <p role="status" aria-live="polite" class="mt-4 text-sm text-content-subtle">
         {{ statusMessage() }}
       </p>
 
       @if (error(); as message) {
-        <div class="mt-3 rounded-lg bg-red-50 p-4" role="alert">
-          <p class="text-sm text-red-700">{{ message }}</p>
+        <div class="mt-3 rounded-lg bg-danger-surface p-4" role="alert">
+          <p class="text-sm text-danger-content">{{ message }}</p>
           <button
             type="button"
             (click)="reload()"
-            class="mt-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            class="mt-2 rounded-lg bg-danger-solid px-3 py-1.5 text-sm font-medium text-on-accent hover:bg-danger-solid"
           >
             Réessayer
           </button>
         </div>
       } @else if (loading()) {
         <div class="mt-3 space-y-3" aria-hidden="true">
-          <div class="h-28 animate-pulse rounded-xl bg-slate-100"></div>
-          <div class="h-40 animate-pulse rounded-xl bg-slate-100"></div>
+          <div class="h-28 animate-pulse rounded-xl bg-sunken"></div>
+          <div class="h-40 animate-pulse rounded-xl bg-sunken"></div>
         </div>
       } @else if (purged(); as gone) {
         <!-- ── Rapport purgé : un état, pas une erreur ────────────────────── -->
-        <section class="mt-3 rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-          <h1 class="text-lg font-semibold text-slate-900">Rapport purgé</h1>
-          <p class="mt-1 text-sm text-slate-600">
+        <section class="mt-3 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
+          <h1 class="text-lg font-semibold text-content">Rapport purgé</h1>
+          <p class="mt-1 text-sm text-content-muted">
             @if (gone.purgedAt) {
               La politique de rétention a effacé le rapport complet le
               {{ gone.purgedAt | date: 'dd/MM/yyyy' }}.
@@ -80,34 +80,34 @@ const FILTER_ALL_VALUE = 'tous';
           @if (gone.scan; as scan) {
             <dl class="mt-4 grid gap-3 sm:grid-cols-3">
               <div>
-                <dt class="text-xs text-slate-500">Page</dt>
-                <dd class="truncate text-sm text-slate-800">{{ scan.url }}</dd>
+                <dt class="text-xs text-content-subtle">Page</dt>
+                <dd class="truncate text-sm text-content">{{ scan.url }}</dd>
               </div>
               <div>
-                <dt class="text-xs text-slate-500">Analysée le</dt>
-                <dd class="text-sm text-slate-800">
+                <dt class="text-xs text-content-subtle">Analysée le</dt>
+                <dd class="text-sm text-content">
                   {{ scan.analyzedAt | date: 'dd/MM/yyyy HH:mm' }}
                 </dd>
               </div>
               <div>
-                <dt class="text-xs text-slate-500">Score</dt>
+                <dt class="text-xs text-content-subtle">Score</dt>
                 <dd>
                   <span [class]="badge(scan.globalScore)">{{ score(scan.globalScore) }}</span>
                 </dd>
               </div>
             </dl>
 
-            <h2 class="mt-6 text-sm font-semibold text-slate-900">Résumé par critère</h2>
+            <h2 class="mt-6 text-sm font-semibold text-content">Résumé par critère</h2>
             <ul class="mt-2 flex flex-wrap gap-2">
               @for (entry of summary(scan); track entry.checkId) {
-                <li class="rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-700">
+                <li class="rounded-md bg-sunken px-2 py-1 text-xs text-content-muted">
                   {{ entry.checkId }} :
                   <span class="font-medium">{{ entry.label }}</span>
                 </li>
               }
             </ul>
           } @else {
-            <p class="mt-4 text-sm text-slate-500">
+            <p class="mt-4 text-sm text-content-subtle">
               Aucun résumé n'accompagne ce scan : il a été purgé par une version antérieure de
               l'application.
             </p>
@@ -115,13 +115,13 @@ const FILTER_ALL_VALUE = 'tous';
         </section>
       } @else if (report(); as result) {
         <header class="mt-3">
-          <h1 class="truncate text-2xl font-semibold text-slate-900">{{ result.title }}</h1>
-          <p class="mt-1 truncate text-sm text-slate-500">{{ result.url }}</p>
+          <h1 class="truncate text-2xl font-semibold text-content">{{ result.title }}</h1>
+          <p class="mt-1 truncate text-sm text-content-subtle">{{ result.url }}</p>
         </header>
 
         <div class="mt-6">
           <ws-report-view [report]="result" [filter]="filter()" (filterChange)="setFilter($event)">
-            <p class="mt-6 text-xs text-slate-400">
+            <p class="mt-6 text-xs text-content-subtle">
               Analyse du {{ result.analyzedAt | date: 'dd/MM/yyyy HH:mm' }} ·
               {{ result.durationMs }} ms
               @if (scan(); as page) {
@@ -132,7 +132,7 @@ const FILTER_ALL_VALUE = 'tous';
                 <a
                   routerLink="/historique/site"
                   [queryParams]="{ domain: page.domain, gamme: page.gamme }"
-                  class="text-brand-700 hover:underline"
+                  class="text-brand-text hover:underline"
                 >
                   tous les audits de {{ page.domain }}
                 </a>

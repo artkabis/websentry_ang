@@ -114,10 +114,10 @@ export function siteRowSummary(input: {
 // côté, un autre de l'autre.
 
 const SCORE_BADGE: Readonly<Record<ScoreClass, string>> = {
-  good: 'bg-emerald-100 text-emerald-800',
-  warning: 'bg-amber-100 text-amber-800',
-  critical: 'bg-red-100 text-red-800',
-  unknown: 'bg-slate-100 text-slate-500',
+  good: 'bg-ok-surface text-ok-content',
+  warning: 'bg-warn-surface text-warn-content',
+  critical: 'bg-danger-surface text-danger-content',
+  unknown: 'bg-sunken text-content-subtle',
 };
 
 /** Classes du badge de score. `extra` reçoit ce qui est propre à l'emplacement. */
@@ -138,10 +138,10 @@ const CHANGE_LABELS: Readonly<Record<PageChange, string>> = {
 };
 
 const CHANGE_BADGE: Readonly<Record<PageChange, string>> = {
-  added: 'bg-sky-100 text-sky-800',
-  removed: 'bg-slate-200 text-slate-700',
-  changed: 'bg-amber-100 text-amber-800',
-  unchanged: 'bg-slate-100 text-slate-500',
+  added: 'bg-info-surface text-info-content',
+  removed: 'bg-line text-content-muted',
+  changed: 'bg-warn-surface text-warn-content',
+  unchanged: 'bg-sunken text-content-subtle',
 };
 
 export function changeLabel(change: PageChange): string {
@@ -158,6 +158,6 @@ export type CheckTrend = 'improved' | 'degraded' | 'stable' | 'ignored';
 export function trendBadgeClass(trend: CheckTrend): string {
   const base = 'rounded px-1.5 py-0.5 text-xs ';
   return trend === 'degraded'
-    ? `${base}bg-red-50 text-red-700`
-    : `${base}bg-emerald-50 text-emerald-700`;
+    ? `${base}bg-danger-surface text-danger-content`
+    : `${base}bg-ok-surface text-ok-content`;
 }
