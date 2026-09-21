@@ -53,15 +53,31 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 ## Démarrage
 
 ```bash
+node -v                                  # doit afficher 22.22.3 ou plus
 pnpm install
-pnpm --filter @websentry/shared build   # à faire EN PREMIER : api et web en dépendent
+pnpm --filter @websentry/shared build    # à faire EN PREMIER : api et web en dépendent
 
-cp .env.example .env                     # puis renseigner JWT_SECRET
+cp .env.example .env                     # à la RACINE du dépôt
+# puis, dans .env :
+#   JWT_SECRET=…                         # openssl rand -hex 32 — obligatoire, 32 caractères
+#   DB_ENABLED=false                     # si vous n'avez pas MariaDB en local
+
 pnpm dev:api                             # http://localhost:3031
-pnpm dev:web                             # http://localhost:4200
+pnpm dev:web                             # http://localhost:4200  (autre terminal)
 ```
 
-Générer un secret : `openssl rand -hex 32`.
+`pnpm dev:api` compile en continu et relance le serveur à chaque écriture ; le
+premier démarrage attend la fin de la compilation initiale, quelques secondes.
+
+### Si ça ne démarre pas
+
+| Symptôme                                                         | Cause                                                                                                                                          |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `The Angular CLI requires a minimum Node.js version of v22.22.3` | Node trop ancien. Ne concerne que le front — l'API, elle, démarre.                                                                             |
+| `Cannot find module '@websentry/shared'`                         | Le paquet partagé n'a pas été construit. `pnpm build` à la racine le fait dans le bon ordre.                                                   |
+| `Configuration d'environnement invalide : JWT_SECRET …`          | `.env` absent, ou secret de moins de 32 caractères. Le démarrage échoue **volontairement** plutôt que de servir un serveur à moitié configuré. |
+| `Connexion MariaDB impossible : ECONNREFUSED`                    | `DB_ENABLED=true` sans base. Passez à `false` : l'analyse fonctionne, seul l'historique est indisponible.                                      |
+| `l'analyse s'exécute en ligne`                                   | Ce n'est pas une erreur. Le worker est du JavaScript compilé ; il n'existe qu'après `pnpm --filter @websentry/api build`.                      |
 
 ---
 

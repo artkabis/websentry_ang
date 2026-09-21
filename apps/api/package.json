@@ -5,7 +5,7 @@
   "description": "WebSentry v2 — API Nest.js sur adapter Fastify",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "node --watch --experimental-strip-types src/main.ts",
+    "dev": "node scripts/dev.mjs",
     "start": "node dist/main.js",
     "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
