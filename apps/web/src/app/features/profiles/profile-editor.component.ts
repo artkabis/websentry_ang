@@ -10,11 +10,13 @@ import {
   tierForWeight,
   type AnalysisSettings,
   type CheckMeta,
+  type PageRule,
   type SettingsProfile,
 } from '@websentry/shared';
 import { AuthService } from '../../core/auth/auth.service';
 import { ProfileConflictError, ProfilesApi } from '../../core/profiles/profiles.api';
 import { TokenListComponent } from '../../shared/token-list.component';
+import { PageRulesComponent } from './page-rules.component';
 import {
   buildSettingsForm,
   patchFormFromSettings,
@@ -31,16 +33,16 @@ import {
  *  • Le VERROUILLAGE OPTIMISTE : la version lue est renvoyée à l'enregistrement.
  *    Si quelqu'un a écrit entre-temps, l'API refuse (409) et l'on propose un
  *    rechargement plutôt que d'écraser silencieusement le travail d'autrui.
- *  • Les réglages NON ÉDITÉS ici (listes de mots, règles par page, pondérations)
- *    sont conservés et réinjectés : sans cela, ouvrir puis enregistrer un profil
- *    l'amputerait.
+ *  • Les réglages QUE PERSONNE N'ÉDITE (polarité des sous-critères, exclusions
+ *    d'orphelins) sont conservés et réinjectés : sans cela, ouvrir puis
+ *    enregistrer un profil l'amputerait.
  *  • Les contrôles CROISÉS (intervalles) doublent ceux du schéma partagé, pour
  *    avertir avant l'appel réseau.
  */
 @Component({
   selector: 'ws-profile-editor',
   standalone: true,
-  imports: [ReactiveFormsModule, TokenListComponent],
+  imports: [ReactiveFormsModule, TokenListComponent, PageRulesComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="mx-auto max-w-3xl px-4 py-10">
@@ -292,6 +294,20 @@ import {
             </div>
           </fieldset>
 
+          <fieldset
+            class="rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line"
+            [disabled]="!canEdit()"
+          >
+            <legend class="px-1 text-sm font-medium text-content">
+              Règles par page ({{ pageRules().length }})
+            </legend>
+            <p class="mt-1 text-xs text-content-subtle">
+              Une exception au profil, pour un gabarit de pages. Les réglages produits sont
+              éphémères : ils valent le temps d'une analyse et ne modifient jamais le profil.
+            </p>
+            <ws-page-rules [(rules)]="pageRules" [checks]="checks()" [disabled]="!canEdit()" />
+          </fieldset>
+
           @if (issues().length > 0) {
             <ul
               role="alert"
@@ -383,6 +399,7 @@ export class ProfileEditorComponent {
   readonly excludedWords = signal<string[]>([]);
   readonly excludedDomains = signal<string[]>([]);
   readonly checkWeights = signal<Record<string, number>>({});
+  readonly pageRules = signal<PageRule[]>([]);
 
   readonly weightTiers = WEIGHT_TIERS;
 
@@ -475,6 +492,9 @@ export class ProfileEditorComponent {
         this.checks().map(check => [check.id, resolveCheckWeight(check.id, settings)]),
       ),
     );
+    // Copie PROFONDE : l'éditeur remplace les règles une à une, et muter celles
+    // du profil lu ferait croire à « aucune modification » après un changement.
+    this.pageRules.set(structuredClone(settings.pageRules ?? []));
   }
 
   weightOf(id: string): number {
@@ -521,6 +541,7 @@ export class ProfileEditorComponent {
         excludedWords: this.excludedWords(),
         excludedDomains: this.excludedDomains(),
         checkWeights: this.checkWeights(),
+        pageRules: this.pageRules(),
       });
       const saved = await this.api.save(this.gamme(), {
         settings,

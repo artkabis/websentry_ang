@@ -1,5 +1,5 @@
 import { FormBuilder, Validators, type FormGroup } from '@angular/forms';
-import { DEFAULT_CHECK_WEIGHT, type AnalysisSettings } from '@websentry/shared';
+import { DEFAULT_CHECK_WEIGHT, type AnalysisSettings, type PageRule } from '@websentry/shared';
 
 /**
  * Formulaire réactif des réglages d'analyse.
@@ -80,9 +80,9 @@ export function patchFormFromSettings(form: SettingsFormGroup, settings: Analysi
 /**
  * Reconstruit des réglages complets à partir du formulaire.
  *
- * `base` fournit tout ce qui n'est éditable nulle part — règles par page,
- * polarité des sous-critères. Repartir d'un objet vide effacerait ces réglages
- * à la première sauvegarde.
+ * `base` fournit tout ce qui n'est éditable nulle part — polarité des
+ * sous-critères, exclusions d'orphelins. Repartir d'un objet vide effacerait
+ * ces réglages à la première sauvegarde.
  */
 export interface EditedCollections {
   enabledChecks: readonly string[];
@@ -90,6 +90,7 @@ export interface EditedCollections {
   excludedDomains: readonly string[];
   /** Surcharges de pondération ; une entrée au poids par défaut est omise. */
   checkWeights: Readonly<Record<string, number>>;
+  pageRules: readonly PageRule[];
 }
 
 export function settingsFromForm(
@@ -102,8 +103,14 @@ export function settingsFromForm(
     Object.entries(edited.checkWeights).filter(([, poids]) => poids !== DEFAULT_CHECK_WEIGHT),
   );
 
+  // Les clés optionnelles éditées sont RETIRÉES du socle avant d'être
+  // réécrites : sans cela, vider complètement les pondérations ou les règles
+  // par page laisserait survivre celles du profil lu, et la suppression
+  // n'aurait aucun effet visible avant le rechargement.
+  const { checkWeights: _poids, pageRules: _regles, ...socle } = base;
+
   return {
-    ...base,
+    ...socle,
     meta: {
       title: { min: v.metaTitleMin, max: v.metaTitleMax },
       description: { min: v.metaDescriptionMin, max: v.metaDescriptionMax },
@@ -135,6 +142,9 @@ export function settingsFromForm(
     },
     detectRegressions: v.detectRegressions,
     enabledChecks: [...edited.enabledChecks],
+    // Une liste vide n'est pas la même chose qu'une absence de règles : la clé
+    // disparaît plutôt que de porter un tableau creux.
+    ...(edited.pageRules.length > 0 ? { pageRules: [...edited.pageRules] } : {}),
     // Un dictionnaire vide n'est pas la même chose qu'une absence de
     // surcharges : la clé disparaît plutôt que de porter un objet creux.
     ...(Object.keys(checkWeights).length > 0 ? { checkWeights } : {}),

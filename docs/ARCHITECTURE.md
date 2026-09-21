@@ -662,11 +662,11 @@ Dettes identifiées sur le périmètre déjà livré :
   d'une version à l'autre.
 - **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
   et les charger en base au moment de la bascule.
-- **Règles par page** — l'éditeur de profil couvre désormais les seuils, les
-  critères actifs, les mots et domaines exclus et la pondération. Les règles par
-  page (motif d'URL, réglages et critères propres à un gabarit) et la polarité
-  des sous-critères restent CONSERVÉES mais non éditables : ce sont des objets
-  imbriqués, qui appellent leur propre écran.
+- **Polarité des sous-critères** — l'éditeur de profil couvre les seuils, les
+  critères actifs, les mots et domaines exclus, la pondération et les règles par
+  page. Reste `subCheckPolarity` (l'absence d'un sous-critère devient l'état
+  conforme) : elle porte sur les SOUS-critères, que l'écran ne liste pas encore.
+  Elle est conservée et réinjectée telle quelle.
 - **Journal d'audit append-only en base** — l'absence de méthode `UPDATE`/`DELETE`
   est garantie côté applicatif et testée ; la verrouiller aussi par des droits
   MariaDB (`GRANT INSERT, SELECT` uniquement) serait plus robuste.

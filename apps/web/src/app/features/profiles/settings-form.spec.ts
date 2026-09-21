@@ -18,6 +18,7 @@ function editees(over: Partial<EditedCollections> = {}): EditedCollections {
     excludedWords: [],
     excludedDomains: [],
     checkWeights: {},
+    pageRules: [],
     ...over,
   };
 }
@@ -59,20 +60,37 @@ describe('formulaire des réglages', () => {
     });
 
     it('CONSERVE ce qui n’est éditable NULLE PART', () => {
-      // Règles par page et exclusions d'orphelins n'ont pas encore d'écran :
-      // sans ce report, ouvrir puis enregistrer un profil les effacerait.
+      // Polarité des sous-critères et exclusions d'orphelins n'ont pas encore
+      // d'écran : sans ce report, ouvrir puis enregistrer les effacerait.
       const base: AnalysisSettings = {
         ...defaultAnalysisSettings(),
-        pageRules: [{ label: 'Produits', patterns: ['/p/*'] }],
         orphanExclusions: ['/mentions-legales'],
         subCheckPolarity: { 'METAS.title': 'absent' },
       };
 
       const rebuilt = settingsFromForm(form, base, editees());
 
-      expect(rebuilt.pageRules).toEqual(base.pageRules);
       expect(rebuilt.orphanExclusions).toEqual(['/mentions-legales']);
       expect(rebuilt.subCheckPolarity).toEqual({ 'METAS.title': 'absent' });
+    });
+
+    it('reprend les RÈGLES PAR PAGE éditées, et retire la clé quand il n’y en a plus', () => {
+      // Réinjecter celles du profil lu annulerait en silence chaque
+      // suppression ; écrire un tableau vide gonflerait le profil d'une clé
+      // qui ne dit rien.
+      const base: AnalysisSettings = {
+        ...defaultAnalysisSettings(),
+        pageRules: [{ label: 'Ancienne', patterns: ['/vieux'] }],
+      };
+
+      const avec = settingsFromForm(form, base, {
+        ...editees(),
+        pageRules: [{ label: 'Contact', patterns: ['contact'] }],
+      });
+      const sans = settingsFromForm(form, base, editees());
+
+      expect(avec.pageRules).toEqual([{ label: 'Contact', patterns: ['contact'] }]);
+      expect('pageRules' in sans).toBe(false);
     });
 
     it('reprend les listes ÉDITÉES, et non celles d’origine', () => {
@@ -109,6 +127,16 @@ describe('formulaire des réglages', () => {
         defaultAnalysisSettings(),
         editees({ checkWeights: { METAS: 1, LINKS: 1 } }),
       );
+
+      expect('checkWeights' in rebuilt).toBe(false);
+    });
+
+    it('EFFACE une pondération que le profil portait et qu’on a ramenée au défaut', () => {
+      // Le socle est recopié tel quel : sans retrait explicite, l'ancienne
+      // valeur survivrait et la remise à « Normal » n'aurait aucun effet.
+      const base: AnalysisSettings = { ...defaultAnalysisSettings(), checkWeights: { METAS: 2 } };
+
+      const rebuilt = settingsFromForm(form, base, editees({ checkWeights: { METAS: 1 } }));
 
       expect('checkWeights' in rebuilt).toBe(false);
     });

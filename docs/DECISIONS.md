@@ -961,3 +961,40 @@ personne ne sait ce qu'il change. Ensuite, l'écran s'allonge : vingt-neuf
 sélecteurs de pondération s'ajoutent aux vingt-neuf cases de critères actifs.
 Un regroupement par famille serait plus lisible ; il suppose une refonte de
 l'écran, qui se propose avant de se coder.
+
+---
+
+## 36. Une règle par page s'édite comme une exception nommée, et un champ vide n'est pas un zéro
+
+**Décision** — L'éditeur de profil expose les règles par page : un nom, des
+motifs d'adresse (repris du composant de jetons), les critères sans objet sur
+ces pages, et six seuils surchargeables. Un champ numérique **vide** signifie
+« pas de surcharge » et non « zéro » ; la clé correspondante disparaît alors de
+l'objet. Une règle sans nom ou sans motif est signalée à l'écran sans bloquer
+l'enregistrement.
+
+**Raison** — C'était le dernier réglage conservé mais invisible du module des
+profils. Il est aussi le plus facile à mal écrire à la main : le moteur cherche
+un motif dans les SEGMENTS du chemin — « contact » retient `/nous-contacter`
+mais pas `/prise-de-contact/equipe` — et cette nuance ne se devine pas. L'écran
+la dit là où on saisit.
+
+La distinction vide/zéro n'est pas cosmétique : `applyPageRules` fusionne la
+surcharge dans les réglages effectifs, donc un `minWords: 0` écrit par
+inadvertance mettrait toutes les pages de contact à zéro mot exigé, sans que
+personne ne l'ait demandé et sans que rien ne le signale.
+
+**Aucune régression** — Les clés optionnelles éditées (`pageRules`,
+`checkWeights`) sont désormais RETIRÉES du socle avant d'être réécrites. Sans
+cela — et c'était le cas jusqu'ici — vider complètement les règles ou ramener
+toutes les pondérations au défaut laissait survivre celles du profil lu : la
+suppression n'avait aucun effet avant rechargement. Deux tests le vérifient.
+
+**Coût assumé** — Deux. L'écran s'allonge encore : chaque règle ajoute une
+carte d'une vingtaine de contrôles, et un profil qui en porte dix devient long
+à parcourir ; un repli par carte serait préférable, mais c'est une refonte de
+l'écran, à proposer. Ensuite, la validation reproduit le schéma partagé et rien
+de plus : deux règles au même motif, ou un H1 dont le minimum dépasse le
+maximum, sont acceptées par le schéma comme par l'écran. Inventer ici des
+contraintes que l'API n'applique pas produirait un refus côté client que le
+serveur ne confirmerait pas.
