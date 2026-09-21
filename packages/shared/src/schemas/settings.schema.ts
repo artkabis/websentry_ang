@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { MAX_CHECK_WEIGHT, MIN_CHECK_WEIGHT } from '../check-weights.js';
 
 /**

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { PERMISSIONS, VALID_RANKS } from '../types/rbac.js';
 
 /**

@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /** Sonde publique `GET /api/v1/health` — aucune information d'infrastructure exposée. */
 export const HealthSchema = z

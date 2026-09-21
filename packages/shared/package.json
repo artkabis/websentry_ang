@@ -3,6 +3,8 @@
   "version": "2.0.0",
   "private": true,
   "type": "commonjs",
+  "//sideEffects": "Le paquet ne contient que des déclarations : schémas, constantes, fonctions pures. Le déclarer sans effet de bord autorise le bundler du frontend à ne garder que ce qui est réellement utilisé, et à placer le reste dans le morceau différé qui l'appelle — le catalogue des 29 critères, par exemple, n'a rien à faire dans le chargement initial.",
+  "sideEffects": false,
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/cjs/index.d.ts",

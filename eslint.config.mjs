@@ -55,6 +55,29 @@ export default tseslint.config(
     },
   },
 
+  // ── Paquet partagé : ce qui part dans le navigateur ───────────────────────
+  // `import { z } from 'zod'` importe un OBJET d'espace de noms déjà construit.
+  // esbuild — le bundler d'Angular — ne sait pas en secouer les branches : il
+  // embarque alors les quarante fichiers de traduction de Zod et son
+  // convertisseur JSON Schema, soit plus de 300 kio d'un code que l'application
+  // n'appelle jamais. `import * as z` laisse le bundler résoudre chaque accès
+  // vers l'export concerné, et ne garder que lui.
+  {
+    files: ['packages/shared/**/*.ts'],
+    rules: {
+      // Cible l'import NOMMÉ seul : `no-restricted-imports` refuserait aussi
+      // l'import d'espace de noms, qui est précisément la forme voulue.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ImportDeclaration[source.value='zod'] > ImportSpecifier[imported.name='z']",
+          message:
+            "Utiliser `import * as z from 'zod'` : l'import nommé empêche le bundler du frontend d'écarter les traductions de Zod (+300 kio embarqués pour rien).",
+        },
+      ],
+    },
+  },
+
   // ── Frontend Angular ──────────────────────────────────────────────────────
   {
     files: ['apps/web/**/*.ts'],

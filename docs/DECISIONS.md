@@ -807,3 +807,41 @@ de huit feuilles déclarées, ou au-delà de 512 Kio, la mesure est partielle �
 rapport le dit, il ne le devine pas. Troisième coût : le temps d'analyse d'une
 page isolée augmente de la latence de ses feuilles, bornée par le délai de la
 sonde.
+
+---
+
+## 32. Le paquet partagé se déclare sans effet de bord — et l'import de Zod suit une forme imposée
+
+**Décision** — Les dossiers de sortie de `@websentry/shared` portent
+`sideEffects: false`, et ses modules importent Zod par espace de noms
+(`import * as z from 'zod'`), forme rendue obligatoire par une règle ESLint. Le
+budget de bundle initial passe de 800 kio (avertissement) / 1 Mio (erreur) à
+440 / 480 kio.
+
+**Raison** — Le chargement initial pesait 804,84 kio bruts pour 173,74 kio
+transférés, dont **498 kio de Zod** : 290 kio de traductions — quarante langues
+que rien n'appelle — et 38 kio de conversion JSON Schema. L'import nommé rend
+un objet d'espace de noms qu'esbuild ne sait pas élaguer ; l'import par espace
+de noms lui laisse résoudre chaque accès vers l'export concerné. Restait le
+catalogue des vingt-neuf critères, 46 kio lus par les seuls écrans différés mais
+embarqués d'emblée, faute de `sideEffects` là où le bundler le cherche —
+c'est-à-dire dans le package.json du dossier de sortie, pas dans celui du
+paquet. Résultat : **423,00 kio bruts, 112,74 kio transférés**, soit 47 % et
+35 % de moins.
+
+**Aucune régression** — Aucun code applicatif ne change : `z.object(…)` s'écrit
+et se comporte comme avant. Les 2 491 tests unitaires passent à l'identique, et
+les 35 scénarios Playwright ont été rejoués **contre le bundle de production**
+servi en statique — pas contre le serveur de développement — précisément parce
+que c'est l'élagage qui était en cause.
+
+**Coût assumé** — `sideEffects: false` est une **affirmation** : elle promet
+qu'aucun module du paquet ne fait quoi que ce soit à l'import. C'est vrai
+aujourd'hui — schémas, constantes, fonctions pures — et rien ne le vérifie
+mécaniquement. Un module qui enregistrerait un format global, configurerait la
+locale de Zod ou muterait un registre au chargement serait **silencieusement
+écarté** du bundle : pas d'erreur, juste un comportement absent en production et
+présent en test. La contrainte est écrite ici et en tête du script qui produit
+ces fichiers. Second coût : le budget resserré refusera un build qui dépasse
+480 kio — ce qui est l'effet recherché, mais demandera d'instruire tout ajout
+lourd au lieu de le laisser passer.

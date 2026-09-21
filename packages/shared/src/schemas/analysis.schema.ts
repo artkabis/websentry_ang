@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import * as z from 'zod';
 import { AnalysisSettingsObjectSchema } from './settings.schema.js';
 import { AnalysisReportSchema, CheckResultSchema } from './report.schema.js';
 

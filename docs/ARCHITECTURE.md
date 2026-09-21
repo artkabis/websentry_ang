@@ -542,6 +542,25 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
      obtenu par la première.
 - **Résolution de session au démarrage** : les cookies étant httpOnly, `/auth/me`
   est le seul moyen de savoir si une session existe.
+- **Chargement différé par route** : seul le noyau part d'emblée (423 kio bruts,
+  113 kio transférés). Le budget de bundle est calé juste au-dessus, avec une
+  marge d'erreur de 57 kio : il **échoue le build**, il n'avertit pas.
+
+### Ce qui garde le chargement initial mince
+
+Deux réglages non évidents, que leur discrétion expose à être défaits :
+
+1. **`import * as z from 'zod'`** dans le paquet partagé. L'import nommé
+   (`import { z }`) rend un objet d'espace de noms déjà construit, qu'esbuild —
+   le bundler d'Angular — ne sait pas élaguer : il embarquait les quarante
+   fichiers de traduction de Zod et son convertisseur JSON Schema, soit plus de
+   300 kio jamais appelés. Une règle ESLint interdit désormais la forme nommée.
+2. **`sideEffects: false` dans les package.json des dossiers de sortie** du
+   paquet partagé, écrits par `scripts/write-cjs-package.mjs`. Un bundler lit
+   cette déclaration dans le package.json le **plus proche du fichier résolu** —
+   celui de `dist/esm/`, pas celui du paquet. Sans elle, tout ce que le barillet
+   réexporte est réputé impur : le catalogue des vingt-neuf critères, lu par les
+   seuls écrans différés, voyageait dans le chargement initial.
 
 ---
 
