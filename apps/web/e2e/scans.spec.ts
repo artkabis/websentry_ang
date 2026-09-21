@@ -196,15 +196,26 @@ test.describe('Historique des scans', () => {
   });
 
   test('navigue au clavier de bout en bout', async ({ page }) => {
-    // Tout ce qui est actionnable doit l'être sans souris (WCAG 2.1.1).
+    // Tout ce qui est actionnable doit l'être sans souris (WCAG 2.1.1). L'ordre
+    // de tabulation suit celui du document : chaque audit expose sa case PUIS
+    // son lien vers les pages. Le test parcourt cet ordre RÉEL au lieu de le
+    // supposer — c'est ce parcours-là que l'utilisateur au clavier subit.
     await mockApi(page);
     await page.goto('/historique/site?domain=exemple.fr&gamme=premium');
 
     await page.getByRole('checkbox').first().focus();
     await page.keyboard.press('Space');
+
     await page.keyboard.press('Tab');
+    await expect(
+      page.getByRole('link', { name: /Voir les pages de l’audit du 2026-06-10/ }),
+    ).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('checkbox').nth(1)).toBeFocused();
     await page.keyboard.press('Space');
 
     await expect(page.getByText('Deux audits sélectionnés.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Comparer' })).toBeEnabled();
   });
 });
