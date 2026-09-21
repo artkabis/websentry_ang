@@ -50,6 +50,9 @@ const FILTER_ALL_VALUE = 'tous';
         <h1 class="text-2xl font-semibold text-slate-900">Analyser une page</h1>
         <p class="mt-1 text-sm text-slate-500">
           Les critères sont évalués un par un ; le rapport s'affiche au fil de l'eau.
+          <a routerLink="/analyse/lot" class="text-brand-700 hover:underline">
+            Analyser plusieurs pages
+          </a>
         </p>
       </header>
 

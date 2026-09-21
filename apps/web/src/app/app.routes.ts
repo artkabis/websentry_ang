@@ -42,6 +42,11 @@ export const routes: Routes = [
       import('./features/analysis/analysis.component').then(m => m.AnalysisComponent),
   },
   {
+    path: 'analyse/lot',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/analysis/batch.component').then(m => m.BatchComponent),
+  },
+  {
     path: 'historique',
     canActivate: [authGuard],
     loadComponent: () =>

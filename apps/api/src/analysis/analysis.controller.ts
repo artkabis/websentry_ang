@@ -9,6 +9,8 @@ import {
   BatchRequestSchema,
   PERMISSIONS,
   SitemapRequestSchema,
+  SseAnalyzeEventSchema,
+  SseBatchEventSchema,
   type AnalysisReport,
   type AnalyzeRequest,
   type BatchRequest,
@@ -107,18 +109,25 @@ export class AnalysisController {
   @RequirePermission(PERMISSIONS.SCAN_RUN)
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('analyze/stream')
+  // Un flux ne CRÉE rien : sans cette précision, Nest répond 201 sur un POST, et
+  // le premier client strict — ou le premier proxy — s'en étonnera à juste titre.
+  @HttpCode(HttpStatus.OK)
   async stream(
     @Body({ schema: AnalyzeRequestSchema }) body: AnalyzeRequest,
     @CurrentUser() user: AuthUser,
     @Req() request: AuthenticatedRequest,
     @Res() reply: FastifyReply,
   ): Promise<void> {
-    const writer = new SseWriter(reply, request);
-    const actor = await this.actorOf(user);
-    // L'identifiant est tiré ICI : les événements le portent tous, y compris
-    // celui émis quand la page ne répond pas — donc avant qu'un rapport existe.
     const analyzeId = randomUUID();
-
+    const writer = new SseWriter(reply, request, SseAnalyzeEventSchema, message => ({
+      type: 'error' as const,
+      analyzeId,
+      message,
+    }));
+    const actor = await this.actorOf(user);
+    // L'identifiant est tiré AVANT le flux : les événements le portent tous, y
+    // compris celui émis quand la page ne répond pas — donc avant qu'un rapport
+    // existe.
     try {
       let announced = false;
       const report = await this.analysis.analyzePage(
@@ -142,7 +151,81 @@ export class AnalysisController {
 
       writer.send({ type: 'complete', analyzeId, report });
     } catch (err) {
-      writer.sendError(err, analyzeId);
+      writer.sendError(err);
+    } finally {
+      writer.close();
+    }
+  }
+
+  /**
+   * POST /api/v1/analyze/batch/stream — lot analysé, page par page.
+   *
+   * Le lot en une seule réponse fige l'écran pendant toute sa durée : deux
+   * cents pages, ce sont plusieurs minutes sans rien à montrer, et un rapport
+   * final de plusieurs mégaoctets d'un coup. Ici, chaque page part dès qu'elle
+   * est terminée — le contrat existait dans le paquet partagé, rien ne le
+   * servait.
+   *
+   * Comme pour l'analyse unitaire, le filtre global ne peut plus rien une fois
+   * les en-têtes partis : les erreurs sont assainies et émises ICI.
+   */
+  @RequirePermission(PERMISSIONS.SCAN_BATCH)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('analyze/batch/stream')
+  @HttpCode(HttpStatus.OK)
+  async batchStream(
+    @Body({ schema: BatchRequestSchema }) body: BatchRequest,
+    @CurrentUser() user: AuthUser,
+    @Req() request: AuthenticatedRequest,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const batchId = randomUUID();
+    const writer = new SseWriter(reply, request, SseBatchEventSchema, message => ({
+      type: 'error' as const,
+      batchId,
+      message,
+    }));
+    const actor = await this.actorOf(user);
+
+    try {
+      let announced = false;
+      const result = await this.analysis.analyzeBatch(
+        body.urls,
+        actor,
+        {
+          settingsOverride: body.settings,
+          profileOverride: body.profileOverride,
+          batchId,
+        },
+        (item, completed, total) => {
+          // `start` part au PREMIER résultat : c'est là qu'on connaît le nombre
+          // de pages réellement distinctes, les doublons ayant été écartés.
+          if (!announced) {
+            announced = true;
+            writer.send({ type: 'start', batchId, total });
+          }
+          writer.send({
+            type: 'page',
+            batchId,
+            completed,
+            total,
+            url: item.url,
+            ok: item.ok,
+            report: item.report,
+          });
+        },
+      );
+
+      writer.send({
+        type: 'complete',
+        batchId,
+        total: result.total,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        durationMs: result.durationMs,
+      });
+    } catch (err) {
+      writer.sendError(err);
     } finally {
       writer.close();
     }

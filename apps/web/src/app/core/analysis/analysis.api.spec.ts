@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import { SseAnalyzeEventSchema, SseBatchEventSchema } from '@websentry/shared';
 import { describe, expect, it } from 'vitest';
 import { readSseStream } from './analysis.api';
 
@@ -23,7 +24,18 @@ function streamOf(chunks: readonly string[]): globalThis.ReadableStream<Uint8Arr
 
 async function collect(chunks: readonly string[], signal?: AbortSignal) {
   const events = [];
-  for await (const event of readSseStream(streamOf(chunks), signal)) events.push(event);
+  for await (const event of readSseStream(streamOf(chunks), SseAnalyzeEventSchema, signal)) {
+    events.push(event);
+  }
+  return events;
+}
+
+/** Le même lecteur, éprouvé sur le contrat d'un LOT. */
+async function collectBatch(chunks: readonly string[]) {
+  const events = [];
+  for await (const event of readSseStream(streamOf(chunks), SseBatchEventSchema)) {
+    events.push(event);
+  }
   return events;
 }
 
@@ -86,5 +98,38 @@ describe('readSseStream', () => {
 
   it('tient sur un flux vide', async () => {
     expect(await collect([])).toEqual([]);
+  });
+});
+
+describe('lecteur de flux — contrat de LOT', () => {
+  it('lit les événements d’un lot avec le même analyseur', async () => {
+    // Le transport est le même ; seul le contrat change. En écrire un second
+    // ferait diverger deux fois les mêmes précautions — tampon, bloc illisible
+    // ignoré, interruption propre.
+    const BATCH_ID = '44444444-4444-4444-8444-444444444444';
+    const events = await collectBatch([
+      `data: ${JSON.stringify({ type: 'start', batchId: BATCH_ID, total: 2 })}\n\n`,
+      `data: ${JSON.stringify({
+        type: 'page',
+        batchId: BATCH_ID,
+        completed: 1,
+        total: 2,
+        url: 'https://exemple.fr/',
+        ok: true,
+        report: null,
+      })}\n\n`,
+    ]);
+
+    expect(events.map(event => event.type)).toEqual(['start', 'page']);
+  });
+
+  it('IGNORE un événement qui ne respecte pas le contrat du lot', async () => {
+    // Un événement d'analyse unitaire n'est pas un événement de lot : l'accepter
+    // ferait planter l'affichage sur un champ absent.
+    const events = await collectBatch([
+      `data: ${JSON.stringify({ type: 'start', analyzeId: null, url: 'https://exemple.fr/', total: 7 })}\n\n`,
+    ]);
+
+    expect(events).toEqual([]);
   });
 });

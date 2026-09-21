@@ -293,6 +293,16 @@ appel direct.
 Un quota atteint est un état à part (`exhausted`), jamais un défaut du site :
 les critères l'annoncent en note d'information, hors décompte et hors barème.
 
+#### Un lot s'affiche pendant qu'il tourne
+
+`POST /analyze/batch/stream` émet chaque page DÈS qu'elle est terminée, rapport
+compris. Le contrat existait dans le paquet partagé et rien ne le servait : le
+lot ne répondait qu'en bloc, ce qui fige l'écran plusieurs minutes sur deux
+cents pages avant de livrer des mégaoctets d'un coup. L'émetteur SSE et le
+lecteur côté client sont GÉNÉRIQUES sur leur contrat — en écrire une seconde
+version ferait diverger deux fois les mêmes précautions : validation avant
+émission, bloc illisible ignoré, socket mort, interruption propre.
+
 #### L'historique se parcourt jusqu'au rapport
 
 Site → audits → pages → rapport. Le dernier maillon manquait : l'API servait le
@@ -524,9 +534,9 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
 | Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1698   | 85 % global, **100 %** sécurité |
-| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 95     | —                               |
+| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 104    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 230    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 414    | 80 %                            |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 428    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
@@ -580,11 +590,10 @@ Dettes identifiées sur le périmètre déjà livré :
   Les écrans existants sont en clair uniquement ; n'en convertir qu'une partie
   serait pire que rien. La bascule est un passage transverse sur les jetons de
   design, à mener d'un bloc plutôt qu'au fil des modules.
-- **Lot et sitemap dans l'interface** — `/analyse` couvre la page unitaire ; le
-  backend expose aussi le lot et le sitemap, sans écran. Le rendu du rapport
-  étant désormais factorisé (`report-view.ts` et ses cartes), un écran de lot
-  consiste surtout à empiler des rapports et à suivre plusieurs flux, pas à
-  réécrire l'affichage.
+- **Sitemap dans l'interface** — `/analyse` couvre la page unitaire et
+  `/analyse/lot` le lot ; la détection et la lecture d'un sitemap sont servies
+  par l'API, sans écran. Il s'agit de choisir des URL découvertes puis de les
+  verser au lot, dont le flux existe désormais.
 - **Feuilles de style externes non mesurées** — `CONTRAST_V2` évalue les styles
   embarqués et en ligne. Un site dont toute la charte tient dans un `.css`
   distant est donc mesuré sur des valeurs par défaut. Faire passer ces feuilles

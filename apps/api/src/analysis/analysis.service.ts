@@ -37,6 +37,8 @@ export interface AnalyzeOptions {
    * avant qu'un rapport existe pour le fournir.
    */
   analyzeId?: string;
+  /** Même raison pour un lot : le flux annonce son identifiant dès le départ. */
+  batchId?: string;
 }
 
 /**
@@ -97,7 +99,7 @@ export class AnalysisService {
     options: AnalyzeOptions = {},
     onPage?: (item: BatchItem, completed: number, total: number) => void,
   ): Promise<BatchResponse> {
-    const batchId = randomUUID();
+    const batchId = options.batchId ?? randomUUID();
     const startedAt = Date.now();
     const results: BatchItem[] = [];
     const reports: AnalysisReport[] = [];

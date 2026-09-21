@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { SseAnalyzeEventSchema, type SseAnalyzeEvent } from '@websentry/shared';
+import type { ZodType } from 'zod';
 import { SSRF_PUBLIC_MESSAGE, SsrfBlockedError } from '../security/ssrf.service.js';
 
 /**
@@ -11,14 +11,23 @@ import { SSRF_PUBLIC_MESSAGE, SsrfBlockedError } from '../security/ssrf.service.
  * produire. Tout ce qu'il garantit ailleurs — pas de trace d'exécution, forme
  * d'erreur uniforme, code HTTP juste — doit donc être refait ICI, à la main.
  * C'est la raison d'être de cette classe.
+ *
+ * Elle est GÉNÉRIQUE sur le contrat d'événements : l'analyse d'une page et
+ * celle d'un lot n'émettent pas les mêmes messages, mais le transport — les
+ * en-têtes, la validation avant émission, la fermeture propre, le socket mort —
+ * est le même. En écrire deux versions ferait diverger deux fois les mêmes
+ * précautions de sécurité.
  */
-export class SseWriter {
+export class SseWriter<TEvent extends { type: string }> {
   private readonly logger = new Logger(SseWriter.name);
   private closed = false;
 
   constructor(
     private readonly reply: FastifyReply,
     request: FastifyRequest,
+    private readonly schema: ZodType<TEvent>,
+    /** Fabrique l'événement d'erreur propre à ce contrat. */
+    private readonly errorEvent: (message: string) => TEvent,
   ) {
     reply.raw.setHeader('Content-Type', 'text/event-stream');
     reply.raw.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -47,12 +56,12 @@ export class SseWriter {
     return this.closed;
   }
 
-  send(event: SseAnalyzeEvent): void {
+  send(event: TEvent): void {
     if (this.closed) return;
 
     // Validation AVANT émission : un événement mal formé serait accepté par le
     // client comme du JSON valide, et casserait son affichage sans rien dire.
-    const parsed = SseAnalyzeEventSchema.safeParse(event);
+    const parsed = this.schema.safeParse(event);
     if (!parsed.success) {
       this.logger.error(`Événement SSE non conforme (${event.type}) — non émis`);
       return;
@@ -72,8 +81,8 @@ export class SseWriter {
    * un message d'undici cite l'hôte, le port et parfois le code système, autant
    * d'informations sur le réseau interne qu'un flux public n'a pas à porter.
    */
-  sendError(err: unknown, analyzeId: string | null = null): void {
-    this.send({ type: 'error', analyzeId, message: publicMessageOf(err) });
+  sendError(err: unknown): void {
+    this.send(this.errorEvent(publicMessageOf(err)));
   }
 
   close(): void {

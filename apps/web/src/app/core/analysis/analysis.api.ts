@@ -1,15 +1,18 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import type { ZodType } from 'zod';
 import {
   AnalysisReportSchema,
   BatchResponseSchema,
   SitemapParseResponseSchema,
   SseAnalyzeEventSchema,
+  SseBatchEventSchema,
   type AnalysisReport,
   type BatchResponse,
   type SitemapParseResponse,
   type SseAnalyzeEvent,
+  type SseBatchEvent,
 } from '@websentry/shared';
 import { API_BASE_URL } from '../api/api.config';
 import { CSRF_COOKIE, CSRF_HEADER, readCookie } from '../auth/csrf';
@@ -89,7 +92,42 @@ export class AnalysisApi {
       throw new Error(`Analyse impossible (${response.status})`);
     }
 
-    yield* readSseStream(response.body, signal);
+    yield* readSseStream(response.body, SseAnalyzeEventSchema, signal);
+  }
+
+  /**
+   * Analyse d'un lot, page par page.
+   *
+   * Le lot en une seule réponse fige l'écran pendant toute sa durée — plusieurs
+   * minutes sur deux cents pages — puis livre des mégaoctets d'un coup. Ici
+   * chaque page arrive dès qu'elle est terminée.
+   */
+  async *batchStream(
+    urls: readonly string[],
+    profileOverride?: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<SseBatchEvent> {
+    const response = await fetch(`${this.baseUrl}/analyze/batch/stream`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        // Le double-submit CSRF s'applique : `fetch` ne traverse PAS les
+        // intercepteurs Angular, le jeton est donc posé explicitement ici.
+        [CSRF_HEADER]: readCookie(CSRF_COOKIE) ?? '',
+      },
+      body: JSON.stringify({
+        urls: [...urls],
+        ...(profileOverride ? { profileOverride } : {}),
+      }),
+      signal,
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Analyse du lot impossible (${response.status})`);
+    }
+
+    yield* readSseStream(response.body, SseBatchEventSchema, signal);
   }
 
   private bodyOf(input: AnalyzeInput): Record<string, unknown> {
@@ -108,10 +146,11 @@ export class AnalysisApi {
  * arrivent par paquets TCP arbitraires — un événement peut être coupé en deux,
  * ou deux événements arriver ensemble —, d'où le tampon.
  */
-export async function* readSseStream(
+export async function* readSseStream<TEvent>(
   body: ReadableStream<Uint8Array>,
+  schema: ZodType<TEvent>,
   signal?: AbortSignal,
-): AsyncGenerator<SseAnalyzeEvent> {
+): AsyncGenerator<TEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -130,7 +169,7 @@ export async function* readSseStream(
         const chunk = buffer.slice(0, separator);
         buffer = buffer.slice(separator + 2);
 
-        const event = parseSseChunk(chunk);
+        const event = parseSseChunk(chunk, schema);
         if (event) yield event;
 
         separator = buffer.indexOf('\n\n');
@@ -148,13 +187,13 @@ export async function* readSseStream(
  * événement de progression est sans conséquence, perdre l'analyse entière en a
  * une.
  */
-function parseSseChunk(chunk: string): SseAnalyzeEvent | null {
+function parseSseChunk<TEvent>(chunk: string, schema: ZodType<TEvent>): TEvent | null {
   const line = chunk.split('\n').find(candidate => candidate.startsWith('data:'));
   if (!line) return null;
 
   try {
     const parsed: unknown = JSON.parse(line.slice('data:'.length).trim());
-    const result = SseAnalyzeEventSchema.safeParse(parsed);
+    const result = schema.safeParse(parsed);
     return result.success ? result.data : null;
   } catch {
     return null;

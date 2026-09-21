@@ -91,6 +91,13 @@ describe('Suite sécurité OWASP — module 4 (E2E)', () => {
       await post('/analyze/stream', admin).send({ url: 'file:///etc/passwd' }).expect(400);
     });
 
+    it('refuse un protocole interdit sur le flux de LOT', async () => {
+      const admin = await session(ADMIN);
+      await post('/analyze/batch/stream', admin)
+        .send({ urls: ['https://exemple.fr/', 'file:///etc/passwd'] })
+        .expect(400);
+    });
+
     it('refuse un protocole interdit à la lecture de sitemap', async () => {
       const admin = await session(ADMIN);
       await post('/sitemap/parse', admin).send({ url: 'file:///etc/hosts' }).expect(400);
@@ -231,6 +238,22 @@ describe('Suite sécurité OWASP — module 4 (E2E)', () => {
       await post('/analyze/batch', tester)
         .send({ urls: ['https://exemple.fr/'] })
         .expect(403);
+    });
+
+    it('REFUSE le flux de lot au rang testeur, comme le lot lui-même', async () => {
+      // Une route de flux n'est pas une porte dérobée vers un lot : elle exige
+      // la même permission que `POST /analyze/batch`.
+      const tester = await session(TESTER);
+      await post('/analyze/batch/stream', tester)
+        .send({ urls: ['https://exemple.fr/'] })
+        .expect(403);
+    });
+
+    it('refuse le flux de lot sans authentification', async () => {
+      await http
+        .post(t.url('/analyze/batch/stream'))
+        .send({ urls: ['https://exemple.fr/'] })
+        .expect(401);
     });
 
     it('refuse la lecture de sitemap au rang testeur', async () => {
