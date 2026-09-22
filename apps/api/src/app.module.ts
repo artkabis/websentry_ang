@@ -12,6 +12,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
+import { UsersModule } from './users/users.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { ScansModule } from './scans/scans.module.js';
 import { CsrfGuard } from './security/csrf.guard.js';
@@ -41,6 +42,7 @@ import { SecurityModule } from './security/security.module.js';
     AuthModule,
     HealthModule,
     ProfilesModule,
+    UsersModule,
     ScansModule,
     AnalysisModule,
     ThrottlerModule.forRoot({

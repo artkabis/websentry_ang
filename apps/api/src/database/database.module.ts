@@ -7,6 +7,7 @@ import {
   LocalUserStore,
 } from '../auth/local/local-stores.js';
 import { DatabaseService } from './database.service.js';
+import { UserAdminRepository } from './repositories/user-admin.repository.js';
 import { UserRepository } from './repositories/user.repository.js';
 import { SessionRepository } from './repositories/session.repository.js';
 import { PermissionRepository } from './repositories/permission.repository.js';
@@ -53,6 +54,7 @@ const DEPOTS_AUTH = [
   providers: [
     DatabaseService,
     ...DEPOTS_AUTH,
+    UserAdminRepository,
     LocalAccountsBootstrap,
     AuditRepository,
     ProfileRepository,
@@ -62,6 +64,7 @@ const DEPOTS_AUTH = [
   exports: [
     DatabaseService,
     UserRepository,
+    UserAdminRepository,
     SessionRepository,
     PermissionRepository,
     AuditRepository,

@@ -17,7 +17,7 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Socle sécurité (SSRF, CSRF, audit, en-têtes) | ✅      | —        | **Livré** |
 | Settings & profils par gamme                 | ✅      | ✅       | **Livré** |
 | Historique des scans                         | ✅      | ✅       | **Livré** |
-| Gestion utilisateurs + audit                 | ⬜      | ⬜       | À faire   |
+| Gestion utilisateurs + audit                 | ✅      | ⬜       | En cours  |
 | Analyse (page, batch, sitemap, SSE)          | ✅      | ✅       | **Livré** |
 | Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
 | Messagerie in-app                            | ⬜      | ⬜       | À faire   |
@@ -25,10 +25,11 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 2989 au total — 337 paquet partagé, 1769 unitaires backend,
-334 E2E + sécurité API, 502 unitaires frontend, 47 E2E navigateur.
-**Couverture** : 100 % lignes paquet partagé, 95,8 % lignes backend
-(100 % sur chaque module de sécurité), 98,6 % lignes frontend.
+**Tests** : 3119 au total — 357 paquet partagé, 1846 unitaires backend,
+367 E2E + sécurité API, 502 unitaires frontend, 47 E2E navigateur.
+**Couverture** : 100 % lignes paquet partagé, 95,9 % lignes backend
+(100 % sur chaque module de sécurité **et sur la gestion des comptes**),
+98,6 % lignes frontend.
 
 > **Module 4 — livré.** Le pipeline d'analyse est complet (récupération
 > SSRF-sûre, profils, pool de threads, flux SSE, sitemap, historisation, suite
@@ -38,7 +39,17 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 > `/analyse/sitemap` la découverte des pages d'un site, et l'historique se
 > parcourt jusqu'au rapport d'une page archivée. Détail dans
 > [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), arbitrages en
+>
 > [`docs/DECISIONS.md`](docs/DECISIONS.md) §21 à §25.
+
+> **Module 5 — backend livré.** `/users` porte le CRUD des comptes, la
+> réinitialisation de mot de passe et les permissions fines, sous quatre
+> garde-fous : on n'agit pas sur un rang supérieur ou égal au sien, on ne se
+> modifie pas soi-même, le dernier administrateur actif ne se retire pas, et
+> toute écriture révoque les jetons déjà émis. Le module exige la base
+> (`503` sans elle) et est couvert à **100 %** lignes, branches et fonctions,
+> seuil verrouillé par fichier. Les écrans d'administration restent à faire.
+> Arbitrages en [`docs/DECISIONS.md`](docs/DECISIONS.md) §39 à §41.
 
 ---
 

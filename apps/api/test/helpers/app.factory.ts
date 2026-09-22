@@ -7,6 +7,10 @@ import { AppConfigService } from '../../src/config/app-config.service.js';
 import { DatabaseService } from '../../src/database/database.service.js';
 import type { UserRow } from '../../src/database/repositories/user.repository.js';
 import { UserRepository } from '../../src/database/repositories/user.repository.js';
+import {
+  UserAdminRepository,
+  type AdminUserRow,
+} from '../../src/database/repositories/user-admin.repository.js';
 import { SessionRepository } from '../../src/database/repositories/session.repository.js';
 import { PermissionRepository } from '../../src/database/repositories/permission.repository.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repository.js';
@@ -125,6 +129,9 @@ export interface TestApp {
   url(path: string): string;
   close(): Promise<void>;
 }
+
+/** Horodatage fixe des comptes amorcés — une date stable rend les tests lisibles. */
+const MOMENT_AMORCAGE = '2026-01-01T00:00:00.000Z';
 
 export const TEST_JWT_SECRET = 'secret-de-test-hs256-suffisamment-long-ok';
 
@@ -623,6 +630,154 @@ export async function createTestApp(
     countPending: vi.fn(() => Promise.resolve({ compressible: 0, purgeable: 0 })),
   };
 
+  /**
+   * Administration des comptes, adossée à la MÊME table simulée que
+   * l'authentification : un compte créé ici doit pouvoir se connecter ensuite,
+   * et un compte suspendu ici doit se voir refuser son jeton.
+   */
+  function versAdmin(ligne: UserRow): AdminUserRow {
+    const brut = ligne as unknown as {
+      total_scans_launched?: number;
+      created_at?: string;
+      updated_at?: string;
+    };
+    return {
+      id: ligne.id,
+      username: ligne.username,
+      display_name: ligne.display_name,
+      email: ligne.email,
+      rank: ligne.rank,
+      status: ligne.status,
+      locked_until: ligne.locked_until,
+      total_scans_launched: brut.total_scans_launched ?? 0,
+      created_at: brut.created_at ?? MOMENT_AMORCAGE,
+      updated_at: brut.updated_at ?? MOMENT_AMORCAGE,
+    } as AdminUserRow;
+  }
+
+  function filtrer(filters: { search?: string; rank?: number; status?: string }): AdminUserRow[] {
+    const motif = filters.search?.toLowerCase();
+    return [...db.users.values()]
+      .filter(u => {
+        if (filters.rank !== undefined && u.rank !== filters.rank) return false;
+        if (filters.status !== undefined && u.status !== filters.status) return false;
+        if (motif === undefined) return true;
+        return [u.username, u.display_name, u.email].some(champ =>
+          (champ ?? '').toLowerCase().includes(motif),
+        );
+      })
+      .sort((a, b) => b.rank - a.rank || a.username.localeCompare(b.username))
+      .map(versAdmin);
+  }
+
+  const userAdminRepo = {
+    available: true,
+    list: vi.fn((filters: never, limit: number, offset: number) =>
+      Promise.resolve(filtrer(filters).slice(offset, offset + limit)),
+    ),
+    count: vi.fn((filters: never) => Promise.resolve(filtrer(filters).length)),
+    findById: vi.fn((id: string) => {
+      const ligne = db.users.get(id);
+      return Promise.resolve(ligne ? versAdmin(ligne) : null);
+    }),
+    countActiveAtLeastRank: vi.fn((rank: number) =>
+      Promise.resolve(
+        [...db.users.values()].filter(u => u.rank >= rank && u.status === 'active').length,
+      ),
+    ),
+    create: vi.fn(
+      (compte: {
+        id: string;
+        username: string;
+        passwordHash: string;
+        rank: number;
+        displayName: string | null;
+        email: string | null;
+      }) => {
+        const maintenant = new Date().toISOString();
+        db.users.set(compte.id, {
+          id: compte.id,
+          username: compte.username,
+          password_hash: compte.passwordHash,
+          display_name: compte.displayName,
+          email: compte.email,
+          rank: compte.rank,
+          status: 'active',
+          token_version: 0,
+          failed_logins: 0,
+          locked_until: null,
+          total_scans_launched: 0,
+          created_at: maintenant,
+          updated_at: maintenant,
+        } as unknown as UserRow);
+        return Promise.resolve();
+      },
+    ),
+    update: vi.fn(
+      (
+        id: string,
+        champs: Partial<{
+          rank: number;
+          status: 'active' | 'suspended' | 'pending';
+          display_name: string | null;
+          email: string | null;
+        }>,
+      ) => {
+        const ligne = db.users.get(id);
+        if (!ligne) return Promise.resolve(0);
+        // Seuls les champs FOURNIS sont écrits — reproduire ici la mise à jour
+        // partielle du dépôt réel, sinon le test ne prouverait rien.
+        for (const [colonne, valeur] of Object.entries(champs)) {
+          if (valeur !== undefined) {
+            (ligne as unknown as Record<string, unknown>)[colonne] = valeur;
+          }
+        }
+        (ligne as unknown as Record<string, unknown>)['updated_at'] = new Date().toISOString();
+        return Promise.resolve(1);
+      },
+    ),
+    updatePassword: vi.fn((id: string, passwordHash: string) => {
+      const ligne = db.users.get(id);
+      if (!ligne) return Promise.resolve(0);
+      ligne.password_hash = passwordHash;
+      ligne.failed_logins = 0;
+      ligne.locked_until = null;
+      ligne.token_version += 1;
+      return Promise.resolve(1);
+    }),
+    delete: vi.fn((id: string) => {
+      db.permissions.delete(id);
+      return Promise.resolve(db.users.delete(id) ? 1 : 0);
+    }),
+    list_permissions: vi.fn((userId: string) =>
+      Promise.resolve(
+        (db.permissions.get(userId) ?? []).map(p => ({
+          permission: p.permission,
+          gammes: p.gammes,
+          granted_by: 'seed',
+          granted_at: MOMENT_AMORCAGE,
+          expires_at: null,
+        })) as never,
+      ),
+    ),
+    grantPermission: vi.fn(
+      (octroi: { userId: string; permission: string; gammes: string[] | null }) => {
+        const liste = db.permissions.get(octroi.userId) ?? [];
+        const existante = liste.find(p => p.permission === octroi.permission);
+        if (existante) existante.gammes = octroi.gammes;
+        else liste.push({ permission: octroi.permission, gammes: octroi.gammes });
+        db.permissions.set(octroi.userId, liste);
+        return Promise.resolve();
+      },
+    ),
+    revokePermission: vi.fn((userId: string, permission: string) => {
+      const liste = db.permissions.get(userId) ?? [];
+      const reste = liste.filter(p => p.permission !== permission);
+      db.permissions.set(userId, reste);
+      return Promise.resolve(liste.length - reste.length);
+    }),
+  };
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
@@ -674,6 +829,8 @@ export async function createTestApp(
     .useValue(databaseStub)
     .overrideProvider(UserRepository)
     .useValue(userRepo)
+    .overrideProvider(UserAdminRepository)
+    .useValue(userAdminRepo)
     .overrideProvider(SessionRepository)
     .useValue(sessionRepo)
     .overrideProvider(PermissionRepository)
@@ -771,7 +928,12 @@ export async function createTestApp(
       token_version: 0,
       failed_logins: 0,
       locked_until: null,
-    } as UserRow);
+      // Colonnes d'administration : absentes de `UserRow` (qui ne décrit que
+      // l'authentification) mais bien présentes dans la table `users`.
+      total_scans_launched: 0,
+      created_at: MOMENT_AMORCAGE,
+      updated_at: MOMENT_AMORCAGE,
+    } as unknown as UserRow);
     db.passwords.set(user.id, user.password);
     if (user.permissions) db.permissions.set(user.id, user.permissions);
   }

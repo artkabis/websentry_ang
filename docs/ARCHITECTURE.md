@@ -57,6 +57,7 @@ Réordonner ces providers casserait silencieusement les exemptions.
 | `audit`    | Journal append-only                                                                                    |
 | `rbac`     | Résolution rang + permissions fines avec scope de gammes                                               |
 | `auth`     | Connexion, rotation du refresh, déconnexion, profil                                                    |
+| `users`    | Administration des comptes — CRUD, mots de passe, permissions fines ; exige la base                    |
 | `health`   | Sonde publique                                                                                         |
 
 ---
@@ -201,6 +202,66 @@ ferait de la route un oracle permettant d'énumérer les audits d'autrui.
 
 Aucune route n'écrit dans l'historique : l'ingestion se fait en process
 (`DECISIONS.md` §16).
+
+---
+
+## Gestion des comptes
+
+Le module expose `/users` et ne fonctionne **qu'avec la base** : sans elle, les
+routes rendent `503` plutôt qu'une interface à moitié vivante (décision 39).
+
+### Deux dépôts pour une seule table
+
+`UserRepository` sert l'authentification ; `UserAdminRepository` sert
+l'administration. Le second ne lit **jamais** `password_hash`, `token_version`
+ni `failed_logins` : la liste des colonnes est explicite dans la requête, donc
+ce qui ne doit pas sortir n'est même pas chargé. Le premier garde son
+implémentation « sans base » (décision 38) ; le second n'en a pas.
+
+### Ordre des décisions sur une écriture
+
+Chaque écriture traverse les mêmes contrôles, dans cet ordre — l'ordre compte,
+car il détermine le code d'erreur rendu :
+
+1. `503` — base absente ;
+2. `404` — compte inexistant (avant tout contrôle de rang : un rang ne se
+   compare pas à celui d'un compte qui n'existe pas) ;
+3. `403` — auto-modification, rang cible supérieur ou égal, délégation d'une
+   permission non détenue ;
+4. `400` — dernier compte d'administration actif ;
+5. `409` — identifiant déjà pris.
+
+Le détail et la justification de chaque règle sont en décision 40.
+
+### Révocation
+
+Toute écriture qui change ce que le jeton affirme incrémente `token_version` —
+rang, statut, mot de passe, permission fine. Une suspension ou une
+réinitialisation de mot de passe ferme **en plus** les sessions ouvertes. La
+suite de bout en bout le vérifie en gardant une session ouverte avant
+l'écriture, puis en constatant son `401`.
+
+### Permissions de route
+
+| Route                             | Permission     |
+| --------------------------------- | -------------- |
+| `GET /users`, `GET /users/:id`    | `users:read`   |
+| `GET /users/:id/permissions`      | `users:read`   |
+| `POST /users`, `PATCH /users/:id` | `users:write`  |
+| `POST /users/:id/password`        | `users:write`  |
+| `PUT`/`DELETE …/permissions…`     | `users:write`  |
+| `DELETE /users/:id`               | `users:delete` |
+
+`users:delete` n'appartient **pas** au jeu par défaut du rang administrateur :
+supprimer un compte est réservé au rang 100, ou à une délégation explicite. La
+délégation ouvre la route, elle n'efface pas le garde-fou de rang — un test le
+prouve.
+
+La réinitialisation du mot de passe est une route **distincte** de la mise à
+jour : mêler le mot de passe aux autres champs permettrait de le changer en
+corrigeant un courriel, et rendrait la trace d'audit ambiguë sur ce qui a
+réellement été fait. Le mot de passe n'entre **jamais** dans le journal — ni en
+clair, ni haché : un journal se lit plus facilement qu'une table de comptes.
 
 ---
 

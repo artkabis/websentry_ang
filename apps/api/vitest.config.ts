@@ -90,6 +90,27 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        // Gestion des comptes : quatre garde-fous y décident qui peut élever,
+        // suspendre ou supprimer qui. Une branche non couverte ici, c'est une
+        // élévation de privilège que personne ne voit passer.
+        'src/users/users.service.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
+        'src/users/users.controller.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
+        'src/database/repositories/user-admin.repository.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

@@ -1076,3 +1076,102 @@ se comporterait différemment selon qu'on a une base ou non. Enfin, le fichier d
 comptes est une seconde source de vérité : elle ne s'active que sans base, mais
 un développeur qui bascule `DB_ENABLED` change d'identifiants sans que rien ne
 le lui rappelle.
+
+---
+
+## 39. La gestion des comptes exige la base, et l'assume
+
+**Décision** — Le module 5 refuse de fonctionner quand `DB_ENABLED=false` :
+toutes les routes `/users` rendent alors `503`. Un dépôt d'administration
+**distinct** du dépôt d'authentification (`UserAdminRepository`) porte les
+requêtes, et le mode « sans base » de la décision 38 n'en reçoit aucune
+implémentation locale.
+
+**Raison** — Le mode sans base porte deux comptes de développement dans un
+fichier. Les administrer par l'API donnerait une **seconde façon de les
+écrire**, et un écran qui marcherait à moitié : créer un compte oui, lui
+accorder une permission fine non, puisque ce mode n'en a pas. Un refus net
+(`503` avec son motif) se comprend mieux qu'une interface où la moitié des
+boutons échouent sans raison visible.
+
+La séparation des deux dépôts suit la même logique : les mélanger obligerait à
+doubler chaque requête d'administration dans un magasin de fichier que personne
+n'administre, et ferait porter au chemin d'authentification — le plus sensible
+du projet — des colonnes dont il n'a pas besoin. `UserAdminRepository` ne lit
+d'ailleurs **jamais** `password_hash`, `token_version` ni `failed_logins` : la
+barrière est dans la requête, en amont du DTO.
+
+**Aucune régression** — La v1 exigeait déjà MariaDB pour son écran
+d'administration ; rien de ce qu'elle faisait n'est retiré. Les quatre
+garde-fous de rang (ci-dessous) sont **ajoutés** par rapport à elle.
+
+**Coût assumé** — Deux. Le mode sans base a désormais un trou visible dans
+l'interface, qu'il faudra expliquer à l'écran et pas seulement dans un message
+d'erreur. Et deux dépôts touchent la table `users` : une colonne ajoutée demain
+doit être décidée dans les deux, faute de quoi l'un des deux la ratera.
+
+---
+
+## 40. Quatre garde-fous encadrent l'administration des comptes
+
+**Décision** — Le service refuse, quel que soit l'appelant et ses permissions :
+
+1. **d'agir sur un rang supérieur ou égal au sien** — sauf le `super_admin` ;
+2. **de changer son propre rang ou son propre statut**, ni de se supprimer ;
+3. **de retirer le dernier compte d'administration actif** (suppression,
+   suspension ou rétrogradation) ;
+4. **d'écrire sans révoquer** : tout changement de rang, de statut, de mot de
+   passe ou de permission incrémente `token_version`, et une suspension ou une
+   réinitialisation ferme en plus les sessions ouvertes.
+
+S'y ajoute la règle de délégation : **on n'accorde pas ce qu'on ne détient pas
+soi-même**.
+
+**Raison** — Une garde de route ne voit que l'acteur. Or chacune de ces règles
+dépend de l'acteur **et** de la cible : c'est pourquoi elles vivent dans le
+service et non dans un décorateur. Sans la première, un administrateur se
+fabrique un `super_admin` et devient `super_admin`. Sans la règle de
+délégation, il obtient le même résultat par personne interposée. Sans la
+deuxième, il s'élève en deux temps ou s'enferme dehors. Sans la troisième,
+l'instance se retrouve sans personne pour la reprendre en main, et il faut
+rouvrir la base à la main. Sans la quatrième, un compte suspendu garde son accès
+jusqu'à l'expiration de son jeton.
+
+**Aucune régression** — La v1 ne portait que la première de ces règles, et de
+façon partielle. Aucune capacité n'est retirée : ce qu'un administrateur pouvait
+faire, il le peut encore, à l'exception des gestes qui mettaient l'instance en
+danger.
+
+**Preuve** — Les trois fichiers du module sont à **100 %** lignes, branches et
+fonctions, seuil verrouillé par fichier dans `vitest.config.ts`. Dix-sept
+mutants ont été appliqués aux garde-fous : les dix-sept font tomber la suite.
+Deux d'entre eux ont survécu au premier passage et ont révélé de vrais trous —
+le refus d'auto-modification n'était prouvé que là où le garde-fou de rang le
+couvrait déjà, et la **rétrogradation** du dernier administrateur n'était jamais
+jouée. Les deux tests manquants ont été ajoutés. Les permissions posées sur
+chaque route sont vérifiées par réflexion, avec un test qui tombe dès qu'une
+route apparaît sans décorateur : un décorateur oublié ne se voit dans aucun test
+fonctionnel, la garde laisse simplement passer.
+
+**Coût assumé** — Deux. Le dernier `super_admin` d'une instance ne peut plus se
+rétrograder lui-même : il lui faut un pair. C'est le prix d'une instance qui
+reste gouvernable. Et ces règles sont muettes côté schéma : l'interface doit les
+anticiper pour ne pas proposer un geste que l'API refusera, sans quoi
+l'utilisateur découvre l'interdit après coup.
+
+---
+
+## 41. Le rang se coerce quand il vient d'une chaîne de requête
+
+**Décision** — `UserListQuerySchema` lit `rank` avec une coercition
+(`z.coerce.number()`), et non avec le `RankSchema` partagé.
+
+**Raison** — Un paramètre d'URL est **toujours** une chaîne. Réutiliser tel
+quel un schéma qui attend un nombre rejetait `?rank=50` en `400`, alors que la
+valeur est parfaitement valide. Le défaut a été trouvé par la suite de bout en
+bout, pas par les tests unitaires du schéma : ceux-ci passaient des nombres, ce
+qu'aucun client HTTP ne fait.
+
+**Coût assumé** — Un schéma de plus à tenir à jour si le catalogue des rangs
+change. Il partage la même liste `VALID_RANKS` que le schéma d'origine, donc il
+n'élargit rien — mais rien n'empêche mécaniquement les deux de diverger un jour.
