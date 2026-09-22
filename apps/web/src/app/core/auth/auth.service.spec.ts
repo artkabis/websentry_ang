@@ -1,7 +1,13 @@
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
-import { PERMISSIONS, RANKS, type CurrentUser } from '@websentry/shared';
+import {
+  PERMISSIONS,
+  RANKS,
+  rankToRole,
+  type CurrentUser,
+  type GrantedPermission,
+} from '@websentry/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { API_BASE_URL } from '../api/api.config';
 import { AuthService } from './auth.service';
@@ -286,5 +292,87 @@ describe('AuthService', () => {
       await withPermissions(RANKS.EDITOR, []);
       expect(service.gammeInScope(PERMISSIONS.DOCS_READ, 'premium')).toBe(false);
     });
+  });
+});
+
+describe('AuthService — parité avec la garde serveur', () => {
+  /**
+   * `/auth/me` ne liste QUE les octrois explicites : le serveur, lui, retombe
+   * sur les défauts du rang (`RbacService.resolve`). Sans ce repli côté client,
+   * l'interface refusait à un administrateur un écran que l'API lui servait.
+   */
+  async function avecProfil(rank: number, permissions: GrantedPermission[] = []) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: API_BASE_URL, useValue: '/api/v1' },
+      ],
+    });
+    const service = TestBed.inject(AuthService);
+    const http = TestBed.inject(HttpTestingController);
+
+    const promesse = service.refreshProfile();
+    http.expectOne('/api/v1/auth/me').flush({
+      id: 'u1',
+      username: 'alice',
+      rank,
+      role: rankToRole(rank),
+      status: 'active',
+      permissions,
+    });
+    // On ATTEND le profil : lire le service avant qu'il soit résolu rendrait
+    // « refusé » pour la seule raison qu'il n'y a encore personne.
+    await promesse;
+    return { service, http };
+  }
+
+  it('accorde à un ADMINISTRATEUR ce que son rang donne, sans ligne explicite', async () => {
+    const t = await avecProfil(RANKS.ADMIN);
+
+    expect(t.service.hasPermission('users:read')).toBe(true);
+    expect(t.service.hasPermission('users:write')).toBe(true);
+    t.http.verify();
+  });
+
+  it('REFUSE à un administrateur ce que son rang ne donne pas', async () => {
+    // `audit:read` est réservé au rang 100 : le repli ne doit pas l'élargir.
+    const t = await avecProfil(RANKS.ADMIN);
+    expect(t.service.hasPermission('audit:read')).toBe(false);
+    t.http.verify();
+  });
+
+  it('REFUSE à un testeur ce que son rang ne donne pas', async () => {
+    const t = await avecProfil(RANKS.TESTER);
+    expect(t.service.hasPermission('users:read')).toBe(false);
+    expect(t.service.hasPermission('scan:run')).toBe(true);
+    t.http.verify();
+  });
+
+  it('accorde une permission EXPLICITE au-delà du rang', async () => {
+    const t = await avecProfil(RANKS.TESTER, [{ permission: 'users:read', gammes: null }]);
+    expect(t.service.hasPermission('users:read')).toBe(true);
+    t.http.verify();
+  });
+
+  it('donne une portée TOTALE à une permission tenue du rang', async () => {
+    // Le serveur rend `{ gammes: null }` dans ce cas : restreindre côté client
+    // masquerait une gamme que l'API accepte.
+    const t = await avecProfil(RANKS.ADMIN);
+    expect(t.service.gammeInScope('profiles:write', 'premium')).toBe(true);
+    t.http.verify();
+  });
+
+  it('respecte la portée d’une permission explicitement restreinte', async () => {
+    const t = await avecProfil(RANKS.TESTER, [{ permission: 'scan:run', gammes: ['sante'] }]);
+    expect(t.service.gammeInScope('scan:run', 'sante')).toBe(true);
+    expect(t.service.gammeInScope('scan:run', 'premium')).toBe(false);
+    t.http.verify();
+  });
+
+  it('refuse une gamme pour une permission que ni le rang ni la base n’accordent', async () => {
+    const t = await avecProfil(RANKS.TESTER);
+    expect(t.service.gammeInScope('users:write', 'premium')).toBe(false);
+    t.http.verify();
   });
 });

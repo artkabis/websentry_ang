@@ -73,12 +73,30 @@ import { AuthService } from '../../core/auth/auth.service';
         </a>
       </section>
 
-      @if (auth.isAdmin()) {
+      @if (auth.hasPermission('users:read') || auth.isSuperAdmin()) {
         <section class="mt-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
           <h2 class="text-base font-medium text-content">Administration</h2>
           <p class="mt-1 text-sm text-content-subtle">
-            Section réservée aux rangs administrateur et supérieurs.
+            Comptes, rangs et permissions. Le journal d'audit est réservé au rang le plus élevé.
           </p>
+          <div class="mt-3 flex flex-wrap gap-4">
+            @if (auth.hasPermission('users:read')) {
+              <a
+                routerLink="/administration/comptes"
+                class="text-sm font-medium text-brand-text hover:underline"
+              >
+                Gérer les comptes
+              </a>
+            }
+            @if (auth.isSuperAdmin()) {
+              <a
+                routerLink="/administration/journal"
+                class="text-sm font-medium text-brand-text hover:underline"
+              >
+                Consulter le journal d'audit
+              </a>
+            }
+          </div>
         </section>
       }
 

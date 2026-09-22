@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
-import { RANKS, type CurrentUser } from '@websentry/shared';
+import { rankHasPermission, RANKS, type CurrentUser } from '@websentry/shared';
 import { render, screen } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -24,6 +24,13 @@ function setup(user: CurrentUser | null, role = 'tester') {
     user: () => user,
     role: () => role,
     isAdmin: () => (user?.rank ?? 0) >= RANKS.ADMIN,
+    isSuperAdmin: () => (user?.rank ?? 0) >= RANKS.SUPER_ADMIN,
+    // Même règle que le service réel : le rang donne ses permissions par
+    // défaut, et le super_admin détient tout.
+    hasPermission: (code: string) =>
+      (user?.rank ?? 0) >= RANKS.SUPER_ADMIN ||
+      rankHasPermission(user?.rank ?? 0, code) ||
+      (user?.permissions ?? []).some(p => p.permission === code),
     logout,
   };
 
@@ -60,16 +67,23 @@ describe('DashboardComponent', () => {
     expect(screen.queryByRole('heading', { name: 'Administration' })).toBeNull();
   });
 
-  it('affiche la section d’administration à un admin', async () => {
+  it('mène un admin aux comptes, mais PAS au journal', async () => {
+    // `audit:read` reste réservé au rang 100 : proposer le lien mènerait à un
+    // écran d'accès refusé.
     const t = setup(profile(RANKS.ADMIN), 'admin');
     await render(DashboardComponent, { providers: t.providers });
+
     expect(screen.getByRole('heading', { name: 'Administration' })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Gérer les comptes/ })).toBeDefined();
+    expect(screen.queryByRole('link', { name: /journal d'audit/ })).toBeNull();
   });
 
-  it('affiche la section d’administration à un super_admin', async () => {
+  it('mène un super_admin aux comptes ET au journal', async () => {
     const t = setup(profile(RANKS.SUPER_ADMIN), 'super_admin');
     await render(DashboardComponent, { providers: t.providers });
-    expect(screen.getByRole('heading', { name: 'Administration' })).toBeDefined();
+
+    expect(screen.getByRole('link', { name: /Gérer les comptes/ })).toBeDefined();
+    expect(screen.getByRole('link', { name: /journal d'audit/ })).toBeDefined();
   });
 
   it('signale l’absence de permission fine', async () => {

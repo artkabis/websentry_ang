@@ -9,11 +9,15 @@ import { expect, test, type Page } from '@playwright/test';
  * réellement appliqué — et non le code qui prétend l'avoir demandé.
  */
 
+/**
+ * Rang 100 : le balayage doit atteindre TOUS les écrans, y compris ceux que
+ * les gardes réservent au rang le plus élevé.
+ */
 const ME = {
   id: 'u1',
   username: 'alice',
-  rank: 50,
-  role: 'admin',
+  rank: 100,
+  role: 'super_admin',
   status: 'active',
   permissions: [],
 };
@@ -205,6 +209,10 @@ test.describe('Thème sombre', () => {
     // sans API, il rend donc son formulaire complet — listes, pondérations,
     // boutons — ce qui en fait l'écran le plus dense à vérifier.
     '/profils/premium',
+    // L'administration apporte ses propres familles : pastilles de statut
+    // (succès, alerte, avertissement) et zone de suppression.
+    '/administration/comptes',
+    '/administration/comptes/nouveau',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {

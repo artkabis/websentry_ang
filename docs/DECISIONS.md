@@ -1175,3 +1175,89 @@ qu'aucun client HTTP ne fait.
 **Coût assumé** — Un schéma de plus à tenir à jour si le catalogue des rangs
 change. Il partage la même liste `VALID_RANKS` que le schéma d'origine, donc il
 n'élargit rien — mais rien n'empêche mécaniquement les deux de diverger un jour.
+
+---
+
+## 42. L'interface REJOUE les garde-fous plutôt que de les découvrir
+
+**Décision** — Les écrans d'administration calculent eux-mêmes ce que le
+service refuserait (`refusPrevisible`, `rangsAttribuables`, les permissions
+délégables) et **n'offrent pas** le geste, en affichant sa raison à la place.
+
+**Raison** — La décision 40 avait énoncé son coût : « ces règles sont muettes
+côté schéma : l'interface doit les anticiper pour ne pas proposer un geste que
+l'API refusera, sans quoi l'utilisateur découvre l'interdit après coup ». C'est
+ce coût qu'on paie ici. Un bouton « Modifier » qui rend 403 n'apprend rien : il
+faut ensuite deviner si c'est le rang, le compte visé, ou une permission qui
+manque.
+
+Ce n'est **pas** une protection, et le code le dit à l'endroit où il s'écrit :
+l'API reste la seule autorité, ces fonctions ne font que reproduire sa décision
+pour l'expliquer plus tôt. Chaque règle reproduite est testée des deux côtés —
+le service en refuse l'exécution, l'interface en refuse l'offre.
+
+**Aucune régression** — Rien n'est retiré : un geste permis reste offert, et un
+geste refusé l'était déjà, en 403.
+
+**Coût assumé** — Deux règles vivent désormais à deux endroits. Un garde-fou
+ajouté au service sans son pendant côté interface donnerait un bouton qui
+échoue ; l'inverse donnerait un bouton manquant sans raison. Les deux jeux de
+tests se lisent l'un l'autre, mais rien ne les lie mécaniquement.
+
+---
+
+## 43. Le journal d'audit est gardé par le RANG, pas par sa permission
+
+**Décision** — `GET /api/v1/audit` exige le rang 100. `audit:read` reste au
+catalogue des permissions mais n'est accordable à personne, et aucune route ne
+le consulte.
+
+**Raison** — Le catalogue portait déjà ce code avec la mention « RÉSERVÉ au
+super_admin ». Le garder au catalogue documente l'intention ; poser la garde sur
+le rang évite de laisser croire qu'on peut le déléguer. Une garde par permission
+aurait fait apparaître `audit:read` dans la liste des codes délégables de
+l'écran des permissions, et un administrateur l'aurait accordé — sans effet,
+puisque rien ne le lit. Un droit qu'on accorde et qui ne fait rien est pire
+qu'un droit absent.
+
+Le journal porte des adresses IP et le détail de chaque action menée sur les
+comptes. C'est une pièce d'enquête, pas une donnée d'exploitation courante.
+
+**Aucune régression** — La v1 n'exposait pas ce journal par l'API. Rien n'est
+retiré ; c'est un ajout.
+
+**Coût assumé** — Deux mécanismes de garde coexistent sur des routes voisines :
+`/users` par permission fine, `/audit` par rang. Un lecteur pressé peut croire à
+une incohérence. Un test par réflexion vérifie que la route d'audit ne porte
+**aucune** permission, pour que ce choix reste lisible dans le code.
+
+---
+
+## 44. `hasPermission` côté client retombe sur les défauts du rang
+
+**Décision** — `AuthService.hasPermission` et `gammeInScope` appliquent
+`rankHasPermission` quand aucune ligne explicite n'existe, comme le fait
+`RbacService.resolve` côté serveur.
+
+**Raison** — Le commentaire de la méthode promettait déjà cette parité — « c'est
+la même règle que côté serveur, afin que l'interface n'affiche jamais une action
+que l'API refuserait — ni l'inverse » — mais le code ne lisait que
+`user.permissions`. Or `/auth/me` ne renvoie que les octrois **explicites** :
+`RbacService.listForUser` ne compose pas les défauts du rang. Un administrateur
+sans ligne en base se voyait donc refuser par l'interface un écran que l'API lui
+aurait servi.
+
+Le défaut était invisible tant qu'aucune route front n'était gardée par une
+permission fine : il est apparu au premier scénario navigateur sur
+`/administration/comptes`. Les tests unitaires ne pouvaient pas le voir — ils
+fournissaient un double d'`AuthService`, donc la règle qu'ils voulaient vérifier.
+
+**Aucune régression** — Le repli n'élargit rien : il applique la même table
+`RANK_DEFAULT_PERMISSIONS` que le serveur. Un test vérifie qu'un administrateur
+n'obtient pas `audit:read`, qui n'est dans aucun défaut de rang.
+
+**Coût assumé** — La règle d'autorisation est maintenant écrite deux fois, une
+par processus. Elles partagent la même table dans le paquet partagé, donc elles
+ne peuvent pas diverger sur les DÉFAUTS — mais rien n'empêche l'une des deux
+d'oublier une étape future (l'expiration d'un octroi, par exemple, que ni l'une
+ni l'autre ne regarde aujourd'hui).

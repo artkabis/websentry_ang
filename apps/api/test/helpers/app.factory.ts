@@ -778,13 +778,63 @@ export async function createTestApp(
     }),
   };
 
+  /** Applique les filtres de lecture du journal, comme le fait le SQL réel. */
+  function filtrerAudit(filtres: {
+    actor?: string;
+    action?: string;
+    targetId?: string;
+    from?: string;
+    to?: string;
+  }): Array<Record<string, unknown>> {
+    /** Les colonnes filtrées sont textuelles : tout autre type est une trace mal écrite. */
+    const champ = (entree: Record<string, unknown>, cle: string): string =>
+      typeof entree[cle] === 'string' ? entree[cle] : '';
+
+    return db.auditLog.filter(entree => {
+      const nom = champ(entree, 'actorName');
+      const id = champ(entree, 'actorId');
+      const action = champ(entree, 'action');
+      const cible = champ(entree, 'targetId');
+      const quand = champ(entree, 'created_at');
+
+      if (filtres.actor && !nom.includes(filtres.actor) && id !== filtres.actor) return false;
+      if (filtres.action && !action.startsWith(filtres.action)) return false;
+      if (filtres.targetId && cible !== filtres.targetId) return false;
+      if (filtres.from && quand < `${filtres.from}T00:00:00.000Z`) return false;
+      // Borne de fin INCLUSIVE, comme le SQL réel.
+      if (filtres.to && quand > `${filtres.to}T23:59:59.999Z`) return false;
+      return true;
+    });
+  }
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
       db.auditLog.push({ ...entry, created_at: new Date().toISOString() });
       return Promise.resolve();
     }),
-    list: vi.fn(() => Promise.resolve(db.auditLog as never)),
+    list: vi.fn((limit: number, offset: number, filtres = {}) =>
+      Promise.resolve(
+        // La plus récente d'abord, comme l'ORDER BY du dépôt réel, et en
+        // COLONNES SQL : c'est la forme que le service reçoit en production,
+        // et un double qui rendrait autre chose ne testerait pas sa lecture.
+        filtrerAudit(filtres)
+          .map((entree, index) => ({
+            id: index + 1,
+            actor_id: entree['actorId'] ?? null,
+            actor_name: entree['actorName'] ?? null,
+            action: entree['action'],
+            target_id: entree['targetId'] ?? null,
+            target_type: entree['targetType'] ?? null,
+            details: entree['details'] ?? null,
+            ip_address: entree['ipAddress'] ?? null,
+            created_at: entree['created_at'],
+          }))
+          .reverse()
+          .slice(offset, offset + limit) as never,
+      ),
+    ),
+    count: vi.fn((filtres = {}) => Promise.resolve(filtrerAudit(filtres).length)),
   };
 
   const databaseStub = {

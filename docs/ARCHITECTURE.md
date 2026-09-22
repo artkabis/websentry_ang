@@ -54,7 +54,7 @@ Réordonner ces providers casserait silencieusement les exemptions.
 | `config`   | Environnement validé par Zod **au démarrage** — le boot échoue plutôt que de servir à moitié configuré |
 | `database` | Pool `mysql2` + repositories ; seul endroit où du SQL est écrit                                        |
 | `security` | SSRF (`safeFetch`, `assertPublicUrl`), scrypt, garde CSRF                                              |
-| `audit`    | Journal append-only                                                                                    |
+| `audit`    | Journal append-only ; lecture paginée et filtrée, réservée au rang 100                                 |
 | `rbac`     | Résolution rang + permissions fines avec scope de gammes                                               |
 | `auth`     | Connexion, rotation du refresh, déconnexion, profil                                                    |
 | `users`    | Administration des comptes — CRUD, mots de passe, permissions fines ; exige la base                    |
@@ -262,6 +262,52 @@ jour : mêler le mot de passe aux autres champs permettrait de le changer en
 corrigeant un courriel, et rendrait la trace d'audit ambiguë sur ce qui a
 réellement été fait. Le mot de passe n'entre **jamais** dans le journal — ni en
 clair, ni haché : un journal se lit plus facilement qu'une table de comptes.
+
+### Écrans d'administration
+
+Trois routes, gardées en miroir des décorateurs de l'API :
+
+| Route                             | Garde côté client | Garde côté API |
+| --------------------------------- | ----------------- | -------------- |
+| `/administration/comptes`         | `users:read`      | `users:read`   |
+| `/administration/comptes/nouveau` | `users:write`     | `users:write`  |
+| `/administration/comptes/:id`     | `users:read`      | `users:read`   |
+| `/administration/journal`         | rang 100          | rang 100       |
+
+`nouveau` est déclarée **avant** `:id` : dans l'autre ordre, « nouveau » serait
+lu comme un identifiant, et rejeté par la validation UUID de l'API.
+
+Les gardes du routeur servent l'EXPÉRIENCE, pas la sécurité : elles évitent
+d'afficher un écran que l'API refuserait de nourrir. Les contourner ne donne
+accès à aucune donnée.
+
+#### L'interface rejoue les garde-fous
+
+Les règles de la décision 40 dépendent de l'acteur ET de la cible : aucun schéma
+ne les porte. L'interface les recalcule (`refusPrevisible`, `rangsAttribuables`)
+pour ne pas offrir un geste qu'elle sait voué au 403 — et affiche la raison à la
+place du bouton. La liste déroulante des rangs ne propose jamais un rang
+supérieur ou égal à celui de l'acteur ; la liste des permissions délégables se
+borne à ce qu'il détient lui-même. Détail et coût en décision 42.
+
+Les messages d'erreur de l'API sont repris **tels quels** quand elle en donne :
+« c'est le dernier compte d'administration actif » ne peut pas être reconstitué
+côté client, qui ignore combien d'administrateurs existent.
+
+#### Mot de passe
+
+Créé ou réinitialisé, il est affiché **en clair** : il faut pouvoir le
+transmettre, et il n'est plus jamais visible ensuite. Le générateur tire dans le
+générateur cryptographique du navigateur, corrige le biais du modulo par rejet,
+et exclut les caractères qui se recopient mal (`O`/`0`, `I`/`l`/`1`).
+
+#### Journal d'audit
+
+Lecture seule, filtres reflétés dans l'URL, détail de chaque trace replié par
+défaut — sa forme dépend de l'action, et l'étaler ferait un mur de JSON. Aucun
+geste d'écriture n'est proposé, parce qu'aucun n'existe côté serveur : le dépôt
+n'a ni `UPDATE` ni `DELETE`, et un scénario vérifie qu'aucune route ne vient
+contourner cette contrainte.
 
 ---
 

@@ -111,6 +111,16 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        // Journal d'audit : la seule trace de ce qui a été fait. Une branche
+        // non couverte, c'est une action qui pourrait ne pas être écrite — ou
+        // une lecture qui exposerait plus que prévu.
+        'src/audit/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/database/repositories/audit.repository.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

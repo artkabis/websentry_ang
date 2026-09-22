@@ -1,5 +1,5 @@
 import type { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/guards/auth.guard';
+import { authGuard, guestGuard, permissionGuard, superAdminGuard } from './core/guards/auth.guard';
 
 /**
  * Table de routage.
@@ -83,6 +83,38 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/scans/scan-detail.component').then(m => m.ScanDetailComponent),
+  },
+  {
+    // Les comptes : lecture gardée par `users:read`, en miroir du décorateur
+    // posé sur la route de l'API. La garde sert l'EXPÉRIENCE — elle évite
+    // d'afficher un écran que l'API refuserait de nourrir — pas la sécurité.
+    path: 'administration/comptes',
+    canActivate: [authGuard, permissionGuard('users:read')],
+    loadComponent: () =>
+      import('./features/admin/users-list.component').then(m => m.UsersListComponent),
+  },
+  {
+    // AVANT `:id`, sans quoi « nouveau » serait lu comme un identifiant — et
+    // rejeté par la validation UUID de l'API.
+    path: 'administration/comptes/nouveau',
+    canActivate: [authGuard, permissionGuard('users:write')],
+    loadComponent: () =>
+      import('./features/admin/user-editor.component').then(m => m.UserEditorComponent),
+  },
+  {
+    path: 'administration/comptes/:id',
+    canActivate: [authGuard, permissionGuard('users:read')],
+    loadComponent: () =>
+      import('./features/admin/user-editor.component').then(m => m.UserEditorComponent),
+  },
+  {
+    // Le journal est réservé au rang 100 : `audit:read` existe au catalogue
+    // mais n'est accordable à personne, et une garde par permission laisserait
+    // croire qu'on peut le déléguer.
+    path: 'administration/journal',
+    canActivate: [authGuard, superAdminGuard],
+    loadComponent: () =>
+      import('./features/admin/audit-log.component').then(m => m.AuditLogComponent),
   },
   {
     path: 'acces-refuse',

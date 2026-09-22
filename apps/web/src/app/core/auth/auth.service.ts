@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import {
   AuthSessionSchema,
   CurrentUserSchema,
+  rankHasPermission,
   rankToRole,
   RANKS,
   type AuthSession,
@@ -61,7 +62,13 @@ export class AuthService {
     const user = this._user();
     if (!user) return false;
     if (user.rank >= RANKS.SUPER_ADMIN) return true;
-    return user.permissions.some(p => p.permission === code);
+    if (user.permissions.some(p => p.permission === code)) return true;
+
+    // Repli sur les défauts du RANG, comme `RbacService.resolve`. Sans lui,
+    // l'interface refusait à un administrateur sans ligne explicite en base un
+    // écran que l'API lui aurait servi : `/auth/me` ne liste que les octrois
+    // explicites, jamais ce que le rang donne déjà.
+    return rankHasPermission(user.rank, code);
   }
 
   /** La gamme demandée entre-t-elle dans le scope accordé pour `code` ? */
@@ -72,7 +79,10 @@ export class AuthService {
     if (user.rank >= RANKS.SUPER_ADMIN) return true;
 
     const granted = user.permissions.find(p => p.permission === code);
-    if (!granted || granted.gammes === null) return !!granted;
+    // Une permission tenue du rang n'a pas de portée : elle vaut partout, comme
+    // le `{ gammes: null }` que rend le serveur dans ce même cas.
+    if (!granted) return rankHasPermission(user.rank, code);
+    if (granted.gammes === null) return true;
     return granted.gammes.some(g => g.toLowerCase() === gamme.toLowerCase());
   }
 
