@@ -131,3 +131,58 @@ describe('ScanRetentionService', () => {
     await expect(t.service.run()).resolves.toMatchObject({ compressed: 0 });
   });
 });
+
+describe('ScanRetentionService — trace du dernier passage', () => {
+  it('n’annonce AUCUN passage avant le premier', () => {
+    // « Aucun passage depuis le démarrage » se distingue de « rien à faire ».
+    const t = build();
+    expect(t.service.dernierPassage()).toBeNull();
+  });
+
+  it('retient un passage réussi, avec ses compteurs', async () => {
+    const t = build();
+    t.repo.findCompressible.mockResolvedValue([]);
+    t.repo.purge.mockResolvedValue(7);
+    t.repo.countPending.mockResolvedValue({ compressible: 2, purgeable: 1 });
+
+    await t.service.run();
+
+    expect(t.service.dernierPassage()).toMatchObject({
+      purges: 7,
+      restants: 3,
+      reussi: true,
+    });
+  });
+
+  it('RETIENT aussi l’échec, avant de le relancer', async () => {
+    // Sans cela, la supervision afficherait le dernier passage réussi et
+    // laisserait croire que tout va bien, alors que la file grandit depuis.
+    const t = build();
+    t.repo.findCompressible.mockRejectedValue(new Error('base injoignable'));
+
+    await expect(t.service.run()).rejects.toThrow('base injoignable');
+    expect(t.service.dernierPassage()).toMatchObject({ reussi: false });
+  });
+
+  it('REMPLACE la trace précédente à chaque passage', async () => {
+    const t = build();
+    t.repo.findCompressible.mockResolvedValue([]);
+    t.repo.purge.mockResolvedValue(1);
+    t.repo.countPending.mockResolvedValue({ compressible: 0, purgeable: 0 });
+    await t.service.run();
+
+    t.repo.purge.mockResolvedValue(9);
+    await t.service.run();
+
+    expect(t.service.dernierPassage()?.purges).toBe(9);
+  });
+
+  it('ne retient RIEN quand la rétention est désactivée', async () => {
+    // Le passage ne s'exécute pas : annoncer une trace donnerait à croire
+    // qu'un travail a eu lieu.
+    const t = build({ enabled: false });
+    await t.service.run();
+
+    expect(t.service.dernierPassage()).toBeNull();
+  });
+});

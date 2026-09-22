@@ -76,6 +76,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.pool !== null;
   }
 
+  /**
+   * Aller-retour minimal vers la base, et sa durée.
+   *
+   * Ne lève JAMAIS : une sonde qui échoue en levant transformerait un
+   * composant en panne en page de supervision inaccessible — c'est-à-dire
+   * qu'on perdrait la vue au moment précis où elle sert.
+   *
+   * `SELECT 1` plutôt qu'une requête métier : on mesure la connexion, pas le
+   * plan d'exécution d'une table qui grossit.
+   */
+  async ping(): Promise<{ ok: boolean; latenceMs: number | null; erreur: string | null }> {
+    if (!this.pool) return { ok: false, latenceMs: null, erreur: null };
+
+    const debut = Date.now();
+    try {
+      await this.pool.query('SELECT 1');
+      return { ok: true, latenceMs: Date.now() - debut, erreur: null };
+    } catch (err) {
+      return { ok: false, latenceMs: null, erreur: (err as Error).message };
+    }
+  }
+
   /** Accès brut au pool — réservé aux transactions. */
   private requirePool(): Pool {
     if (!this.pool) {

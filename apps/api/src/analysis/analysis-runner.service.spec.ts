@@ -211,3 +211,37 @@ describe('AnalysisRunnerService', () => {
     });
   });
 });
+
+describe('AnalysisRunnerService — état pour la supervision', () => {
+  it('annonce un pool NON DÉMARRÉ sur une instance qui n’a rien analysé', () => {
+    // Le pool est paresseux : « non démarré » est l'état normal d'une
+    // instance qui ne sert que des lectures d'historique.
+    expect(build(true).etat()).toEqual({
+      active: true,
+      demarre: false,
+      enEchec: false,
+      threadsMax: 1,
+    });
+  });
+
+  it('n’annonce AUCUN thread quand les workers sont désactivés', () => {
+    // Annoncer « 4 threads » sur une configuration qui n'en utilise aucun
+    // ferait chercher une panne là où il n'y a qu'un réglage.
+    expect(build(false).etat()).toEqual({
+      active: false,
+      demarre: false,
+      enEchec: false,
+      threadsMax: 0,
+    });
+  });
+
+  it('n’a PAS d’effet de bord — interroger n’est pas démarrer', async () => {
+    // Une sonde qui provoque ce qu'elle observe ne mesure plus rien.
+    const service = build(true);
+    service.etat();
+    service.etat();
+
+    expect(service.etat().demarre).toBe(false);
+    await service.onModuleDestroy();
+  });
+});

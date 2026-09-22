@@ -20,6 +20,6 @@ import { SitemapService } from './sitemap.service.js';
   imports: [ProfilesModule, ScansModule, RbacModule],
   controllers: [AnalysisController],
   providers: [AnalysisService, AnalysisRunnerService, PageFetcherService, SitemapService],
-  exports: [AnalysisService],
+  exports: [AnalysisService, AnalysisRunnerService],
 })
 export class AnalysisModule {}

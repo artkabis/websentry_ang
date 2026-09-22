@@ -98,6 +98,18 @@ describe('AppComponent', () => {
       expect(within(nav).queryByRole('link', { name: 'Journal' })).toBeNull();
     });
 
+    it('ajoute « Supervision » à qui détient health:read', async () => {
+      // C'est une donnée d'exploitation : constater qu'un pool est tombé ne
+      // doit pas demander le rang le plus élevé.
+      await render(AppComponent, {
+        providers: providers(false, CONNECTE, { permissions: ['health:read'] }),
+      });
+      const nav = screen.getByRole('navigation', { name: 'Navigation principale' });
+
+      expect(within(nav).getByRole('link', { name: 'Supervision' })).toBeTruthy();
+      expect(within(nav).queryByRole('link', { name: 'Comptes' })).toBeNull();
+    });
+
     it('ajoute « Journal » au seul super administrateur', async () => {
       await render(AppComponent, {
         providers: providers(false, CONNECTE, { permissions: ['users:read'], superAdmin: true }),

@@ -20,7 +20,7 @@ const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 @Module({
   controllers: [ScansController],
   providers: [ScansService, ScanRetentionService],
-  exports: [ScansService],
+  exports: [ScansService, ScanRetentionService],
 })
 export class ScansModule implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(ScansModule.name);

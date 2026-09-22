@@ -18,6 +18,7 @@ import {
   FeedbackRepository,
   type FeedbackRow,
 } from '../../src/database/repositories/feedback.repository.js';
+import { SupervisionRepository } from '../../src/database/repositories/supervision.repository.js';
 import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
 import { ScanRepository } from '../../src/database/repositories/scan.repository.js';
 import { ScanRetentionRepository } from '../../src/database/repositories/scan-retention.repository.js';
@@ -957,8 +958,28 @@ export async function createTestApp(
     count: vi.fn((filtres = {}) => Promise.resolve(filtrerAudit(filtres).length)),
   };
 
+  /** Volumétrie — comptée sur la base simulée, comme le ferait le SQL réel. */
+  const supervisionRepo = {
+    available: true,
+    scans24h: vi.fn(() => Promise.resolve(db.scanPages.size)),
+    scans7j: vi.fn(() => Promise.resolve(db.scanPages.size)),
+    comptesActifs: vi.fn(() =>
+      Promise.resolve([...db.users.values()].filter(u => u.status === 'active').length),
+    ),
+    retoursOuverts: vi.fn(() =>
+      Promise.resolve(
+        [...db.feedback.values()].filter(f =>
+          ['nouveau', 'accepte', 'en_cours'].includes(String(f['status'])),
+        ).length,
+      ),
+    ),
+  };
+
   const databaseStub = {
     enabled: true,
+    // La sonde de supervision ne doit JAMAIS lever : le double reproduit ce
+    // contrat, faute de quoi le relevé échouerait au lieu de rapporter.
+    ping: vi.fn(() => Promise.resolve({ ok: true, latenceMs: 1, erreur: null })),
     onModuleInit: vi.fn(() => Promise.resolve()),
     onModuleDestroy: vi.fn(() => Promise.resolve()),
     query: vi.fn(() => Promise.resolve([])),
@@ -1009,6 +1030,8 @@ export async function createTestApp(
     .useValue(auditRepo)
     .overrideProvider(FeedbackRepository)
     .useValue(feedbackRepo)
+    .overrideProvider(SupervisionRepository)
+    .useValue(supervisionRepo)
     .overrideProvider(ProfileRepository)
     .useValue(profileRepo)
     .overrideProvider(ScanRepository)

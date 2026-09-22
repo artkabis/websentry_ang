@@ -118,6 +118,15 @@ export default defineConfig({
         // Retours : la visibilité y décide qui lit quoi. Une branche non
         // couverte, c'est un retour d'un autre compte qui s'affiche.
         'src/feedback/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Supervision : c'est la vue qu'on consulte QUAND quelque chose va
+        // mal. Une branche non couverte, c'est un verdict faux au pire moment.
+        'src/supervision/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/database/repositories/supervision.repository.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
         'src/database/repositories/feedback.repository.ts': {
           lines: 100,
           branches: 100,

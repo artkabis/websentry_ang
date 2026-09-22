@@ -78,6 +78,20 @@ describe('DashboardComponent', () => {
     expect(screen.queryByRole('link', { name: /journal d'audit/ })).toBeNull();
   });
 
+  it('mène un admin à la supervision — health:read vient avec son rang', async () => {
+    const t = setup(profile(RANKS.ADMIN), 'admin');
+    await render(DashboardComponent, { providers: t.providers });
+
+    expect(screen.getByRole('link', { name: /Superviser l'instance/ })).toBeDefined();
+  });
+
+  it('ne mène PAS un testeur à la supervision', async () => {
+    const t = setup(profile(RANKS.TESTER));
+    await render(DashboardComponent, { providers: t.providers });
+
+    expect(screen.queryByRole('link', { name: /Superviser/ })).toBeNull();
+  });
+
   it('mène un super_admin aux comptes ET au journal', async () => {
     const t = setup(profile(RANKS.SUPER_ADMIN), 'super_admin');
     await render(DashboardComponent, { providers: t.providers });

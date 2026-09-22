@@ -126,6 +126,15 @@ export const routes: Routes = [
       import('./features/admin/user-editor.component').then(m => m.UserEditorComponent),
   },
   {
+    // La supervision est une donnée d'EXPLOITATION, gardée par `health:read`
+    // que le rang administrateur détient : constater qu'un pool est tombé ne
+    // doit pas demander le rang le plus élevé.
+    path: 'administration/supervision',
+    canActivate: [authGuard, permissionGuard('health:read')],
+    loadComponent: () =>
+      import('./features/supervision/supervision.component').then(m => m.SupervisionComponent),
+  },
+  {
     // Le journal est réservé au rang 100 : `audit:read` existe au catalogue
     // mais n'est accordable à personne, et une garde par permission laisserait
     // croire qu'on peut le déléguer.

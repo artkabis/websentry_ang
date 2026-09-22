@@ -280,13 +280,33 @@ test.describe('Mesure du coût fixe', () => {
    * et vérifier que le lien d'évitement les ramène à un seul pour qui veut
    * atteindre le contenu.
    */
-  test('la barre coûte un nombre BORNÉ d’arrêts avant le contenu', async ({ page }) => {
+  test('la barre ne coûte QUE ce que sa composition explique', async ({ page }) => {
     // Une seule traversée par test : une fois qu'on a tabulé, le point de
     // départ de la navigation séquentielle n'est plus le début du document, et
     // un second comptage dans le même test mesurerait autre chose.
     // Le raccourci par l'évitement est vérifié par « est le PREMIER arrêt ».
     await connecte(page, 100);
     await page.goto('/tableau-de-bord');
+
+    // La borne est DÉRIVÉE de ce que la coquille affiche, et non figée à un
+    // nombre : une entrée de navigation ajoutée déplacerait sinon un chiffre
+    // magique sans qu'on sache si le coût est légitime. Ici, tout arrêt
+    // supplémentaire non expliqué par la composition fait tomber le test.
+    const entrees = await page
+      .getByRole('navigation', { name: 'Navigation principale' })
+      .getByRole('link')
+      .count();
+    const attendu =
+      1 /* lien d'évitement */ +
+      1 /* logo */ +
+      entrees +
+      1 /* Signaler */ +
+      // Le choix d'apparence est un GROUPE de boutons radio : il ne coûte
+      // qu'UN arrêt, pas trois. Seul le bouton coché reçoit le focus, et les
+      // flèches naviguent à l'intérieur du groupe — c'est le comportement
+      // natif, et c'est ce qui rend un groupe radio préférable à trois
+      // boutons pour qui navigue au clavier.
+      1; /* choix d'apparence */
 
     await remettreLeFocusAZero(page);
     let avantContenu = 0;
@@ -299,8 +319,8 @@ test.describe('Mesure du coût fixe', () => {
       if (dansLeContenu) break;
     }
 
-    // Lien d'évitement + logo + six entrées + trois choix d'apparence.
-    expect(avantContenu).toBeGreaterThan(1);
-    expect(avantContenu).toBeLessThanOrEqual(12);
+    // Le dernier arrêt compté est le PREMIER du contenu : la coquille en coûte
+    // donc un de moins.
+    expect(avantContenu - 1).toBe(attendu);
   });
 });

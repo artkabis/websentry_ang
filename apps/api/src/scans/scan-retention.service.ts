@@ -17,10 +17,32 @@ import { compressReport } from './scans.service.js';
  * comparaison entre deux scans anciens reste possible longtemps après que leur
  * détail a disparu.
  */
+/** Trace du dernier passage, telle que la supervision la présente. */
+export interface DernierPassage {
+  termineA: string;
+  compresses: number;
+  purges: number;
+  restants: number;
+  dureeMs: number;
+  reussi: boolean;
+}
+
 @Injectable()
 export class ScanRetentionService {
   private readonly logger = new Logger(ScanRetentionService.name);
   private running = false;
+
+  /**
+   * Dernier passage observé, EN MÉMOIRE.
+   *
+   * Il disparaît au redémarrage, et c'est assumé : le journaliser en base
+   * demanderait une table pour une donnée qu'on ne consulte qu'en direct, et
+   * qui perd tout intérêt une fois le processus reparti — après un
+   * redémarrage, le prochain passage dira la vérité mieux que l'ancien.
+   * L'écran annonce « aucun passage depuis le démarrage » plutôt que de
+   * laisser croire à une absence de travail.
+   */
+  private dernier: DernierPassage | null = null;
 
   constructor(
     private readonly repo: ScanRetentionRepository,
@@ -35,6 +57,11 @@ export class ScanRetentionService {
    * passage peut déborder sur l'heure du suivant, et deux passages simultanés
    * compresseraient les mêmes lignes en double.
    */
+  /** Dernier passage observé depuis le démarrage — `null` si aucun encore. */
+  dernierPassage(): DernierPassage | null {
+    return this.dernier;
+  }
+
   async run(): Promise<RetentionResult> {
     const started = Date.now();
     const empty: RetentionResult = { compressed: 0, purged: 0, remaining: 0, durationMs: 0 };
@@ -75,7 +102,21 @@ export class ScanRetentionService {
         );
       }
 
+      this.dernier = { ...versPassage(result), reussi: true };
       return result;
+    } catch (err) {
+      // L'échec est RETENU avant d'être relancé : sans cela, la supervision
+      // afficherait le dernier passage réussi et laisserait croire que tout
+      // va bien, alors que la file grandit depuis.
+      this.dernier = {
+        termineA: new Date().toISOString(),
+        compresses: 0,
+        purges: 0,
+        restants: 0,
+        dureeMs: Date.now() - started,
+        reussi: false,
+      };
+      throw err;
     } finally {
       this.running = false;
     }
@@ -106,4 +147,15 @@ export class ScanRetentionService {
 
     return this.repo.compress(updates);
   }
+}
+
+/** Résultat d'un passage → trace horodatée. */
+function versPassage(resultat: RetentionResult): Omit<DernierPassage, 'reussi'> {
+  return {
+    termineA: new Date().toISOString(),
+    compresses: resultat.compressed,
+    purges: resultat.purged,
+    restants: resultat.remaining,
+    dureeMs: resultat.durationMs,
+  };
 }

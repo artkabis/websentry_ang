@@ -319,6 +319,54 @@ des URL clientes, et le journal se lit plus largement que la table des retours.
 
 ---
 
+## Supervision
+
+Trois pannes se détectaient déjà et n'étaient qu'écrites dans les journaux :
+base injoignable, pool d'analyse tombé, passage de rétention en échec. Le
+module les rend visibles (décision 48).
+
+### Deux sondes, deux régimes d'accès
+
+| Route          | Accès         | Contenu                                     |
+| -------------- | ------------- | ------------------------------------------- |
+| `/health`      | public        | `ok` et `version`, rien d'autre             |
+| `/supervision` | `health:read` | base, pool, rétention, volumétrie, instance |
+
+Les confondre reviendrait à offrir un outil de reconnaissance (OWASP #7). Un
+test vérifie que la sonde publique ne laisse échapper aucun mot lié à
+l'infrastructure.
+
+### Trois états, le pire l'emporte
+
+`degrade` porte l'essentiel : un composant qui fonctionne **en repli** — le
+pool tombé, remplacé par l'exécution en ligne — n'est ni sain ni en panne. Le
+verdict global est **dérivé** des composants, jamais déclaré séparément.
+
+| Composant | `ok`                         | `degrade`                              | `panne`                  |
+| --------- | ---------------------------- | -------------------------------------- | ------------------------ |
+| Base      | connectée, latence mesurée   | désactivée par configuration           | injoignable              |
+| Pool      | prêt, démarré, ou éteint     | tombé — analyses en ligne, plus lentes | —                        |
+| Rétention | passage réussi, rien à faire | désactivée, ou file qui ne se vide pas | dernier passage en échec |
+
+### Ce qu'elle ne fait pas
+
+Aucune commande d'exploitation : redémarrer un pool ou forcer une purge depuis
+une page web serait une surface d'attaque pour un gain nul. Le message d'erreur
+du pilote n'est jamais rapporté. La volumétrie rend `null` plutôt que des zéros
+quand la base ne répond pas.
+
+Aucun composant en panne ne fait échouer le relevé : une page de supervision
+qui rend 500 parce que la base est tombée est inutile au moment précis où elle
+servirait. Chaque sonde est isolée, et son échec devient une ligne du rapport.
+
+### Points d'observation ajoutés aux services
+
+- `DatabaseService.ping()` — `SELECT 1` chronométré, qui **ne lève jamais** ;
+- `AnalysisRunnerService.etat()` — sans démarrer le pool, qui est paresseux ;
+- `ScanRetentionService.dernierPassage()` — **en mémoire**, échec compris : sans
+  cela, la supervision afficherait le dernier passage réussi et laisserait
+  croire que tout va bien pendant que la file grandit.
+
 ### Coquille applicative
 
 L'en-tête est présent sur tous les écrans et porte trois choses : le retour au

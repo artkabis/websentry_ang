@@ -147,6 +147,23 @@ export class AnalysisRunnerService implements OnModuleDestroy {
   }
 
   /**
+   * État du pool, pour la supervision.
+   *
+   * Cette méthode ne DÉMARRE rien : le pool est paresseux, et l'interroger ne
+   * doit pas provoquer ce qu'il observe. Un pool « non démarré » est donc
+   * normal sur une instance qui n'a encore rien analysé.
+   */
+  etat(): { active: boolean; demarre: boolean; enEchec: boolean; threadsMax: number } {
+    const active = this.config.analysis.workersEnabled;
+    return {
+      active,
+      demarre: this.pool !== null,
+      enEchec: this.poolFailed,
+      threadsMax: active ? this.maxThreads() : 0,
+    };
+  }
+
+  /**
    * Pool paresseux : il n'est créé qu'à la première analyse.
    *
    * Démarrer des threads au boot coûterait de la mémoire à une instance qui,

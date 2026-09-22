@@ -181,3 +181,47 @@ describe('DatabaseService', () => {
     });
   });
 });
+
+describe('DatabaseService — sonde de supervision', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  /** Service monté sur un pool simulé. */
+  async function monte(dbEnabled = true) {
+    const { pool } = poolStub();
+    createPool.mockReturnValue(pool as never);
+    const service = new DatabaseService(configStub(dbEnabled));
+    await service.onModuleInit();
+    return { service, pool };
+  }
+
+  it('rend une latence MESURÉE quand la base répond', async () => {
+    const { service, pool } = await monte();
+
+    const sonde = await service.ping();
+    expect(sonde).toMatchObject({ ok: true, erreur: null });
+    expect(sonde.latenceMs).toBeGreaterThanOrEqual(0);
+    // `SELECT 1` : on mesure la connexion, pas le plan d'exécution d'une
+    // table qui grossit.
+    expect(pool.query).toHaveBeenCalledWith('SELECT 1');
+  });
+
+  it('ne LÈVE JAMAIS quand la base refuse', async () => {
+    // Une sonde qui échoue en levant transformerait un composant en panne en
+    // page de supervision inaccessible — on perdrait la vue au moment précis
+    // où elle sert.
+    const { service, pool } = await monte();
+    pool.query.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const sonde = await service.ping();
+    expect(sonde).toEqual({ ok: false, latenceMs: null, erreur: 'ECONNREFUSED' });
+  });
+
+  it('DISTINGUE une base absente d’une base en panne', async () => {
+    // Sans base configurée, il n'y a pas d'erreur à rapporter : le message
+    // « ECONNREFUSED » ferait chercher une panne là où il n'y a qu'un choix.
+    const service = new DatabaseService(configStub(false));
+    await service.onModuleInit();
+
+    expect(await service.ping()).toEqual({ ok: false, latenceMs: null, erreur: null });
+  });
+});

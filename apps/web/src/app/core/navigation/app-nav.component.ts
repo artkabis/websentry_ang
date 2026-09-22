@@ -82,6 +82,11 @@ export class AppNavComponent {
       visible: () => this.auth.hasPermission('users:read'),
     },
     {
+      chemin: '/administration/supervision',
+      libelle: 'Supervision',
+      visible: () => this.auth.hasPermission('health:read'),
+    },
+    {
       chemin: '/administration/journal',
       libelle: 'Journal',
       visible: () => this.auth.isSuperAdmin(),

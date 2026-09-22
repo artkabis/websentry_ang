@@ -217,6 +217,8 @@ test.describe('Thème sombre', () => {
     // de couleur sur un même écran.
     '/retours',
     '/retours/nouveau',
+    // La supervision porte les trois familles d'état sur un même écran.
+    '/administration/supervision',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {

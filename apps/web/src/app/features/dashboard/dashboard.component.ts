@@ -73,7 +73,9 @@ import { AuthService } from '../../core/auth/auth.service';
         </a>
       </section>
 
-      @if (auth.hasPermission('users:read') || auth.isSuperAdmin()) {
+      @if (
+        auth.hasPermission('users:read') || auth.hasPermission('health:read') || auth.isSuperAdmin()
+      ) {
         <section class="mt-6 rounded-xl bg-panel p-6 shadow-sm ring-1 ring-line">
           <h2 class="text-base font-medium text-content">Administration</h2>
           <p class="mt-1 text-sm text-content-subtle">
@@ -86,6 +88,14 @@ import { AuthService } from '../../core/auth/auth.service';
                 class="text-sm font-medium text-brand-text hover:underline"
               >
                 Gérer les comptes
+              </a>
+            }
+            @if (auth.hasPermission('health:read')) {
+              <a
+                routerLink="/administration/supervision"
+                class="text-sm font-medium text-brand-text hover:underline"
+              >
+                Superviser l'instance
               </a>
             }
             @if (auth.isSuperAdmin()) {

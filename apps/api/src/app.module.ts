@@ -14,6 +14,7 @@ import { HealthModule } from './health/health.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { UsersModule } from './users/users.module.js';
 import { FeedbackModule } from './feedback/feedback.module.js';
+import { SupervisionModule } from './supervision/supervision.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { ScansModule } from './scans/scans.module.js';
 import { CsrfGuard } from './security/csrf.guard.js';
@@ -45,6 +46,7 @@ import { SecurityModule } from './security/security.module.js';
     ProfilesModule,
     UsersModule,
     FeedbackModule,
+    SupervisionModule,
     ScansModule,
     AnalysisModule,
     ThrottlerModule.forRoot({

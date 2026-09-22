@@ -1383,3 +1383,78 @@ usages — sans quoi l'écran proposerait des passages que l'API refuserait.
 mais évite que deux écritures divergent si la seconde échoue. Et la table des
 transitions devra être maintenue : un statut ajouté sans ses passages
 laisserait un retour sans issue — un test le vérifie, mais il faudra y penser.
+
+---
+
+## 48. La supervision rend visible ce qui n'était que journalisé
+
+**Décision** — `GET /api/v1/supervision`, gardée par `health:read`, rapporte
+l'état de la base, du pool d'analyse et de la rétention, plus quatre compteurs
+de volumétrie. La sonde publique `/health` reste inchangée et pauvre.
+
+**Raison** — Trois pannes réelles ne se voyaient que dans les journaux du
+serveur : une base injoignable, un pool d'analyse tombé — qui fait
+silencieusement retomber l'analyse en ligne, donc lente — et un passage de
+rétention en échec, qui laisse la table des rapports gonfler. Ces trois
+défaillances étaient déjà détectées et écrites ; personne ne les voyait.
+
+`health:read` plutôt que le rang 100 : c'est une donnée d'**exploitation**, pas
+une pièce d'enquête comme le journal d'audit. Qui pilote l'outil doit pouvoir
+constater qu'un pool est tombé sans attendre le rang le plus élevé. Le rang
+administrateur détient ce code par défaut.
+
+**Trois états, et le pire l'emporte.** `degrade` est celui qui compte : un
+composant qui fonctionne en repli n'est ni sain ni en panne, et le ranger dans
+l'une ou l'autre case fait perdre l'information qui justifie une intervention.
+Le verdict global est **dérivé** des composants, jamais déclaré à part — deux
+sources pourraient se contredire, et c'est alors le résumé qu'on croit.
+
+**Aucune régression** — Rien n'est retiré. La sonde publique garde exactement
+sa surface : un test vérifie qu'elle ne rend que `ok` et `version`, et qu'aucun
+mot lié à l'infrastructure n'y apparaît.
+
+**Ce que le module refuse de faire** — Aucune commande d'exploitation :
+redémarrer un pool ou forcer une purge depuis une page web serait une surface
+d'attaque pour un gain nul. Le message d'erreur du pilote n'est jamais
+rapporté — « ECONNREFUSED 10.0.3.14:3306 » renseignerait sur la topologie
+interne. Et la volumétrie rend `null` plutôt que des zéros quand la base ne
+répond pas : des zéros passeraient pour une instance au repos.
+
+**Preuve** — Quatorze mutants sur les verdicts : les quatorze font tomber la
+suite. Le seul survivant du premier passage a révélé un vrai trou — aucun test
+ne vérifiait qu'une rétention en panne **à elle seule** bascule le verdict
+global, parce que je testais les composants « à tour de rôle » sans jamais en
+isoler un. Deux tests d'isolement ont été ajoutés.
+
+**Coût assumé** — Trois. Le dernier passage de rétention est retenu **en
+mémoire** : il disparaît au redémarrage, et l'écran annonce alors « aucun
+passage depuis le démarrage ». Le journaliser en base demanderait une table
+pour une donnée qu'on ne consulte qu'en direct. Ensuite, la sonde de base fait
+un aller-retour SQL à chaque relevé : c'est délibérément `SELECT 1`, mais la
+page reste une requête de plus. Enfin, l'interrogation du pool ne le démarre
+pas — un test le vérifie — ce qui signifie qu'un pool cassé n'est signalé
+qu'**après** la première analyse qui a échoué à le créer.
+
+---
+
+## 49. Un groupe de boutons radio ne coûte qu'UN arrêt de tabulation
+
+**Décision** — Le test qui borne le coût clavier de la coquille **dérive** son
+attendu de la composition réelle de l'en-tête, au lieu de le figer à un nombre.
+
+**Raison** — L'ajout d'une septième entrée de navigation a fait tomber la
+borne, comme prévu. Mais en la recalculant, la mesure a démenti l'hypothèse :
+13 arrêts observés contre 14 attendus. Le choix d'apparence est un **groupe de
+boutons radio**, et un groupe radio n'est qu'un seul arrêt — seul le bouton
+coché reçoit le focus, les flèches naviguant à l'intérieur. C'est le
+comportement natif, et c'est précisément ce qui rend un groupe radio préférable
+à trois boutons pour qui navigue au clavier.
+
+Relever un nombre magique aurait masqué cette découverte. Le test énonce
+désormais sa comptabilité — lien d'évitement, logo, entrées de navigation,
+« Signaler », groupe d'apparence — et tombe sur tout arrêt que cette
+comptabilité n'explique pas.
+
+**Coût assumé** — Le test est plus long à lire qu'un `toBeLessThanOrEqual(12)`.
+En échange, il ne se contente plus d'accepter une dérive : il exige qu'on dise
+d'où vient chaque arrêt.
