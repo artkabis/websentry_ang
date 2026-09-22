@@ -85,6 +85,24 @@ export const routes: Routes = [
       import('./features/scans/scan-detail.component').then(m => m.ScanDetailComponent),
   },
   {
+    // Les retours ne sont gardés QUE par l'authentification : déposer est
+    // ouvert à tous, et la lecture est restreinte par l'API aux retours dont
+    // on est l'auteur. Une garde par permission fermerait l'écran « mes
+    // retours » à ceux-là mêmes qu'on veut faire remonter des retours.
+    path: 'retours',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/feedback/feedback-list.component').then(m => m.FeedbackListComponent),
+  },
+  {
+    // AVANT rien d'autre : `retours/nouveau` n'a pas de segment dynamique
+    // concurrent, mais l'ordre reste explicite.
+    path: 'retours/nouveau',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/feedback/feedback-submit.component').then(m => m.FeedbackSubmitComponent),
+  },
+  {
     // Les comptes : lecture gardée par `users:read`, en miroir du décorateur
     // posé sur la route de l'API. La garde sert l'EXPÉRIENCE — elle évite
     // d'afficher un écran que l'API refuserait de nourrir — pas la sécurité.

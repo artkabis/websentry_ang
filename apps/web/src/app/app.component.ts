@@ -5,7 +5,9 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
-import { RouterLink, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { AppNavComponent } from './core/navigation/app-nav.component';
 import { ThemeToggleComponent } from './core/theme/theme-toggle.component';
@@ -58,7 +60,19 @@ import { ThemeToggleComponent } from './core/theme/theme-toggle.component';
           } @else {
             <span class="text-sm font-semibold text-content">WebSentry</span>
           }
-          <div class="ml-auto">
+          <div class="ml-auto flex items-center gap-3">
+            @if (auth.user()) {
+              <!-- Signaler depuis N'IMPORTE QUEL écran, en emportant celui-ci.
+                   C'est tout l'enjeu du module : si signaler coûte plus cher
+                   que contourner, personne ne signale. -->
+              <a
+                routerLink="/retours/nouveau"
+                [queryParams]="{ depuis: routeCourante() }"
+                class="text-sm text-content-muted hover:text-brand-text hover:underline"
+              >
+                Signaler
+              </a>
+            }
             <ws-theme-toggle />
           </div>
         </div>
@@ -72,6 +86,24 @@ import { ThemeToggleComponent } from './core/theme/theme-toggle.component';
 })
 export class AppComponent {
   readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  /**
+   * Route affichée, jointe au retour qu'on dépose.
+   *
+   * Lue sur les événements du routeur plutôt qu'une fois au démarrage : la
+   * coquille ne se reconstruit pas d'une navigation à l'autre, et un lien figé
+   * enverrait toujours le premier écran visité.
+   */
+  readonly routeCourante = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      // Sans la chaîne de requête : les filtres d'un écran n'apprennent rien
+      // sur le problème signalé, et peuvent contenir une recherche nominative.
+      map(e => e.urlAfterRedirects.split('?')[0] ?? ''),
+    ),
+    { initialValue: '' },
+  );
 
   private readonly contenu = viewChild<ElementRef<HTMLElement>>('contenu');
 

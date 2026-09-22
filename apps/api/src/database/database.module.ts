@@ -12,6 +12,7 @@ import { UserRepository } from './repositories/user.repository.js';
 import { SessionRepository } from './repositories/session.repository.js';
 import { PermissionRepository } from './repositories/permission.repository.js';
 import { AuditRepository } from './repositories/audit.repository.js';
+import { FeedbackRepository } from './repositories/feedback.repository.js';
 import { ProfileRepository } from './repositories/profile.repository.js';
 import { ScanRepository } from './repositories/scan.repository.js';
 import { ScanRetentionRepository } from './repositories/scan-retention.repository.js';
@@ -57,6 +58,7 @@ const DEPOTS_AUTH = [
     UserAdminRepository,
     LocalAccountsBootstrap,
     AuditRepository,
+    FeedbackRepository,
     ProfileRepository,
     ScanRepository,
     ScanRetentionRepository,
@@ -68,6 +70,7 @@ const DEPOTS_AUTH = [
     SessionRepository,
     PermissionRepository,
     AuditRepository,
+    FeedbackRepository,
     ProfileRepository,
     ScanRepository,
     ScanRetentionRepository,

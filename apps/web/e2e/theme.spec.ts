@@ -213,6 +213,10 @@ test.describe('Thème sombre', () => {
     // (succès, alerte, avertissement) et zone de suppression.
     '/administration/comptes',
     '/administration/comptes/nouveau',
+    // Les retours apportent leurs propres pastilles de statut — cinq familles
+    // de couleur sur un même écran.
+    '/retours',
+    '/retours/nouveau',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {

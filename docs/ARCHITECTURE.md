@@ -58,6 +58,7 @@ Réordonner ces providers casserait silencieusement les exemptions.
 | `rbac`     | Résolution rang + permissions fines avec scope de gammes                                               |
 | `auth`     | Connexion, rotation du refresh, déconnexion, profil                                                    |
 | `users`    | Administration des comptes — CRUD, mots de passe, permissions fines ; exige la base                    |
+| `feedback` | Retours des bêta-testeurs — dépôt ouvert à tous, triage sous `feedback:read`                           |
 | `health`   | Sonde publique                                                                                         |
 
 ---
@@ -262,6 +263,61 @@ jour : mêler le mot de passe aux autres champs permettrait de le changer en
 corrigeant un courriel, et rendrait la trace d'audit ambiguë sur ce qui a
 réellement été fait. Le mot de passe n'entre **jamais** dans le journal — ni en
 clair, ni haché : un journal se lit plus facilement qu'une table de comptes.
+
+## Retours des bêta-testeurs
+
+Le module a un objectif simple : faire en sorte que signaler coûte moins cher
+que contourner. Tout en découle (décision 46).
+
+### Qui voit quoi
+
+| Acteur                     | Voit                | Peut trier |
+| -------------------------- | ------------------- | ---------- |
+| Tout compte authentifié    | ses propres retours | non        |
+| Porteur de `feedback:read` | tous les retours    | oui        |
+
+La restriction est appliquée sur le **filtre SQL**, jamais après coup sur les
+lignes lues : filtrer en mémoire ramènerait d'abord les retours des autres, et
+la pagination calculée dessus serait fausse. Le retour d'un autre compte rend
+**404** et non 403 — un 403 confirmerait son existence.
+
+### Contexte capturé
+
+Le lien « Signaler » de la barre supérieure emporte la route courante, **sans
+sa chaîne de requête** : les filtres d'un écran n'apprennent rien sur le
+problème signalé et peuvent contenir une recherche nominative. La route est
+lue sur les événements du routeur, pas une fois au démarrage — la coquille ne
+se reconstruit pas d'une navigation à l'autre, et un lien figé enverrait
+toujours le premier écran visité.
+
+### Cycle de vie
+
+```
+nouveau ─┬─► accepté ─┬─► en cours ─┬─► résolu ─► (rouvrir) en cours
+         │            │             │
+         └─► rejeté ◄─┴─────────────┘
+              │
+              └─► nouveau (reprise)
+```
+
+La table `TRANSITIONS_STATUT` vit dans le paquet partagé : le service l'applique
+et l'interface n'affiche que les boutons correspondants. `resolved_at` est
+dérivé du statut par le SQL lui-même, jamais posé par l'appelant — le laisser
+écrire permettrait d'horodater une résolution qui n'a pas eu lieu. Détail et
+coût en décision 47.
+
+### Ce que le module n'offre pas
+
+Ni suppression, ni réécriture du titre ou du corps : ils appartiennent à leur
+auteur, et les effacer perdrait ce qu'il a réellement signalé. Le triage ne
+touche qu'au statut, à la gravité, à l'assignation et à la **réponse** — c'est
+elle qui ferme la boucle, et sans elle un retour « rejeté » ne dit pas
+pourquoi.
+
+Le corps d'un retour n'entre **pas** dans le journal d'audit : il peut citer
+des URL clientes, et le journal se lit plus largement que la table des retours.
+
+---
 
 ### Coquille applicative
 

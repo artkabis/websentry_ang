@@ -19,17 +19,17 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Historique des scans                         | ✅      | ✅       | **Livré** |
 | Gestion utilisateurs + audit                 | ✅      | ✅       | **Livré** |
 | Analyse (page, batch, sitemap, SSE)          | ✅      | ✅       | **Livré** |
-| Feedback beta-testeurs                       | ⬜      | ⬜       | À faire   |
+| Feedback beta-testeurs                       | ✅      | ✅       | **Livré** |
 | Messagerie in-app                            | ⬜      | ⬜       | À faire   |
 | Analytics d'usage / RGPD                     | ⬜      | ⬜       | À faire   |
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 3351 au total — 369 paquet partagé, 1865 unitaires backend,
-380 E2E + sécurité API, 678 unitaires frontend, 59 E2E navigateur.
+**Tests** : 3594 au total — 396 paquet partagé, 1934 unitaires backend,
+406 E2E + sécurité API, 773 unitaires frontend, 85 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 96 % lignes backend
-(100 % sur chaque module de sécurité, sur la gestion des comptes **et sur le
-journal d'audit**), 98,3 % lignes frontend.
+(100 % sur chaque module de sécurité, sur la gestion des comptes, sur le
+journal d'audit **et sur les retours**), 98 % lignes frontend.
 
 > **Module 4 — livré.** Le pipeline d'analyse est complet (récupération
 > SSRF-sûre, profils, pool de threads, flux SSE, sitemap, historisation, suite

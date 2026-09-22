@@ -1308,3 +1308,78 @@ atteignait sans la voir. Le remplissage n'est désormais posé qu'au focus. Et
 deux scénarios remettaient le focus à zéro en cliquant en (1, 1) — c'est-à-dire
 sur ce lien : ils mesuraient le parcours clavier en sautant l'en-tête, tout en
 prétendant le mesurer en entier.
+
+---
+
+## 46. Déposer un retour ne demande AUCUNE permission
+
+**Décision** — `POST /api/v1/feedback` et la lecture de `/feedback` sont
+ouvertes à tout compte authentifié. Aucune route du module ne porte de
+décorateur de permission. Ce que `feedback:read` change, c'est le PÉRIMÈTRE :
+qui ne l'a pas ne voit que ses propres retours et ne peut rien trier.
+
+**Raison** — Le module existe pour une seule raison : une équipe qualité qui
+enchaîne les audits rencontre des cas limites que personne n'a prévus. Si
+signaler coûte plus cher que contourner, elle contourne, et le défaut reste.
+Une permission à demander est exactement ce coût-là.
+
+Une garde `@RequirePermission(FEEDBACK_READ)` sur la liste aurait fermé l'écran
+« mes retours » à ceux-là mêmes qu'on veut faire remonter des retours — ils
+auraient déposé sans jamais savoir ce que devenait leur signalement, ce qui
+est la meilleure façon de les faire cesser.
+
+**La restriction est posée sur le FILTRE SQL**, pas après coup sur les lignes
+lues : filtrer en mémoire ramènerait d'abord les retours des autres, et une
+pagination calculée dessus serait fausse. Et le retour d'un autre compte rend
+**404**, pas 403 : un 403 confirmerait qu'un retour existe sous cet
+identifiant, ce qui est déjà une information.
+
+**Aucune régression** — La v1 collectait ses retours hors de l'application ;
+rien n'est retiré. Le lien « Signaler » de la barre supérieure emporte l'écran
+courant **sans sa chaîne de requête** : les filtres n'apprennent rien sur le
+problème et peuvent contenir une recherche nominative.
+
+**Preuve** — Quinze mutants appliqués aux garde-fous : les quinze font tomber
+la suite. Deux d'entre eux se sont révélés **équivalents** au premier passage —
+ils réécrivaient le code sans changer son comportement. Le second a mis au jour
+une branche réellement morte (un garde sur la forme du contexte JSON, que la
+vérification champ par champ rendait indistinguable) : elle a été **supprimée**
+plutôt que couverte par un test creux, comme `CLAUDE.md` §4 le demande.
+
+**Coût assumé** — Trois. Le dépôt est ouvert, donc exposé au remplissage
+automatique : seule une limite de débit (dix par minute) et la borne de 5 000
+caractères s'y opposent. Ensuite, le corps d'un retour peut citer des URL
+clientes, et il n'est volontairement **pas** recopié dans le journal d'audit,
+qui se lit plus largement — la trace dit qu'un retour a été déposé, pas ce
+qu'il contient. Enfin, rien n'empêche un compte de déposer deux fois le même
+retour : le dédoublonnage est un travail de triage, pas de saisie.
+
+---
+
+## 47. Un statut de retour ne saute pas d'étape
+
+**Décision** — Les passages de statut sont énumérés dans une table
+(`TRANSITIONS_STATUT`) du paquet partagé. `nouveau → résolu` est **refusé** ;
+`résolu → en cours` (rouvrir) est **permis**. L'interface n'offre que les
+passages que l'API accepte.
+
+**Raison** — Le chemin parcouru raconte ce qui s'est passé : un retour
+« résolu » qui n'est jamais passé par « en cours » n'a jamais été travaillé, et
+personne ne peut plus distinguer ce qui a été corrigé de ce qui a été classé.
+Rouvrir reste possible parce qu'un correctif qui ne corrige pas se constate
+après coup, et forcer la création d'un doublon perdrait le fil de la
+discussion.
+
+`rejeté` est un statut à part entière et ne se confond pas avec `résolu` :
+refuser un retour est une réponse légitime, et la noyer dans « résolu » ferait
+croire à l'auteur que son cas a été traité.
+
+La table vit dans le paquet **partagé** : le service l'applique, l'interface
+s'en sert pour n'afficher que les boutons utiles. Une seule source, deux
+usages — sans quoi l'écran proposerait des passages que l'API refuserait.
+
+**Coût assumé** — Deux. `resolved_at` est dérivé du statut **par le SQL**
+(`CASE WHEN ? = 'resolu'`), ce qui est moins lisible qu'une écriture explicite
+mais évite que deux écritures divergent si la seconde échoue. Et la table des
+transitions devra être maintenue : un statut ajouté sans ses passages
+laisserait un retour sans issue — un test le vérifie, mais il faudra y penser.

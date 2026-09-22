@@ -115,6 +115,15 @@ export default defineConfig({
         // non couverte, c'est une action qui pourrait ne pas être écrite — ou
         // une lecture qui exposerait plus que prévu.
         'src/audit/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Retours : la visibilité y décide qui lit quoi. Une branche non
+        // couverte, c'est un retour d'un autre compte qui s'affiche.
+        'src/feedback/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/database/repositories/feedback.repository.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
         'src/database/repositories/audit.repository.ts': {
           lines: 100,
           branches: 100,

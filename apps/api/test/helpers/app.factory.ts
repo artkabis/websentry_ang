@@ -14,6 +14,10 @@ import {
 import { SessionRepository } from '../../src/database/repositories/session.repository.js';
 import { PermissionRepository } from '../../src/database/repositories/permission.repository.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repository.js';
+import {
+  FeedbackRepository,
+  type FeedbackRow,
+} from '../../src/database/repositories/feedback.repository.js';
 import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
 import { ScanRepository } from '../../src/database/repositories/scan.repository.js';
 import { ScanRetentionRepository } from '../../src/database/repositories/scan-retention.repository.js';
@@ -49,6 +53,9 @@ export class FakeDb {
     { id: string; userId: string; expiresAt: Date; revoked: boolean }
   >();
   readonly auditLog: Array<Record<string, unknown>> = [];
+
+  /** Retours des bêta-testeurs — reproduit la table `feedback`. */
+  readonly feedback = new Map<string, Record<string, unknown>>();
 
   /** Profils par gamme — reproduit la table `settings_profiles`. */
   readonly profiles = new Map<
@@ -807,6 +814,119 @@ export async function createTestApp(
     });
   }
 
+  /**
+   * Retours — le double applique les MÊMES filtres que le SQL réel, y compris
+   * la restriction par auteur : c'est elle qui porte le garde-fou de
+   * visibilité, et un double qui l'ignorerait ne testerait rien.
+   */
+  function filtrerFeedback(filtres: {
+    status?: string;
+    kind?: string;
+    severity?: string;
+    search?: string;
+    authorId?: string;
+  }): Array<Record<string, unknown>> {
+    const motif = filtres.search?.toLowerCase();
+    return [...db.feedback.values()]
+      .filter(ligne => {
+        if (filtres.status && ligne['status'] !== filtres.status) return false;
+        if (filtres.kind && ligne['kind'] !== filtres.kind) return false;
+        if (filtres.severity && ligne['severity'] !== filtres.severity) return false;
+        if (filtres.authorId && ligne['author_id'] !== filtres.authorId) return false;
+        if (motif === undefined) return true;
+        return [ligne['title'], ligne['body']].some(
+          champ => typeof champ === 'string' && champ.toLowerCase().includes(motif),
+        );
+      })
+      .sort((a, b) => String(b['created_at']).localeCompare(String(a['created_at'])));
+  }
+
+  /** Jointure gauche sur `users` pour le nom de l'assigné. */
+  function avecAssigne(ligne: Record<string, unknown>): FeedbackRow {
+    const assigne = ligne['assigned_to'];
+    const compte = typeof assigne === 'string' ? db.users.get(assigne) : undefined;
+    return { ...ligne, assigned_name: compte?.username ?? null } as unknown as FeedbackRow;
+  }
+
+  const feedbackRepo = {
+    available: true,
+    list: vi.fn((filtres: never, limit: number, offset: number) =>
+      Promise.resolve(
+        filtrerFeedback(filtres)
+          .slice(offset, offset + limit)
+          .map(avecAssigne),
+      ),
+    ),
+    count: vi.fn((filtres: never) => Promise.resolve(filtrerFeedback(filtres).length)),
+    countByStatus: vi.fn((filtres: never) => {
+      const parStatut = new Map<string, number>();
+      for (const ligne of filtrerFeedback(filtres)) {
+        const statut = String(ligne['status']);
+        parStatut.set(statut, (parStatut.get(statut) ?? 0) + 1);
+      }
+      return Promise.resolve([...parStatut].map(([status, total]) => ({ status, total })) as never);
+    }),
+    findById: vi.fn((id: string) => {
+      const ligne = db.feedback.get(id);
+      return Promise.resolve(ligne ? avecAssigne(ligne) : null);
+    }),
+    create: vi.fn(
+      (retour: {
+        id: string;
+        kind: string;
+        severity: string;
+        title: string;
+        body: string;
+        context: unknown;
+        authorId: string | null;
+        authorName: string | null;
+      }) => {
+        const maintenant = new Date().toISOString();
+        db.feedback.set(retour.id, {
+          id: retour.id,
+          kind: retour.kind,
+          severity: retour.severity,
+          status: 'nouveau',
+          title: retour.title,
+          body: retour.body,
+          context: retour.context,
+          author_id: retour.authorId,
+          author_name: retour.authorName,
+          assigned_to: null,
+          resolution: null,
+          created_at: maintenant,
+          updated_at: maintenant,
+          resolved_at: null,
+        });
+        return Promise.resolve();
+      },
+    ),
+    triage: vi.fn(
+      (
+        id: string,
+        champs: Partial<{
+          status: string;
+          severity: string;
+          assigned_to: string | null;
+          resolution: string | null;
+        }>,
+      ) => {
+        const ligne = db.feedback.get(id);
+        if (!ligne) return Promise.resolve(0);
+
+        for (const [colonne, valeur] of Object.entries(champs)) {
+          if (valeur !== undefined) ligne[colonne] = valeur;
+        }
+        // `resolved_at` est DÉRIVÉ du statut, comme le CASE du SQL réel.
+        if (champs.status !== undefined) {
+          ligne['resolved_at'] = champs.status === 'resolu' ? new Date().toISOString() : null;
+        }
+        ligne['updated_at'] = new Date().toISOString();
+        return Promise.resolve(1);
+      },
+    ),
+  };
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
@@ -887,6 +1007,8 @@ export async function createTestApp(
     .useValue(permissionRepo)
     .overrideProvider(AuditRepository)
     .useValue(auditRepo)
+    .overrideProvider(FeedbackRepository)
+    .useValue(feedbackRepo)
     .overrideProvider(ProfileRepository)
     .useValue(profileRepo)
     .overrideProvider(ScanRepository)

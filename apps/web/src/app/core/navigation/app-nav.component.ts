@@ -74,6 +74,8 @@ export class AppNavComponent {
     { chemin: '/analyse', libelle: 'Analyse', visible: () => true },
     { chemin: '/historique', libelle: 'Historique', visible: () => true },
     { chemin: '/profils', libelle: 'Profils', visible: () => true },
+    // Ouvert à tous : signaler ne doit demander aucune permission.
+    { chemin: '/retours', libelle: 'Retours', visible: () => true },
     {
       chemin: '/administration/comptes',
       libelle: 'Comptes',

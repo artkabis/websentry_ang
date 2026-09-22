@@ -82,7 +82,8 @@ describe('AppComponent', () => {
         within(nav)
           .getAllByRole('link')
           .map(a => a.textContent?.trim()),
-      ).toEqual(['Tableau de bord', 'Analyse', 'Historique', 'Profils']);
+        // « Retours » y figure : signaler ne demande aucune permission.
+      ).toEqual(['Tableau de bord', 'Analyse', 'Historique', 'Profils', 'Retours']);
     });
 
     it('ajoute « Comptes » à qui détient users:read', async () => {
@@ -149,6 +150,21 @@ describe('AppComponent', () => {
       await userEvent.click(screen.getByRole('link', { name: 'Aller au contenu' }));
       const cible = fixture.nativeElement.querySelector('#contenu') as HTMLElement;
       expect(document.activeElement).toBe(cible);
+    });
+  });
+
+  describe('signalement depuis n’importe quel écran', () => {
+    it('offre le lien à un compte connecté', async () => {
+      // Si signaler coûte plus cher que contourner, personne ne signale.
+      await render(AppComponent, { providers: providers(false, CONNECTE) });
+
+      const lien = screen.getByRole('link', { name: 'Signaler' });
+      expect(lien.getAttribute('href')).toContain('/retours/nouveau');
+    });
+
+    it('ne l’offre PAS à un visiteur non connecté', async () => {
+      await render(AppComponent, { providers: providers(false) });
+      expect(screen.queryByRole('link', { name: 'Signaler' })).toBeNull();
     });
   });
 });
