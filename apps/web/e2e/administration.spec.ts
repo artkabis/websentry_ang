@@ -93,7 +93,17 @@ async function mockApi(
  * section repliée y figure encore, alors que le navigateur ne s'y arrête pas.
  */
 async function compterTabulations(page: Page, maximum = 200): Promise<number> {
-  await page.locator('body').click({ position: { x: 1, y: 1 } });
+  // Un clic en haut à gauche ne convient PAS : c'est là que se place le lien
+  // d'évitement une fois focalisé, et cliquer dessus sauterait l'en-tête —
+  // on mesurerait alors l'écran seul, en croyant mesurer le parcours entier.
+  // La coquille affiche son état de chargement tant que /auth/me n'a pas
+  // répondu : tabuler avant qu'elle existe donnerait un résultat qui dépend de
+  // la vitesse de la machine.
+  await expect(page.getByRole('link', { name: 'Aller au contenu' })).toBeAttached();
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.body.focus();
+  });
   const vus = new Set<string>();
 
   for (let i = 0; i < maximum; i += 1) {
@@ -161,7 +171,10 @@ test.describe('Liste des comptes', () => {
 
     const arrets = await compterTabulations(page);
     expect(arrets).toBeGreaterThan(4);
-    expect(arrets).toBeLessThanOrEqual(20);
+    // Coquille comprise : lien d'évitement, logo, entrées de navigation et
+    // choix d'apparence forment un coût FIXE, que le lien d'évitement permet
+    // de sauter en un seul arrêt.
+    expect(arrets).toBeLessThanOrEqual(32);
   });
 });
 

@@ -263,6 +263,36 @@ corrigeant un courriel, et rendrait la trace d'audit ambiguë sur ce qui a
 réellement été fait. Le mot de passe n'entre **jamais** dans le journal — ni en
 clair, ni haché : un journal se lit plus facilement qu'une table de comptes.
 
+### Coquille applicative
+
+L'en-tête est présent sur tous les écrans et porte trois choses : le retour au
+tableau de bord, la **navigation principale**, et le choix d'apparence. Avant
+elle, seize routes n'avaient qu'un point d'entrée, et trois écrans n'offraient
+aucune sortie (décision 45).
+
+Les entrées sont des **familles** et non des écrans, et chacune n'apparaît que
+si l'utilisateur peut réellement ouvrir sa destination : `Comptes` demande
+`users:read`, `Journal` demande le rang 100. L'écran courant est signalé par
+`aria-current="page"`, y compris depuis un écran interne à la famille
+(`/analyse/lot` marque `Analyse`).
+
+Sous la largeur d'un téléphone, la barre se replie derrière un bouton dont
+l'état est porté par `aria-expanded` ; une navigation la referme.
+
+#### Lien d'évitement
+
+Premier arrêt de tabulation de chaque écran, il donne le focus au conteneur du
+contenu routé (`#contenu`, `tabindex="-1"`). Deux détails le font fonctionner :
+
+- le saut est traité **en code** (`preventDefault` puis `focus`) — avec une base
+  de document à la racine, un fragment nu est résolu en URL absolue et le
+  routeur quitterait l'écran en cours ;
+- son remplissage n'est appliqué **qu'au focus** — posé en permanence, il
+  écraserait le `padding: 0` de `sr-only` et laisserait une cible cliquable de
+  24 px dans le coin, invisible mais atteignable au pointeur.
+
+Une fois focalisé, il mesure au moins 24 × 24 px (WCAG 2.5.8).
+
 ### Écrans d'administration
 
 Trois routes, gardées en miroir des décorateurs de l'API :
@@ -794,12 +824,13 @@ l'interface, pas au moteur.
 
 Dettes identifiées sur le périmètre déjà livré :
 
-- **Coquille applicative** — la barre supérieure ne porte que le nom du produit
-  et le choix d'apparence, et chaque écran n'expose qu'un lien : le retour au
-  tableau de bord. Aller de `/profils` à `/analyse` coûte donc deux clics par un
-  détour. Une navigation persistante et un fil d'Ariane sur les parcours
-  profonds (`historique → site → audit → page`) restent à proposer : chaque
-  écran porte son propre en-tête, et les unifier revient à reprendre les dix.
+- **Fil d'Ariane sur les parcours profonds** — la navigation persistante est
+  livrée (décision 45), mais `historique → site → audit → page` descend de
+  quatre niveaux sans que l'écran dise où l'on se trouve dans cette chaîne. Deux
+  écrans portent un fil d'Ariane écrit à la main (la fiche compte, l'éditeur de
+  profil) ; les autres n'en ont pas. Un fil générique dérivé de la route
+  demanderait de donner un libellé à chaque segment, y compris aux identifiants
+  — ce qui suppose de charger la donnée avant de pouvoir nommer le niveau.
 
 - **Tests d'intégration MariaDB** — conteneur éphémère en CI, pour valider le SQL
   réel des repositories. La dette s'alourdit à chaque module : le verrouillage

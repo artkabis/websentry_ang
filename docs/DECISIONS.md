@@ -1261,3 +1261,50 @@ par processus. Elles partagent la même table dans le paquet partagé, donc elle
 ne peuvent pas diverger sur les DÉFAUTS — mais rien n'empêche l'une des deux
 d'oublier une étape future (l'expiration d'un octroi, par exemple, que ni l'une
 ni l'autre ne regarde aujourd'hui).
+
+---
+
+## 45. Une coquille applicative, quatre modules après avoir été différée
+
+**Décision** — L'en-tête porte désormais une navigation principale (six
+entrées, filtrées par les droits), un lien d'évitement global, et le contenu
+routé devient une cible focalisable.
+
+**Raison** — La refonte avait été proposée puis différée : le gain ne
+justifiait pas de toucher à tous les écrans. Quatre modules plus tard, la
+mesure a changé de camp :
+
+- **seize routes** pour un seul point d'entrée ;
+- **cinq liens** depuis le tableau de bord, **aucun** entre familles d'écrans —
+  passer de l'analyse à l'administration demandait deux clics en repassant par
+  le tableau de bord ;
+- trois écrans — le journal d'audit, la liste et l'éditeur de profils —
+  n'offraient **aucune sortie** hors du logo ou du bouton « Précédent » ;
+- aucun lien d'évitement global : seul l'éditeur de profil en avait un.
+
+Les entrées sont des **familles**, pas des écrans : « Analyse » mène à la page
+unitaire, d'où le lot et le sitemap sont atteignables. Lister les seize routes
+rendrait la barre illisible et ferait payer dix tabulations de plus sur chaque
+écran. Une entrée n'apparaît que si son écran est réellement ouvrable —
+proposer un lien qui mène à « accès refusé » est pire que de ne rien proposer.
+
+**Aucune régression** — Rien n'est retiré : le logo ramène toujours au tableau
+de bord, et les cartes du tableau de bord restent. L'état actif est annoncé par
+`aria-current`, pas seulement par un fond coloré, qui ne dit rien à un lecteur
+d'écran.
+
+**Coût assumé** — Trois. La barre ajoute un coût FIXE d'arrêts de tabulation sur
+chaque écran : un test le borne à douze avant le contenu, et le lien
+d'évitement le ramène à un seul pour qui vise le contenu. Ensuite, deux
+mécanismes de navigation coexistent — la barre et les cartes du tableau de bord
+— et une famille ajoutée demain doit être déclarée aux deux endroits. Enfin, la
+barre se replie derrière un bouton sous la largeur d'un téléphone : c'est un
+état de plus à tenir, et il n'existe que là.
+
+**Deux défauts trouvés en le construisant.** Le remplissage du lien d'évitement
+écrasait le `padding: 0` de `sr-only` : invisible mais large de 24 px, il
+laissait une cible cliquable dans le coin supérieur gauche, que le pointeur
+atteignait sans la voir. Le remplissage n'est désormais posé qu'au focus. Et
+deux scénarios remettaient le focus à zéro en cliquant en (1, 1) — c'est-à-dire
+sur ce lien : ils mesuraient le parcours clavier en sautant l'en-tête, tout en
+prétendant le mesurer en entier.
