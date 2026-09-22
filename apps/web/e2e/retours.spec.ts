@@ -40,6 +40,25 @@ function retour(over: Record<string, unknown> = {}) {
 const COMPTEURS = { nouveau: 1, accepte: 0, en_cours: 0, resolu: 0, rejete: 0 };
 
 /**
+ * Suit le lien « Signaler » une fois qu'il porte l'écran attendu.
+ *
+ * Le lien est rendu dès que la session est résolue, mais sa cible suit les
+ * ÉVÉNEMENTS du routeur : cliquer sans attendre le tombait parfois avec un
+ * contexte encore vide. Affirmer l'adresse avant de cliquer rend le scénario
+ * déterministe et vérifie en prime le contrat lui-même — le lien doit désigner
+ * l'écran courant, ce que la page d'arrivée ne prouve qu'indirectement.
+ */
+async function signalerDepuis(page: Page, ecran: string): Promise<void> {
+  // `exact` : l'écran des retours porte aussi « Signaler quelque chose ».
+  const lien = page.getByRole('link', { name: 'Signaler', exact: true });
+  await expect(lien).toHaveAttribute(
+    'href',
+    `/retours/nouveau?depuis=${encodeURIComponent(ecran)}`,
+  );
+  await lien.click();
+}
+
+/**
  * Les permissions doivent porter leur PORTÉE : le schéma partagé est strict,
  * et un profil incomplet est rejeté à la frontière — `hasPermission` rendrait
  * alors faux pour la seule raison que le double était mal formé.
@@ -92,7 +111,7 @@ test.describe('Dépôt d’un retour', () => {
     await mockApi(page, { deposes });
 
     await page.goto('/profils');
-    await page.getByRole('link', { name: 'Signaler' }).click();
+    await signalerDepuis(page, '/profils');
 
     await expect(page.getByText(/sera joint automatiquement/)).toBeVisible();
     await expect(page.getByText('/profils')).toBeVisible();
@@ -114,7 +133,7 @@ test.describe('Dépôt d’un retour', () => {
 
     await page.goto('/retours');
     await page.goto('/historique');
-    await page.getByRole('link', { name: 'Signaler' }).click();
+    await signalerDepuis(page, '/historique');
 
     await expect(page.getByText('/historique')).toBeVisible();
   });
@@ -125,8 +144,10 @@ test.describe('Dépôt d’un retour', () => {
     await connecte(page);
     await mockApi(page);
 
+    // Le lien lui-même ne doit porter QUE le chemin : c'est là que se joue la
+    // règle, avant même d'arriver sur l'écran de dépôt.
     await page.goto('/retours?recherche=quelquun');
-    await page.getByRole('link', { name: 'Signaler' }).click();
+    await signalerDepuis(page, '/retours');
 
     await expect(page).not.toHaveURL(/recherche/);
   });
