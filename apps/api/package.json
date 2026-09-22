@@ -8,6 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "db:init": "node scripts/db.mjs init",
     "db:user": "node scripts/db.mjs user",
+    "dev:user": "node scripts/dev-user.mjs",
     "start": "node dist/main.js",
     "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

@@ -10,3 +10,6 @@ playwright-report/
 test-results/
 .DS_Store
 *.log
+
+# Comptes du mode « sans base » — empreintes de mots de passe, jamais versionnées.
+.dev-accounts.json

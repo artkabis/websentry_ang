@@ -116,6 +116,16 @@ export const EnvSchema = z
         message: 'JWT_SECRET ressemble à une valeur de démonstration — interdit en production',
       });
     }
+    // Le mode « sans base » porte des comptes locaux dans un fichier : c'est un
+    // outil de développement, et il n'a rien à faire en production, où les
+    // comptes, leurs rangs et leurs révocations vivent en base.
+    if (env.NODE_ENV === 'production' && !env.DB_ENABLED) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DB_ENABLED'],
+        message: 'DB_ENABLED=false est un mode de développement — interdit en production',
+      });
+    }
     // Un refresh plus court que l'access rendrait la rotation inopérante.
     if (env.REFRESH_TOKEN_TTL <= env.ACCESS_TOKEN_TTL) {
       ctx.addIssue({

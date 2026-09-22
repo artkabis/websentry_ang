@@ -436,6 +436,23 @@ seul le contenu est encodé, jamais les séparateurs que nous émettons.
 
 ## Modèle d'authentification
 
+### Sans base de données
+
+`DB_ENABLED=false` sert à travailler sans MariaDB — la v1 le permettait, la v2
+l'avait perdu. Trois dépôts reçoivent alors une implémentation locale, sous le
+même jeton d'injection : ni l'authentification ni le RBAC ne savent laquelle ils
+reçoivent.
+
+| Dépôt        | Avec base          | Sans base                                  |
+| ------------ | ------------------ | ------------------------------------------ |
+| Utilisateurs | table `users`      | `apps/api/.dev-accounts.json` (empreintes) |
+| Sessions     | `user_sessions`    | mémoire du processus                       |
+| Permissions  | `user_permissions` | aucune — le rang seul décide               |
+
+Ce qui ne change pas : mot de passe haché par le même service, verrouillage
+après échecs, révocation par `token_version`, jeton de rafraîchissement à usage
+unique. Le mode est refusé au démarrage si `NODE_ENV=production`.
+
 ### Cookies
 
 | Cookie       | httpOnly | Durée  | Chemin                 | Rôle                                               |

@@ -25,7 +25,7 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Supervision & santé                          | ⬜      | ⬜       | À faire   |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 2938 au total — 337 paquet partagé, 1718 unitaires backend,
+**Tests** : 2989 au total — 337 paquet partagé, 1769 unitaires backend,
 334 E2E + sécurité API, 502 unitaires frontend, 47 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 95,8 % lignes backend
 (100 % sur chaque module de sécurité), 98,6 % lignes frontend.
@@ -46,7 +46,8 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 
 - **Node.js ≥ 22.22.3** (exigé par Angular CLI 22)
 - **pnpm ≥ 10**
-- **MariaDB** (facultatif en développement : `DB_ENABLED=false`)
+- **MariaDB** (facultatif en développement : `DB_ENABLED=false` donne des
+  comptes locaux `admin` et `tester`, sans base)
 
 ---
 
@@ -69,24 +70,42 @@ pnpm dev:web                             # http://localhost:4200  (autre termina
 `pnpm dev:api` compile en continu et relance le serveur à chaque écriture ; le
 premier démarrage attend la fin de la compilation initiale, quelques secondes.
 
-### Créer un compte pour se connecter
+### Se connecter
 
-Il n'existe **aucun accès sans identifiant** : les écrans sont derrière une
-session, et un contournement d'authentification n'est pas une commodité de
-développement. Il faut donc une base et un compte — `DB_ENABLED=false` permet de
-démarrer l'API, mais pas de s'y connecter.
+**Sans MariaDB** (`DB_ENABLED=false`) : rien à faire. Au premier démarrage,
+l'API crée un compte `admin` et un compte `tester` et **affiche leurs mots de
+passe une seule fois** dans le journal :
+
+```
+[ComptesLocaux] Mode sans base — comptes locaux créés, notez ces mots de passe :
+[ComptesLocaux]   admin / GbJIt7Q59wLQFdRa
+[ComptesLocaux]   tester / 4hwsMEKSWmX_zUP3
+```
+
+Ils vivent dans `apps/api/.dev-accounts.json`, qui n'est jamais versionné et ne
+contient que des empreintes. Pour en changer :
 
 ```bash
-# MariaDB doit tourner, et .env porter DB_ENABLED=true + les accès
-pnpm --filter @websentry/api build        # le hachage du mot de passe vient du code compilé
+pnpm --filter @websentry/api build        # le hachage vient du code compilé
+pnpm --filter @websentry/api dev:user admin 'un-mot-de-passe-choisi'
+```
+
+Ce mode est **refusé en production** : le démarrage échoue si `NODE_ENV=production`
+et `DB_ENABLED=false`. Les permissions fines par gamme n'y existent pas — seul le
+rang décide.
+
+**Avec MariaDB** (`DB_ENABLED=true`) :
+
+```bash
+pnpm --filter @websentry/api build
 pnpm --filter @websentry/api db:init      # applique src/database/sql/*.sql
 pnpm --filter @websentry/api db:user alice 'un-mot-de-passe-solide' admin
 ```
 
 Rangs acceptés : `tester` (10), `editor` (30), `admin` (50), `super_admin`
-(100) — ou leur valeur numérique. Rejouer `db:user` sur un identifiant existant
-**réinitialise son mot de passe** et invalide les sessions ouvertes : c'est le
-geste prévu quand on l'a oublié.
+(100) — ou leur valeur numérique. Rejouer `db:user` ou `dev:user` sur un
+identifiant existant **réinitialise son mot de passe** et invalide les sessions
+ouvertes : c'est le geste prévu quand on l'a oublié.
 
 ### Si ça ne démarre pas
 

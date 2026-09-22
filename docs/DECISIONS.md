@@ -1037,3 +1037,42 @@ devient un réglage rarement vu : le résumé chiffré est ce qui l'évite, et i
 doit être tenu à jour quand une section change de contenu. Enfin, le lien
 d'évitement traite son clic en code : avec une base de document à la racine, une
 ancre de fragment quitterait la route en cours.
+
+---
+
+## 38. Le mode « sans base » de la v1 est rétabli, avec de vrais comptes
+
+**Décision** — `DB_ENABLED=false` redonne ce que la v1 offrait : un compte
+`admin` (rang 50) et un compte `tester` (rang 10) utilisables sans MariaDB.
+Trois dépôts — utilisateurs, sessions, permissions — reçoivent une
+implémentation locale : fichier pour les comptes, mémoire pour les sessions,
+aucune permission fine. Les mots de passe sont **tirés au sort** au premier
+démarrage et affichés une fois ; le fichier ne garde que leur empreinte, hachée
+par le service qui vérifie la connexion. Le mode est **refusé en production**.
+
+**Raison** — La v2 avait perdu cette capacité : l'authentification lit la table
+`users`, et `DB_ENABLED=false` laissait donc une application impossible à
+ouvrir. C'est une régression au sens de `CLAUDE.md` §1 — ce que la v1 fait, la
+v2 le fait au minimum — et elle rendait le premier contact avec le projet
+impraticable sans installer MariaDB.
+
+Ce n'est pas un contournement d'authentification, et la distinction porte tout
+le reste : les comptes ont un vrai mot de passe, le verrouillage après échecs
+s'applique, `token_version` révoque comme en base, et un jeton de
+rafraîchissement ne sert qu'une fois. Seul le LIEU de stockage change.
+
+**Aucune régression** — Les dépôts locaux héritent des dépôts SQL et en
+redéfinissent chaque méthode publique ; un test par réflexion le vérifie, parce
+qu'une méthode oubliée tomberait sur la base désactivée et lèverait sur un
+chemin qu'aucun test n'emprunte forcément. Les trois fichiers sont couverts à
+100 % en lignes et en branches, comme l'exige §4 pour ce qui touche à
+l'authentification.
+
+**Coût assumé** — Trois. Les sessions vivent en mémoire : un redémarrage
+déconnecte, ce qui est acceptable en développement et le serait beaucoup moins
+ailleurs — d'où le refus en production. Les permissions fines par gamme
+n'existent pas dans ce mode : le rang seul décide, et un écran qui en dépendrait
+se comporterait différemment selon qu'on a une base ou non. Enfin, le fichier de
+comptes est une seconde source de vérité : elle ne s'active que sans base, mais
+un développeur qui bascule `DB_ENABLED` change d'identifiants sans que rien ne
+le lui rappelle.
