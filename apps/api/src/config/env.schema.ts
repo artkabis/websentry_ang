@@ -102,6 +102,23 @@ export const EnvSchema = z
     /** Pages analysées en parallèle dans un lot — borne l'egress simultané. */
     ANALYSIS_BATCH_CONCURRENCY: intFromEnv(4, 1),
 
+    // ── Gouvernance des données ─────────────────────────────────────────────
+    /**
+     * Délai au-delà duquel le journal d'audit perd son IDENTITÉ.
+     *
+     * L'action, sa cible et son horodatage restent : ce sont eux qui font du
+     * journal une preuve. Seuls l'identifiant, le nom et l'adresse IP sont
+     * retirés — ce que la conservation limitée exige, sans effacer l'événement.
+     */
+    AUDIT_ANONYMIZE_AFTER_DAYS: intFromEnv(180, 1),
+    /** Lignes traitées par passage — borne le verrou pris sur la table. */
+    AUDIT_ANONYMIZE_BATCH: intFromEnv(1000, 1),
+    /** `false` désactive entièrement l'anonymisation de fond. */
+    AUDIT_ANONYMIZE_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform(v => v === 'true'),
+
     // ── Messagerie ──────────────────────────────────────────────────────────
     /**
      * Dossier des pièces jointes — HORS de l'arborescence servie.

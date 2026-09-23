@@ -418,6 +418,67 @@ journal dit qui a écrit à qui, il n'archive pas la correspondance.
 
 ---
 
+## Analytics d'usage et gouvernance
+
+Le module **ne collecte rien** (décision 58). Il lit deux tables qui existent
+déjà pour d'autres raisons :
+
+```text
+audit_log      ──┐
+(traçabilité)    ├──▶ UsageRepository ──▶ agrégats ──▶ GET /usage
+scan_sessions  ──┘     COUNT(DISTINCT …)              GET /usage/gouvernance
+(preuve)               jamais SELECT actor_name
+```
+
+### Le tunnel
+
+Trois étages, et ce qu'ils prouvent :
+
+| Étape          | Source                 | Ce qu'elle dit                |
+| -------------- | ---------------------- | ----------------------------- |
+| `connexion`    | `audit_log/auth.login` | On ouvre l'outil              |
+| `analyse`      | `scan_sessions`        | On cherche quelque chose      |
+| `exploitation` | `audit_log`, 9 actions | On agit sur ce qu'on a trouvé |
+
+L'étape « analyse » ne vient PAS du journal : lancer une analyse n'y laisse pas
+de trace, parce que l'historique des scans est déjà cette trace, et mieux
+renseignée. L'écrire deux fois produirait deux compteurs qui divergent.
+
+Chaque étage compte des **comptes distincts** — une personne qui se connecte
+quarante fois ne fait pas quarante comptes — ET le nombre d'actions, qui est
+l'autre moitié de l'information.
+
+### Ce que le module ne rend jamais
+
+Aucune réponse ne porte un nom, un identifiant ni une adresse IP. La garantie
+est posée dans le SQL (`COUNT(DISTINCT …)`, jamais `SELECT actor_name`), et
+vérifiée sur le SQL lui-même : une fois la donnée remontée, la retirer
+relèverait de la discipline.
+
+La fenêtre d'observation est **fermée** — 7, 30 ou 90 jours. Une plage libre
+laisserait isoler une heure, et un compteur sur une heure dans une équipe de
+dix désigne quelqu'un (décision 60).
+
+### Anonymisation du journal
+
+```text
+                 AUDIT_ANONYMIZE_AFTER_DAYS (180 par défaut)
+    ─────────────────────────────┼──────────────────────────▶ temps
+       lignes anonymisées        │   lignes identifiantes
+       action, cible, date       │   + actor_id, actor_name, ip_address
+```
+
+Un travail de fond quotidien retire les trois colonnes identifiantes des lignes
+antérieures au seuil. Il vit dans `UsageModule`, passe par `UsageRepository`, et
+**aucune route HTTP ne le déclenche** : `AuditRepository` n'expose toujours ni
+UPDATE ni DELETE (décision 59).
+
+Le registre de traitement — tables lues, finalités, données personnelles
+présentes, durées de conservation — est **rendu par le code** à
+`GET /usage/gouvernance`, compteurs à jour compris.
+
+---
+
 ## Supervision
 
 Trois pannes se détectaient déjà et n'étaient qu'écrites dans les journaux :
@@ -995,10 +1056,10 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
-| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 445    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2091   | 85 % global, **100 %** sécurité |
-| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 214    | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`          | 362    | —                               |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 462    | 95 %                            |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2147   | 85 % global, **100 %** sécurité |
+| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 230    | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 377    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 938    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 108    | —                               |
 
@@ -1017,7 +1078,8 @@ faire_).
 
 ## Reste à faire
 
-Modules non encore migrés : analytics d'usage / RGPD et portail documentaire.
+Modules non encore migrés : portail documentaire. L'analytics d'usage a son
+backend ; son écran reste à faire.
 
 Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
 sitemap, sécurité) avec les 29 analyseurs de la v1. Ce qui reste y tient à

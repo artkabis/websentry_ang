@@ -1648,3 +1648,92 @@ passera.
 
 **Coût assumé** — Un aller-retour perdu quand le fichier ment sur son type.
 C'est rare, et le message du serveur est repris tel quel à l'écran.
+
+---
+
+## 58. Le module d'analytics ne COLLECTE rien
+
+**Décision** — Les statistiques d'usage sont calculées à partir du journal
+d'audit et de l'historique des scans. Aucune table d'événements, aucun
+traceur, aucune collecte dédiée.
+
+**Raison** — Ces deux tables existent déjà, l'une pour la traçabilité, l'autre
+pour la preuve. Ajouter une collecte propre au module aurait créé une SECONDE
+base de données à caractère personnel là où la première suffit — exactement ce
+que le principe de minimisation interdit, et exactement le genre de table dont
+plus personne ne se souvient trois ans plus tard.
+
+Le registre de traitement est d'ailleurs **rendu par le code** plutôt qu'écrit
+à côté : un registre rédigé à la main décrit l'intention du jour où il a été
+rédigé, et la réponse `collecteDediee: false` est un `z.literal(false)` — le
+type interdit d'annoncer le contraire.
+
+Conséquence directe : **aucune réponse du module ne nomme une personne**. La
+question « qui a fait quoi » se lit dans le journal d'audit, réservé au rang
+100 ; « combien de comptes font quoi » se lit ici. Le dépôt ne SÉLECTIONNE
+jamais un identifiant ni un nom, et un test le vérifie sur le SQL lui-même —
+c'est le seul endroit où la garantie peut être posée, puisqu'une fois la donnée
+remontée, la retirer relèverait de la discipline.
+
+**Coût assumé** — Ce qui n'est pas journalisé n'est pas mesurable. Consulter un
+rapport, ouvrir un écran, revenir en arrière : rien de tout cela n'apparaît
+dans le tunnel, parce que la lecture n'est pas tracée. Ajouter ces événements
+au journal pour nourrir un compteur reviendrait à **collecter pour mesurer**,
+ce que cette décision refuse. Le tunnel dit donc si l'outil sert, pas comment
+on s'y promène.
+
+---
+
+## 59. L'anonymisation MODIFIE le journal d'audit — et cela ne rompt pas l'append-only
+
+**Décision** — Passé le délai de conservation, un travail de fond retire
+l'identifiant, le nom et l'adresse IP des lignes du journal d'audit. L'action,
+sa cible et son horodatage restent. Aucune route HTTP ne déclenche ce travail.
+
+**Raison** — C'est une contradiction apparente avec la garantie posée au
+module 5 : `AuditRepository` n'expose ni UPDATE ni DELETE, et cette absence est
+structurelle. Elle le reste — l'anonymisation passe par un **autre dépôt**,
+qu'aucun contrôleur n'atteint, et `AuditRepository` n'a pas bougé d'une ligne.
+
+La garantie se lit désormais avec sa portée exacte : le journal est
+inréécrivable sur **ce qui s'est passé**. Il n'est pas éternel sur **qui l'a
+fait** — et ne pas l'être est une obligation, pas une faiblesse. Effacer
+l'événement, en revanche, reviendrait à prétendre que rien n'a eu lieu : c'est
+pourquoi seules trois colonnes tombent.
+
+Le traitement est borné par lot : une seule requête sur un journal volumineux
+bloquerait la table pendant tout le passage, et l'API avec elle.
+
+**Coût assumé** — Un incident vieux de plus de six mois ne peut plus être
+attribué à une personne. C'est le but, et c'est irréversible. Les
+investigations qui portent sur un passé lointain devront s'appuyer sur ce qui
+reste : l'enchaînement des actions, leurs cibles, leurs dates.
+
+Second coût : la suppression d'un compte anonymise déjà ses traces, par les
+clés étrangères (`ON DELETE SET NULL`). Deux mécanismes concourent donc au même
+effet, l'un immédiat et ciblé, l'autre différé et massif. C'est de la
+redondance, assumée : le droit à l'effacement ne peut pas dépendre d'un
+minuteur.
+
+---
+
+## 60. La fenêtre d'observation est FERMÉE, et le seuil d'anonymat est partagé
+
+**Décision** — Trois fenêtres et trois seulement : 7, 30 ou 90 jours. Aucune
+plage libre, aucune date de début arbitraire.
+
+**Raison** — Une plage libre laisse isoler une journée, puis une heure. Dans
+une équipe de dix personnes, un compteur sur une heure ne compte plus des
+comptes : il désigne quelqu'un. La restriction n'est donc pas une simplicité
+d'interface, c'est la mesure anti-réidentification du module — et elle est
+testée comme telle.
+
+Le paquet partagé porte en outre `SEUIL_ANONYMAT` et `sousLeSeuil()` : un
+compteur strictement inférieur à cinq est signalé comme tel, pour que
+l'interface le présente en « moins de 5 » plutôt qu'en clair. La règle vit dans
+le schéma pour que les deux côtés la partagent — recopiée, elle divergerait.
+
+**Coût assumé** — On ne peut pas enquêter sur un pic d'un jour précis depuis
+cet écran. C'est voulu : cette enquête-là se mène dans le journal d'audit, qui
+est nominatif, réservé au rang 100, et dont chaque consultation est elle-même
+traçable.

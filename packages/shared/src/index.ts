@@ -14,3 +14,4 @@ export * from './schemas/audit.schema.js';
 export * from './schemas/feedback.schema.js';
 export * from './schemas/supervision.schema.js';
 export * from './schemas/message.schema.js';
+export * from './schemas/usage.schema.js';

@@ -123,6 +123,21 @@ export class AppConfigService {
     };
   }
 
+  /**
+   * Politique d'anonymisation du journal d'audit.
+   *
+   * Elle est lue au même endroit que les autres politiques de rétention : une
+   * durée de conservation qui vivrait dans le code serait une durée que
+   * personne ne peut ajuster sans redéployer.
+   */
+  get anonymisation(): { enabled: boolean; afterDays: number; batchSize: number } {
+    return {
+      enabled: this.get('AUDIT_ANONYMIZE_ENABLED'),
+      afterDays: this.get('AUDIT_ANONYMIZE_AFTER_DAYS'),
+      batchSize: this.get('AUDIT_ANONYMIZE_BATCH'),
+    };
+  }
+
   /** Dossier des pièces jointes de la messagerie. */
   get messageUploadsDir(): string {
     return this.get('MESSAGE_UPLOADS_DIR');

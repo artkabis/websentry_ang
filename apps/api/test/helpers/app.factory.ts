@@ -20,6 +20,7 @@ import {
   type FeedbackRow,
 } from '../../src/database/repositories/feedback.repository.js';
 import { SupervisionRepository } from '../../src/database/repositories/supervision.repository.js';
+import { UsageRepository } from '../../src/database/repositories/usage.repository.js';
 import {
   MessageRepository,
   type AttachmentRow,
@@ -1097,6 +1098,124 @@ export async function createTestApp(
     }),
   };
 
+  /**
+   * Analytics d'usage — le double CALCULE à partir du journal réellement écrit.
+   *
+   * Rendre des agrégats figés testerait le double. Ici, une connexion faite par
+   * la suite alimente vraiment le tunnel : le compteur de comptes actifs suit
+   * ce que les scénarios ont fait, pas ce qu'on a décidé qu'il dirait.
+   */
+  function apresBorne(depuis: string, horodatage: unknown): boolean {
+    // Le service envoie « AAAA-MM-JJ hh:mm:ss » ; le journal écrit de l'ISO.
+    return String(horodatage).replace('T', ' ') >= depuis;
+  }
+
+  const usageRepo = {
+    available: true,
+    comptesActifs: vi.fn((depuis: string) =>
+      Promise.resolve(
+        new Set(
+          db.auditLog
+            .filter(e => apresBorne(depuis, e['created_at']) && e['actorId'] !== null)
+            .map(e => String(e['actorId'])),
+        ).size,
+      ),
+    ),
+    compteurAudit: vi.fn((actions: readonly string[], depuis: string) => {
+      if (actions.length === 0) return Promise.resolve(null);
+      const lignes = db.auditLog.filter(
+        e =>
+          actions.includes(String(e['action'])) &&
+          apresBorne(depuis, e['created_at']) &&
+          e['actorId'] !== null,
+      );
+      return Promise.resolve({
+        comptes: new Set(lignes.map(e => String(e['actorId']))).size,
+        actions: lignes.length,
+      } as never);
+    }),
+    compteurAnalyses: vi.fn((depuis: string) => {
+      const sessions = [...db.scanSessions.values()].filter(
+        s => apresBorne(depuis, s.analyzed_at) && s.launched_by !== null,
+      );
+      return Promise.resolve({
+        comptes: new Set(sessions.map(s => s.launched_by)).size,
+        actions: sessions.length,
+      } as never);
+    }),
+    connexionsParJour: vi.fn((depuis: string) =>
+      Promise.resolve(
+        grouperParJour(
+          db.auditLog
+            .filter(e => e['action'] === 'auth.login' && apresBorne(depuis, e['created_at']))
+            .map(e => String(e['created_at'])),
+        ) as never,
+      ),
+    ),
+    analysesParJour: vi.fn((depuis: string) =>
+      Promise.resolve(
+        grouperParJour(
+          [...db.scanSessions.values()]
+            .filter(s => apresBorne(depuis, s.analyzed_at))
+            .map(s => s.analyzed_at),
+        ) as never,
+      ),
+    ),
+    gammes: vi.fn((depuis: string) => {
+      const parGamme = new Map<string, { analyses: number; pesees: number; poids: number }>();
+      for (const session of db.scanSessions.values()) {
+        if (!apresBorne(depuis, session.analyzed_at) || session.gamme === null) continue;
+        const agrege = parGamme.get(session.gamme) ?? { analyses: 0, pesees: 0, poids: 0 };
+        agrege.analyses += 1;
+        if (session.avg_score !== null) {
+          agrege.pesees += session.avg_score * session.page_count;
+          agrege.poids += session.page_count;
+        }
+        parGamme.set(session.gamme, agrege);
+      }
+      return Promise.resolve(
+        [...parGamme].map(([gamme, a]) => ({
+          gamme,
+          analyses: a.analyses,
+          score_moyen: a.poids === 0 ? null : a.pesees / a.poids,
+        })) as never,
+      );
+    }),
+    lignesAnonymisees: vi.fn(() =>
+      Promise.resolve(
+        db.auditLog.filter(e => e['actorId'] === null && e['actorName'] === null).length,
+      ),
+    ),
+    lignesEnAttente: vi.fn((avant: string) =>
+      Promise.resolve(
+        db.auditLog.filter(
+          e =>
+            !apresBorne(avant, e['created_at']) &&
+            (e['actorId'] !== null || e['actorName'] !== null || e['ipAddress'] !== null),
+        ).length,
+      ),
+    ),
+    anonymiser: vi.fn((avant: string, lot: number) => {
+      let touchees = 0;
+      for (const entree of db.auditLog) {
+        if (touchees >= lot) break;
+        if (apresBorne(avant, entree['created_at'])) continue;
+        if (
+          entree['actorId'] === null &&
+          entree['actorName'] === null &&
+          entree['ipAddress'] === null
+        ) {
+          continue;
+        }
+        entree['actorId'] = null;
+        entree['actorName'] = null;
+        entree['ipAddress'] = null;
+        touchees += 1;
+      }
+      return Promise.resolve(touchees);
+    }),
+  };
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
@@ -1203,6 +1322,8 @@ export async function createTestApp(
     .useValue(supervisionRepo)
     .overrideProvider(MessageRepository)
     .useValue(messageRepo)
+    .overrideProvider(UsageRepository)
+    .useValue(usageRepo)
     .overrideProvider(ProfileRepository)
     .useValue(profileRepo)
     .overrideProvider(ScanRepository)
@@ -1303,4 +1424,16 @@ export function cookieAttributes(
     if (key) attrs[key.toLowerCase()] = value ?? true;
   }
   return attrs;
+}
+
+/** Regroupe des horodatages par jour, comme le ferait `GROUP BY DATE(...)`. */
+function grouperParJour(horodatages: readonly string[]): { jour: string; total: number }[] {
+  const parJour = new Map<string, number>();
+  for (const horodatage of horodatages) {
+    const jour = String(horodatage).slice(0, 10);
+    parJour.set(jour, (parJour.get(jour) ?? 0) + 1);
+  }
+  return [...parJour]
+    .map(([jour, total]) => ({ jour, total }))
+    .sort((a, b) => a.jour.localeCompare(b.jour));
 }

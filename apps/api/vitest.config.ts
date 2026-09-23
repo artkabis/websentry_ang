@@ -126,6 +126,17 @@ export default defineConfig({
         // téléchargement dépend de la boîte du demandeur. Une branche non
         // couverte ici, c'est un fichier servi à qui n'y a pas droit.
         'src/messages/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Analytics : le module porte la seule opération capable de MODIFIER
+        // le journal d'audit, et sa garantie tient à ce qu'il ne rend jamais
+        // une identité. Une branche non couverte ici, c'est soit une
+        // réidentification, soit une anonymisation qui ne se fait pas.
+        'src/usage/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/database/repositories/usage.repository.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
         'src/database/repositories/message.repository.ts': {
           lines: 100,
           branches: 100,
