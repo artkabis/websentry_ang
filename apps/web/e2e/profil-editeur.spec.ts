@@ -136,6 +136,13 @@ test.describe('Éditeur de profil', () => {
     await page.goto('/profils/premium');
     await page.locator('summary', { hasText: 'Pondération des critères' }).click();
 
+    // `<details>` révèle son contenu AVANT d'émettre `toggle` : recharger sur
+    // la seule visibilité courserait la mémorisation. On attend l'écriture
+    // elle-même, qui est ce que la visite suivante relira.
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem('websentry.section.ponderation')))
+      .toBe('1');
+
     await page.reload();
 
     await expect(page.getByLabel('Pondération — Critère numéro 0')).toBeVisible();

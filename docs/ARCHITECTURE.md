@@ -896,12 +896,12 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
-| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 337    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1698   | 85 % global, **100 %** sécurité |
-| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 104    | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`          | 230    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 442    | 80 %                            |
-| E2E navigateur     | `apps/web/e2e/`                    | 35     | —                               |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 408    | 95 %                            |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1980   | 85 % global, **100 %** sécurité |
+| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 181    | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 314    | —                               |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 811    | 80 %                            |
+| E2E navigateur     | `apps/web/e2e/`                    | 92     | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié

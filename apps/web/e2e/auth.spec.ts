@@ -75,6 +75,11 @@ test.describe('Parcours de connexion', () => {
   test('connecte puis affiche le tableau de bord', async ({ page }) => {
     await mockAnonymous(page);
     await page.goto('/connexion');
+    // `goto` rend la main au chargement, pas une fois `/auth/me` répondu :
+    // basculer les simulations avant ce moment ferait répondre « session
+    // établie » à l'appel initial, et la garde emmènerait au tableau de bord
+    // sans jamais afficher le formulaire.
+    await expect(page.getByLabel('Identifiant')).toBeVisible();
 
     // La session bascule au moment du login.
     await page.route('**/api/v1/auth/login', route =>
