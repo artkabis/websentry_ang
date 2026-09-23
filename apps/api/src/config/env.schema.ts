@@ -102,6 +102,16 @@ export const EnvSchema = z
     /** Pages analysées en parallèle dans un lot — borne l'egress simultané. */
     ANALYSIS_BATCH_CONCURRENCY: intFromEnv(4, 1),
 
+    // ── Messagerie ──────────────────────────────────────────────────────────
+    /**
+     * Dossier des pièces jointes — HORS de l'arborescence servie.
+     *
+     * Aucune route ne sert de fichier statique : le contenu est lu par le
+     * service et renvoyé sous un identifiant, jamais sous un chemin. Le dossier
+     * peut donc vivre où l'exploitant veut, y compris sur un volume monté.
+     */
+    MESSAGE_UPLOADS_DIR: z.string().min(1).default('./data/pieces-jointes'),
+
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((env, ctx) => {

@@ -13,3 +13,6 @@ test-results/
 
 # Comptes du mode « sans base » — empreintes de mots de passe, jamais versionnées.
 .dev-accounts.json
+
+# Pièces jointes de la messagerie : données d'exploitation, jamais du dépôt.
+data/

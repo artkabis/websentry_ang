@@ -121,6 +121,17 @@ export default defineConfig({
         // Supervision : c'est la vue qu'on consulte QUAND quelque chose va
         // mal. Une branche non couverte, c'est un verdict faux au pire moment.
         'src/supervision/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Messagerie : c'est le seul module qui accepte un FICHIER. Le type est
+        // reconnu à l'empreinte, le nom de stockage est généré, et l'accès au
+        // téléchargement dépend de la boîte du demandeur. Une branche non
+        // couverte ici, c'est un fichier servi à qui n'y a pas droit.
+        'src/messages/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        'src/database/repositories/message.repository.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
         'src/database/repositories/supervision.repository.ts': {
           lines: 100,
           branches: 100,

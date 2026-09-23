@@ -5,7 +5,7 @@
 Suite automatisée, **step bloquant de la CI** :
 `pnpm --filter @websentry/api test:security` → `apps/api/test/security/`.
 
-Six fichiers, un par surface d'attaque distincte :
+Sept fichiers, un par surface d'attaque distincte :
 
 - `owasp.e2e-spec.ts` — le socle (auth, RBAC, en-têtes) ;
 - `owasp-profiles.e2e-spec.ts` — la surface du module 2 : routes d'écriture
@@ -23,27 +23,32 @@ Six fichiers, un par surface d'attaque distincte :
   donne tout le reste, plus le journal d'audit et le relevé de supervision ;
 - `owasp-feedback.e2e-spec.ts` — celle du module 6 : le **seul point d'écriture
   ouvert à tout compte authentifié**, avec du texte libre déposé par un
-  utilisateur et relu par un autre.
+  utilisateur et relu par un autre ;
+- `owasp-messagerie.e2e-spec.ts` — celle du module 8 : le **seul module qui
+  accepte un fichier**. Ses requêtes sont FORGÉES OCTET PAR OCTET, parce qu'un
+  client HTTP normal nettoie le nom de fichier avant de l'envoyer — une suite
+  qui s'appuierait sur lui vérifierait la politesse du client, pas la défense
+  du serveur.
 
 Elle s'exécute contre l'application **assemblée** et la sollicite par HTTP réel.
 
 | #   | Faille                        | Vérifié par                                                                                                                                                                                                                                                                         | Où                                                                                                                              |
 | --- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Injection SQL                 | 6 charges classiques n'authentifient ni n'altèrent l'état ; 4 charges sur chaque filtre de recherche ; tri hors liste fermée refusé ; opérateurs du mode booléen neutralisés ; rang et statut hors catalogue refusés plutôt qu'interpolés ; charge stockée relue comme du **texte** | OWASP §1, scans §1, admin §1, retours §1 + `*.repository.spec.ts`                                                               |
-| 2   | XSS stocké / réfléchi         | CSP sans `unsafe-inline` ni `unsafe-eval`, `nosniff`, aucun écho de charge, `Content-Type` non interprétable en HTML ; charge HTML déposée puis relue en JSON non interprétable, et jamais renvoyée dans un message d'erreur                                                        | OWASP §2, retours §2                                                                                                            |
-| 3   | CSRF                          | Mutation par cookie refusée sans en-tête et sur en-tête divergent ; Bearer exempté ; échecs journalisés ; `SameSite=Strict`                                                                                                                                                         | OWASP §3, admin §3, retours §3 + `csrf.guard.spec.ts`                                                                           |
+| 1   | Injection SQL                 | 6 charges classiques n'authentifient ni n'altèrent l'état ; 4 charges sur chaque filtre de recherche ; tri hors liste fermée refusé ; opérateurs du mode booléen neutralisés ; rang et statut hors catalogue refusés plutôt qu'interpolés ; charge stockée relue comme du **texte** | OWASP §1, scans §1, admin §1, retours §1, messagerie §1 + `*.repository.spec.ts`                                                |
+| 2   | XSS stocké / réfléchi         | CSP sans `unsafe-inline` ni `unsafe-eval`, `nosniff`, aucun écho de charge, `Content-Type` non interprétable en HTML ; charge HTML déposée puis relue en JSON non interprétable ; pièce jointe servie en `attachment` sous une CSP muette, SVG refusé                               | OWASP §2, retours §2, messagerie §2                                                                                             |
+| 3   | CSRF                          | Mutation par cookie refusée sans en-tête et sur en-tête divergent ; Bearer exempté ; échecs journalisés ; `SameSite=Strict`                                                                                                                                                         | OWASP §3, admin §3, retours §3, messagerie §3 + `csrf.guard.spec.ts`                                                            |
 | 4   | Authentification cassée       | `alg:none` rejeté, charge utile modifiée rejetée, révocation immédiate, refresh à usage unique, access token borné à 15 min                                                                                                                                                         | OWASP §4 + `token.service.spec.ts`                                                                                              |
-| 5   | Contrôle d'accès défaillant   | Fermé par défaut, `ws_role` non falsifiable, IDOR impossible, élévation refusée ; historique cloisonné par compte ; **trois régimes** d'administration distingués ; auto-élévation, vol de mot de passe d'un rang supérieur et écritures absentes vérifiés route par route          | OWASP §5, scans §5, admin §5, retours §5 + `*.guard.spec.ts`                                                                    |
+| 5   | Contrôle d'accès défaillant   | Fermé par défaut, `ws_role` non falsifiable, IDOR impossible, élévation refusée ; historique cloisonné par compte ; **trois régimes** d'administration distingués ; auto-élévation, vol de mot de passe d'un rang supérieur et écritures absentes vérifiés route par route          | OWASP §5, scans §5, admin §5, retours §5, messagerie §5 + `*.guard.spec.ts`                                                     |
 | 6   | Mauvaise configuration        | 8 en-têtes OWASP vérifiés par test, pile serveur non annoncée, CORS tiers refusé, préfixe `/api/v1` appliqué                                                                                                                                                                        | OWASP §6                                                                                                                        |
-| 7   | Données sensibles exposées    | DTO de sortie en liste blanche, aucun jeton dans le corps, sonde publique muette ; ni empreinte ni compteur d'échec exposés, mot de passe réinitialisé non renvoyé, adresses IP du journal réservées au rang 100, relevé de supervision muet sur l'infrastructure                   | OWASP §7, admin §7, retours §7 + `auth.service.spec.ts`                                                                         |
+| 7   | Données sensibles exposées    | DTO de sortie en liste blanche, aucun jeton dans le corps, sonde publique muette ; ni empreinte ni compteur d'échec exposés, mot de passe réinitialisé non renvoyé, adresses IP du journal réservées au rang 100, relevé de supervision muet sur l'infrastructure                   | OWASP §7, admin §7, retours §7, messagerie §7 + `auth.service.spec.ts`                                                          |
 | 8   | SSRF                          | Blocklist exhaustive, refus multi-enregistrements, re-validation par redirection, épinglage IP                                                                                                                                                                                      | `ip-rules.spec.ts`, `ssrf.service.spec.ts`, `safe-fetch.spec.ts` (**100 %**) + `owasp-analysis.e2e-spec.ts` § adresses internes |
-| 9   | Désérialisation non sécurisée | JSON malformé, pollution de prototype, charge non-objet, `Content-Type` non pris en charge ; clé dangereuse soumise à la création d'un compte et dans le contexte d'un retour                                                                                                       | OWASP §9, admin §9, retours §9                                                                                                  |
+| 9   | Désérialisation non sécurisée | JSON malformé, pollution de prototype, charge non-objet, `Content-Type` non pris en charge ; clé dangereuse soumise à la création d'un compte et dans le contexte d'un retour                                                                                                       | OWASP §9, admin §9, retours §9, messagerie §9                                                                                   |
 | 10  | Composants vulnérables        | `pnpm audit --audit-level=high` bloquant + Renovate                                                                                                                                                                                                                                 | CI                                                                                                                              |
-| 11  | Journalisation insuffisante   | 5 événements d'audit vérifiés, verrouillage tracé, aucun mot de passe journalisé, IP et acteur conservés ; **le corps d'un retour n'est jamais recopié dans le journal**                                                                                                            | OWASP §11, retours §7                                                                                                           |
-| 12  | Force brute                   | Verrouillage après 5 échecs (persisté en base), sans impact sur les autres comptes de la même IP, compteurs exposés ; **429 réellement provoqués** sur la création de compte, la réinitialisation de mot de passe et le dépôt d'un retour                                           | OWASP §12, admin §12, retours §12 + `login-throttle.service.spec.ts`                                                            |
+| 11  | Journalisation insuffisante   | 5 événements d'audit vérifiés, verrouillage tracé, aucun mot de passe journalisé, IP et acteur conservés ; **le corps d'un retour n'est jamais recopié dans le journal**                                                                                                            | OWASP §11, retours §7, messagerie §7                                                                                            |
+| 12  | Force brute                   | Verrouillage après 5 échecs (persisté en base), sans impact sur les autres comptes de la même IP, compteurs exposés ; **429 réellement provoqués** sur la création de compte, la réinitialisation de mot de passe, le dépôt d'un retour et l'envoi d'un message                     | OWASP §12, admin §12, retours §12, messagerie §12 + `login-throttle.service.spec.ts`                                            |
 | 13  | Fuite par messages d'erreur   | Aucune stack trace, forme uniforme + `requestId`, aucun détail de base, aucun oracle d'énumération — y compris entre « compte inexistant » et « compte existant » et entre « retour d'autrui » et « retour absent »                                                                 | OWASP §13, admin §7, retours §5 + `all-exceptions.filter.spec.ts`                                                               |
-| 14  | Traversée de chemin           | 4 encodages, aucun service de fichiers statiques exposé ; identifiants de compte et de retour validés comme UUID avant d'atteindre quoi que ce soit                                                                                                                                 | OWASP §14, admin §14, retours §14                                                                                               |
-| 15  | Mass assignment               | Clés surnuméraires rejetées (`.strict()`), 11 charges malformées, bornes exactes, corps surdimensionné ; `status`, `tokenVersion`, `passwordHash`, `id`, `authorId` et `assignedTo` refusés un à un ; transition de statut illégale refusée                                         | OWASP §15, admin §15, retours §15                                                                                               |
+| 14  | Traversée de chemin           | 4 encodages, aucun service de fichiers statiques exposé ; identifiants validés comme UUID avant d'atteindre quoi que ce soit ; **nom de fichier porteur de chemin, octet nul, type menteur, SVG, archive et exécutable refusés** sur requête forgée à la main                       | OWASP §14, admin §14, retours §14, **messagerie §14** + `attachment-storage.service.spec.ts` (**100 %**)                        |
+| 15  | Mass assignment               | Clés surnuméraires rejetées (`.strict()`), 11 charges malformées, bornes exactes, corps surdimensionné ; `status`, `tokenVersion`, `passwordHash`, `id`, `authorId` et `assignedTo` refusés un à un ; transition de statut illégale refusée                                         | OWASP §15, admin §15, retours §15, messagerie §15                                                                               |
 
 **Note sur la faille n°8** — La dette de couverture E2E signalée jusqu'au module 3
 est LEVÉE : les routes d'analyse émettent des requêtes sortantes, et la suite du
@@ -137,6 +142,28 @@ posée sur chaque route et tombe dès qu'une route apparaît sans décorateur.
 > Les mutations décrites ci-dessus ont été appliquées temporairement puis
 > révoquées. Aucune n'est présente dans l'arbre : le dépôt ne contient que la
 > version durcie.
+
+### Sur le module 8
+
+Cinq mutations sur `messages.service.ts`, appliquées aux garde-fous et à ce que
+le journal retient. Trois mutations supplémentaires sur le schéma partagé, où
+vit la reconnaissance des pièces jointes.
+
+| Mutation appliquée                                               | Résultat attendu                       | Observé     |
+| ---------------------------------------------------------------- | -------------------------------------- | ----------- |
+| Garde de visibilité retirée du téléchargement d'une pièce jointe | La pièce d'autrui devient lisible      | ✅ 2 échecs |
+| L'auteur n'est plus ajouté à ses propres destinataires           | Il ne peut plus se relire              | ✅ 1 échec  |
+| La copie de l'auteur n'est plus marquée lue                      | Sa propre annonce l'interrompt         | ✅ 1 échec  |
+| Le `NULL` de `SUM()` n'est plus converti en zéro                 | La pastille affiche « null »           | ✅ 2 échecs |
+| Le corps du message entre dans les détails d'audit               | Le journal archive la correspondance   | ✅ 1 échec  |
+| `every` → `some` sur les signatures de type de fichier           | Un conteneur RIFF non-WebP est accepté | ✅ 1 échec  |
+| Le nom de repli d'une pièce jointe disparaît                     | L'en-tête de téléchargement sort vide  | ✅ 1 échec  |
+| Le refus d'une cible que l'audience n'attend pas est retiré      | Un envoi « à tous » paraît restreint   | ✅ 1 échec  |
+
+Deux de ces mutations ont d'abord été posées sur la **mauvaise occurrence** —
+la première du fichier, pas celle visée. Elles ont tué un test, mais pas le bon.
+Le constat vaut d'être écrit : une mutation qui fait rougir la suite n'a rien
+prouvé tant qu'on n'a pas vérifié **quel** test est tombé.
 
 **Réserve assumée** — `owasp-admin.e2e-spec.ts` et `owasp-feedback.e2e-spec.ts`
 n'ont pas encore subi de contrôle par mutation. Les garde-fous qu'elles

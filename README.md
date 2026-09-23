@@ -20,13 +20,13 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Gestion utilisateurs + audit                 | ✅      | ✅       | **Livré** |
 | Analyse (page, batch, sitemap, SSE)          | ✅      | ✅       | **Livré** |
 | Feedback beta-testeurs                       | ✅      | ✅       | **Livré** |
-| Messagerie in-app                            | ⬜      | ⬜       | À faire   |
+| Messagerie in-app                            | ✅      | ⬜       | En cours  |
 | Analytics d'usage / RGPD                     | ⬜      | ⬜       | À faire   |
 | Supervision & santé                          | ✅      | ✅       | **Livré** |
 | Portail documentation                        | ⬜      | ⬜       | À faire   |
 
-**Tests** : 3786 au total — 408 paquet partagé, 1980 unitaires backend,
-495 E2E + sécurité API, 811 unitaires frontend, 92 E2E navigateur.
+**Tests** : 4015 au total — 445 paquet partagé, 2091 unitaires backend,
+576 E2E + sécurité API, 811 unitaires frontend, 92 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 96 % lignes backend
 (100 % sur chaque module de sécurité, sur la gestion des comptes, sur le
 journal d'audit, sur les retours **et sur la supervision**), 98 % lignes

@@ -2,6 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { AppModule } from '../../src/app.module.js';
+import { registerSecurityPlugins } from '../../src/bootstrap.js';
 import { API_PREFIX } from '../../src/common/constants.js';
 import { AppConfigService } from '../../src/config/app-config.service.js';
 import { DatabaseService } from '../../src/database/database.service.js';
@@ -19,6 +20,12 @@ import {
   type FeedbackRow,
 } from '../../src/database/repositories/feedback.repository.js';
 import { SupervisionRepository } from '../../src/database/repositories/supervision.repository.js';
+import {
+  MessageRepository,
+  type AttachmentRow,
+  type MessageFilters,
+  type MessageRow,
+} from '../../src/database/repositories/message.repository.js';
 import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
 import { ScanRepository } from '../../src/database/repositories/scan.repository.js';
 import { ScanRetentionRepository } from '../../src/database/repositories/scan-retention.repository.js';
@@ -57,6 +64,15 @@ export class FakeDb {
 
   /** Retours des bêta-testeurs — reproduit la table `feedback`. */
   readonly feedback = new Map<string, Record<string, unknown>>();
+
+  /** Messagerie — reproduit `messages`, `message_recipients`, `message_attachments`. */
+  readonly messages = new Map<string, Record<string, unknown>>();
+  /** Clé composite `messageId:userId`, comme la clé primaire réelle. */
+  readonly messageRecipients = new Map<
+    string,
+    { message_id: string; user_id: string; read_at: string | null; archived_at: string | null }
+  >();
+  readonly messageAttachments = new Map<string, Record<string, unknown>>();
 
   /** Profils par gamme — reproduit la table `settings_profiles`. */
   readonly profiles = new Map<
@@ -928,6 +944,159 @@ export async function createTestApp(
     ),
   };
 
+  /** Boîte d'un destinataire — la jointure PORTE le cloisonnement. */
+  function boite(filtres: MessageFilters): MessageRow[] {
+    return [...db.messageRecipients.values()]
+      .filter(d => d.user_id === filtres.userId)
+      .filter(d => (filtres.archived === true ? d.archived_at !== null : d.archived_at === null))
+      .filter(d => (filtres.unread === true ? d.read_at === null : true))
+      .map(d => ({ destinataire: d, message: db.messages.get(d.message_id) }))
+      .filter(
+        (x): x is { destinataire: typeof x.destinataire; message: Record<string, unknown> } =>
+          x.message !== undefined,
+      )
+      .filter(x => (filtres.importance ? x.message['importance'] === filtres.importance : true))
+      .filter(x => {
+        if (!filtres.search) return true;
+        const motif = filtres.search.toLowerCase();
+        return (
+          String(x.message['subject']).toLowerCase().includes(motif) ||
+          String(x.message['body']).toLowerCase().includes(motif)
+        );
+      })
+      .sort((a, b) => String(b.message['sent_at']).localeCompare(String(a.message['sent_at'])))
+      .map(
+        x =>
+          ({
+            ...x.message,
+            read_at: x.destinataire.read_at,
+            archived_at: x.destinataire.archived_at,
+          }) as unknown as MessageRow,
+      );
+  }
+
+  const messageRepo = {
+    available: true,
+    list: vi.fn((filtres: MessageFilters, limit: number, offset: number) =>
+      Promise.resolve(boite(filtres).slice(offset, offset + limit)),
+    ),
+    count: vi.fn((filtres: MessageFilters) => Promise.resolve(boite(filtres).length)),
+    counts: vi.fn((userId: string) => {
+      const lignes = boite({ userId });
+      return Promise.resolve({
+        total: lignes.length,
+        nonLus: lignes.filter(l => l.read_at === null).length,
+        interrompt: lignes.filter(l => l.read_at === null && l.importance === 'critique').length,
+      } as never);
+    }),
+    findForRecipient: vi.fn((id: string, userId: string) => {
+      const ligne = boite({ userId }).find(l => l.id === id) ?? null;
+      // Les archivés sortent de la vue par défaut, mais restent LISIBLES à
+      // l'unité : ranger n'est pas supprimer.
+      return Promise.resolve(
+        ligne ?? boite({ userId, archived: true }).find(l => l.id === id) ?? null,
+      );
+    }),
+    attachmentsOf: vi.fn((ids: readonly string[]) =>
+      Promise.resolve(
+        [...db.messageAttachments.values()].filter(p =>
+          ids.includes(String(p['message_id'])),
+        ) as unknown as AttachmentRow[],
+      ),
+    ),
+    findAttachment: vi.fn((id: string) =>
+      Promise.resolve((db.messageAttachments.get(id) ?? null) as AttachmentRow | null),
+    ),
+    peutVoir: vi.fn((messageId: string, userId: string) =>
+      Promise.resolve(db.messageRecipients.has(`${messageId}:${userId}`)),
+    ),
+    recipientsByRank: vi.fn((minRank: number) =>
+      Promise.resolve(
+        [...db.users.values()]
+          .filter(u => u.rank >= minRank && u.status === 'active')
+          .map(u => u.id),
+      ),
+    ),
+    allRecipients: vi.fn(() =>
+      Promise.resolve([...db.users.values()].filter(u => u.status === 'active').map(u => u.id)),
+    ),
+    existingRecipients: vi.fn((ids: readonly string[]) =>
+      Promise.resolve(
+        [...db.users.values()]
+          .filter(u => ids.includes(u.id) && u.status === 'active')
+          .map(u => u.id),
+      ),
+    ),
+    createWithRecipients: vi.fn(
+      (message: {
+        id: string;
+        subject: string;
+        body: string;
+        importance: string;
+        audience: string;
+        audienceRank: number | null;
+        authorId: string | null;
+        authorName: string | null;
+        recipientIds: readonly string[];
+        attachments: readonly { id: string; nom: string; mime: string; taille: number }[];
+      }) => {
+        db.messages.set(message.id, {
+          id: message.id,
+          subject: message.subject,
+          body: message.body,
+          importance: message.importance,
+          audience: message.audience,
+          audience_rank: message.audienceRank,
+          author_id: message.authorId,
+          author_name: message.authorName,
+          sent_at: new Date().toISOString(),
+        });
+        for (const userId of message.recipientIds) {
+          db.messageRecipients.set(`${message.id}:${userId}`, {
+            message_id: message.id,
+            user_id: userId,
+            read_at: null,
+            archived_at: null,
+          });
+        }
+        for (const piece of message.attachments) {
+          db.messageAttachments.set(piece.id, {
+            id: piece.id,
+            message_id: message.id,
+            nom: piece.nom,
+            mime: piece.mime,
+            taille: piece.taille,
+          });
+        }
+        return Promise.resolve();
+      },
+    ),
+    markRead: vi.fn((id: string, userId: string) => {
+      const ligne = db.messageRecipients.get(`${id}:${userId}`);
+      // `read_at IS NULL` dans le SQL réel : relire ne repousse pas la date de
+      // PREMIÈRE lecture.
+      if (!ligne || ligne.read_at !== null) return Promise.resolve(0);
+      ligne.read_at = new Date().toISOString();
+      return Promise.resolve(1);
+    }),
+    setArchived: vi.fn((id: string, userId: string, archive: boolean) => {
+      const ligne = db.messageRecipients.get(`${id}:${userId}`);
+      if (!ligne) return Promise.resolve(0);
+      ligne.archived_at = archive ? new Date().toISOString() : null;
+      return Promise.resolve(1);
+    }),
+    markAllRead: vi.fn((userId: string) => {
+      let touchees = 0;
+      for (const ligne of db.messageRecipients.values()) {
+        if (ligne.user_id === userId && ligne.read_at === null && ligne.archived_at === null) {
+          ligne.read_at = new Date().toISOString();
+          touchees += 1;
+        }
+      }
+      return Promise.resolve(touchees);
+    }),
+  };
+
   const auditRepo = {
     available: true,
     append: vi.fn((entry: Record<string, unknown>) => {
@@ -1032,6 +1201,8 @@ export async function createTestApp(
     .useValue(feedbackRepo)
     .overrideProvider(SupervisionRepository)
     .useValue(supervisionRepo)
+    .overrideProvider(MessageRepository)
+    .useValue(messageRepo)
     .overrideProvider(ProfileRepository)
     .useValue(profileRepo)
     .overrideProvider(ScanRepository)
@@ -1050,48 +1221,11 @@ export async function createTestApp(
     new FastifyAdapter({ genReqId: () => crypto.randomUUID(), trustProxy: true }),
   );
 
-  // Mêmes plugins et mêmes réglages qu'en production : tester une application
-  // assemblée autrement reviendrait à ne pas tester ce qui est déployé.
+  // Mêmes plugins et mêmes réglages qu'en production — la MÊME fonction, pas
+  // une copie : une copie finirait par diverger, et c'est alors une autre
+  // application que la suite vérifierait.
   const config = app.get(AppConfigService);
-  const fastifyCookie = (await import('@fastify/cookie')).default;
-  const helmet = (await import('@fastify/helmet')).default;
-  await app.register(fastifyCookie, {
-    parseOptions: { sameSite: 'strict', path: '/' },
-  });
-  await app.register(helmet, {
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        connectSrc: ["'self'", ...config.corsOrigins],
-        fontSrc: ["'self'"],
-        objectSrc: ["'none'"],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
-        frameAncestors: ["'none'"],
-      },
-    },
-    hsts: { maxAge: 63_072_000, includeSubDomains: true, preload: true },
-    frameguard: { action: 'deny' },
-    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    crossOriginOpenerPolicy: { policy: 'same-origin' },
-    crossOriginResourcePolicy: { policy: 'same-origin' },
-    hidePoweredBy: true,
-    noSniff: true,
-  });
-
-  app
-    .getHttpAdapter()
-    .getInstance()
-    .addHook('onSend', (_req, reply, payload, done) => {
-      void reply.header(
-        'Permissions-Policy',
-        'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
-      );
-      done(null, payload);
-    });
+  await registerSecurityPlugins(app, config);
 
   app.setGlobalPrefix(API_PREFIX);
   app.enableCors({

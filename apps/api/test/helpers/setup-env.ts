@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 /**
  * Variables d'environnement de test.
  *
@@ -24,3 +27,11 @@ process.env.LOG_LEVEL = 'error';
  * tests unitaires, où elle est pilotée explicitement.
  */
 process.env.SCAN_RETENTION_ENABLED = 'false';
+
+/**
+ * Les pièces jointes de la messagerie sont rangées dans un dossier TEMPORAIRE.
+ *
+ * Sans cela, la suite écrirait dans `./data/pieces-jointes` du dépôt, et y
+ * laisserait ses fichiers d'un passage à l'autre.
+ */
+process.env.MESSAGE_UPLOADS_DIR = join(tmpdir(), `websentry-pj-test-${process.pid}`);

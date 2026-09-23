@@ -1458,3 +1458,97 @@ comptabilité n'explique pas.
 **Coût assumé** — Le test est plus long à lire qu'un `toBeLessThanOrEqual(12)`.
 En échange, il ne se contente plus d'accepter une dérive : il exige qu'on dise
 d'où vient chaque arrêt.
+
+---
+
+## 50. La messagerie est un canal DESCENDANT, pas une discussion
+
+**Décision** — Un compte reçoit des messages ; il n'en compose pas, sauf à
+détenir `messages:write`. Aucune route de réponse, aucun fil de discussion.
+
+**Raison** — Le sens de circulation n'est pas une invention : il est **donné par
+le catalogue de permissions de la v1**, où `messages:write` n'est accordé par
+défaut qu'aux rangs 50 et 100. Si un testeur pouvait répondre, il lui faudrait
+cette permission, et elle lui serait accordée par défaut. Elle ne l'est pas.
+
+La messagerie sert donc à ce qu'elle sert : consigne, annonce de version,
+information ciblée. Remonter de l'information a déjà son canal — le module de
+retours, construit pour cela, avec son triage et ses transitions de statut.
+
+**Coût assumé** — Un destinataire qui veut réagir change d'outil. C'est un
+détour réel, et il est accepté pour une raison précise : une messagerie
+bidirectionnelle appelle des fils, des citations, des notifications de réponse
+et une modération — un module entier, que rien dans le périmètre v1 ne demande.
+Le jour où le besoin s'exprime, `feedback` et `messages` fusionnent autour d'un
+fil commun ; d'ici là, deux modules simples valent mieux qu'un compliqué.
+
+---
+
+## 51. Une pièce jointe est reconnue à son EMPREINTE, et rangée sous un nom généré
+
+**Décision** — Le type d'un fichier est lu dans ses premiers octets, jamais dans
+son extension ni dans l'en-tête `Content-Type`. Le fichier est écrit sous un
+UUID produit par le serveur, suivi de l'extension du type reconnu. Le nom fourni
+par l'appelant est conservé **pour l'affichage seulement**, nettoyé à l'écriture.
+
+**Raison** — L'extension et le `Content-Type` sont des déclarations de
+l'appelant : les croire revient à le laisser choisir ce qu'on stocke. La
+signature des premiers octets, elle, ne se déclare pas.
+
+Quant au nom, il ne devient jamais un chemin. C'est ce qui rend la traversée de
+chemin impossible **par construction** plutôt que par filtrage : il n'y a aucun
+chemin à filtrer, donc aucune liste de caractères à tenir à jour, et aucun
+encodage exotique à prévoir. `cheminDe()` ne porte d'ailleurs aucun garde de
+confinement — un UUID et une extension d'une liste fermée ne peuvent pas sortir
+du dossier, et un garde y serait une branche qu'aucune entrée ne peut atteindre.
+
+La liste blanche est courte à dessein — PNG, JPEG, WebP, PDF — et le SVG en est
+**exclu** : c'est un document exécutable, pas une image inerte.
+
+**Coût assumé** — Un format légitime non listé est refusé sans recours pour
+l'utilisateur ; l'ajouter demande une décision, un couple signature/extension et
+une ligne de plus dans la contrainte `CHECK`. C'est exactement le frein
+souhaité : chaque type admis est un format de plus à ne pas mal servir.
+
+Second coût : les fichiers vivent hors base, donc une sauvegarde de la base
+seule est **incomplète**. Le stocker en base aurait alourdi chaque lecture de
+message et démesuré chaque sauvegarde, pour un gain qui ne se manifeste que si
+l'on perd le disque sans perdre la base.
+
+---
+
+## 52. L'auteur reçoit une copie de son message, DÉJÀ LUE
+
+**Décision** — L'expéditeur est toujours ajouté aux destinataires de ce qu'il
+envoie, et sa ligne est marquée lue dans le même mouvement.
+
+**Raison** — Deux problèmes, une seule règle. Sans copie, l'auteur n'a aucun
+moyen de relire ce qu'il a écrit : le journal d'audit conserve le sujet, jamais
+le corps, et il n'existe pas de dossier « envoyés ». Sans le marquage, une
+annonce `critique` interromprait son propre auteur à l'écran.
+
+Cette règle a un effet de bord utile : la visibilité d'un message se résume à
+« être dans la boîte ». `peutVoir()` n'a donc pas de second cas « ou bien
+l'auteur » — une branche qu'aucun envoi ne pourrait produire.
+
+**Coût assumé** — Le nombre de lignes de destinataires dépasse de un l'audience
+annoncée. Le journal d'audit enregistre l'audience **résolue**, sans l'auteur,
+pour que « 12 destinataires » veuille dire douze personnes prévenues.
+
+---
+
+## 53. La suite E2E appelle la VRAIE fonction d'enregistrement des plugins
+
+**Décision** — `registerSecurityPlugins()` est exportée depuis `bootstrap.ts` et
+appelée telle quelle par la fabrique de tests, à la place de la copie qui y
+vivait.
+
+**Raison** — La fabrique annonçait « mêmes plugins et mêmes réglages qu'en
+production » en recopiant la liste. Une copie ne diverge pas tout de suite :
+elle diverge à l'ajout suivant. L'arrivée de `@fastify/multipart` était
+précisément cet ajout — et l'oublier d'un côté aurait fait passer une suite
+verte sur une application que personne ne déploie.
+
+**Coût assumé** — La fabrique de tests dépend maintenant d'un module de
+production. C'est assumé : c'est ce qui rend l'affirmation vérifiable au lieu
+d'être un commentaire.

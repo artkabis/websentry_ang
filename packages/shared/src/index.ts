@@ -13,3 +13,4 @@ export * from './scan-comparison.js';
 export * from './schemas/audit.schema.js';
 export * from './schemas/feedback.schema.js';
 export * from './schemas/supervision.schema.js';
+export * from './schemas/message.schema.js';

@@ -319,6 +319,77 @@ des URL clientes, et le journal se lit plus largement que la table des retours.
 
 ---
 
+## Messagerie in-app
+
+Canal **descendant** : composer exige `messages:write` (rangs 50 et 100 par
+défaut, dans le catalogue hérité de la v1), lire n'exige rien. La décision 50
+dit pourquoi, et ce que ce choix coûte.
+
+### Trois tables, une jointure qui porte le cloisonnement
+
+| Table                 | Rôle                                                             |
+| --------------------- | ---------------------------------------------------------------- |
+| `messages`            | Le message, écrit UNE fois — corps, importance, audience, auteur |
+| `message_recipients`  | L'état de lecture, qui appartient au DESTINATAIRE (`read_at`)    |
+| `message_attachments` | Les métadonnées d'une pièce jointe — jamais son contenu          |
+
+Toute lecture part de `message_recipients` et joint `messages`. Ce n'est pas un
+filtre appliqué après coup : un message qui n'a pas été adressé à un compte ne
+produit aucune ligne pour lui. `MessagesService` n'a donc jamais à comparer des
+identifiants pour décider ce qu'il montre.
+
+L'audience (`tous`, `rang`, `comptes`) est **résolue à l'envoi**, en lignes de
+destinataires figées. Un compte créé demain ne reçoit pas une annonce d'hier :
+une consigne datée n'a pas à surgir devant un nouvel arrivant. Les comptes
+suspendus sont exclus — leur écrire garnirait une boîte que personne n'ouvrira.
+
+L'auteur est toujours parmi ses propres destinataires, sa copie déjà lue
+(décision 52).
+
+### Importance et irruption
+
+Trois niveaux, distingués par un comportement observable et non par une nuance :
+`normale` attend dans la boîte, `haute` se signale en tête, `critique` s'impose
+à l'écran. La règle vit dans le schéma partagé (`sInterrompt`), pour que le
+serveur et l'interface ne la recopient pas chacun de son côté.
+
+### Pièces jointes
+
+```text
+POST /messages (multipart)
+  │
+  ├─ @fastify/multipart ─── limites de TRANSPORT (5 Mio, 3 fichiers, 8 champs)
+  │     └─ dépassement → code FST_* → traduit en 400, jamais en 500
+  │
+  ├─ CreateMessageSchema ── union discriminée par l'audience
+  │
+  └─ AttachmentStorageService
+        ├─ typeReconnu(octets) ──── empreinte, jamais l'extension ni le Content-Type
+        ├─ randomUUID() + extension du type RECONNU ── le nom de stockage
+        └─ nomAffichable(nom) ────── pour l'écran et le Content-Disposition
+```
+
+Le fichier vit hors base, sous un identifiant généré ; la table n'en porte que
+les métadonnées. Le téléchargement se fait par identifiant de pièce jointe et
+jamais par chemin : il n'existe aucune route de fichiers statiques. La réponse
+porte `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` et
+une CSP muette — un PDF porteur de script ne s'exécute pas s'il est tout de
+même affiché.
+
+La décision 51 détaille le raisonnement et son coût.
+
+### Ce que la messagerie n'offre pas
+
+Ni suppression, ni réécriture : le corps appartient à son auteur, et sa copie à
+chaque destinataire. Archiver **range** sans supprimer — l'archivé sort de la
+vue par défaut et reste lisible à l'unité.
+
+Le corps d'un message n'entre **pas** dans le journal d'audit, qui n'en retient
+que le sujet, l'importance, l'audience et le nombre de destinataires : le
+journal dit qui a écrit à qui, il n'archive pas la correspondance.
+
+---
+
 ## Supervision
 
 Trois pannes se détectaient déjà et n'étaient qu'écrites dans les journaux :
@@ -896,10 +967,10 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
-| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 408    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 1980   | 85 % global, **100 %** sécurité |
-| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 181    | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`          | 314    | —                               |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 445    | 95 %                            |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2091   | 85 % global, **100 %** sécurité |
+| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 214    | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 362    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 811    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 92     | —                               |
 
@@ -918,9 +989,8 @@ faire_).
 
 ## Reste à faire
 
-Modules non encore migrés (priorités 5 à 7 du cahier des charges) : gestion des
-utilisateurs, feedback, messagerie, analytics, supervision, portail
-documentaire.
+Modules non encore migrés : analytics d'usage / RGPD et portail documentaire.
+La messagerie a son backend ; ses écrans restent à faire.
 
 Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
 sitemap, sécurité) avec les 29 analyseurs de la v1. Ce qui reste y tient à

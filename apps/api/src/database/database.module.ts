@@ -14,6 +14,7 @@ import { PermissionRepository } from './repositories/permission.repository.js';
 import { AuditRepository } from './repositories/audit.repository.js';
 import { FeedbackRepository } from './repositories/feedback.repository.js';
 import { SupervisionRepository } from './repositories/supervision.repository.js';
+import { MessageRepository } from './repositories/message.repository.js';
 import { ProfileRepository } from './repositories/profile.repository.js';
 import { ScanRepository } from './repositories/scan.repository.js';
 import { ScanRetentionRepository } from './repositories/scan-retention.repository.js';
@@ -61,6 +62,7 @@ const DEPOTS_AUTH = [
     AuditRepository,
     FeedbackRepository,
     SupervisionRepository,
+    MessageRepository,
     ProfileRepository,
     ScanRepository,
     ScanRetentionRepository,
@@ -74,6 +76,7 @@ const DEPOTS_AUTH = [
     AuditRepository,
     FeedbackRepository,
     SupervisionRepository,
+    MessageRepository,
     ProfileRepository,
     ScanRepository,
     ScanRetentionRepository,

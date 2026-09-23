@@ -123,6 +123,11 @@ export class AppConfigService {
     };
   }
 
+  /** Dossier des pièces jointes de la messagerie. */
+  get messageUploadsDir(): string {
+    return this.get('MESSAGE_UPLOADS_DIR');
+  }
+
   get logLevel(): Env['LOG_LEVEL'] {
     return this.get('LOG_LEVEL');
   }
