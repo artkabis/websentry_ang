@@ -103,6 +103,24 @@ export const routes: Routes = [
       import('./features/feedback/feedback-submit.component').then(m => m.FeedbackSubmitComponent),
   },
   {
+    // La messagerie n'est gardée QUE par l'authentification : lire sa boîte
+    // n'exige aucune permission, et l'API cloisonne par la jointure. Une garde
+    // de permission ici fermerait la boîte à ceux-là mêmes à qui l'on écrit.
+    path: 'messages',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/messages/messages-inbox.component').then(m => m.MessagesInboxComponent),
+  },
+  {
+    // Composer, en revanche, exige `messages:write` — en miroir du décorateur
+    // posé sur la route de l'API. La garde sert l'EXPÉRIENCE : elle évite
+    // d'afficher un formulaire dont l'envoi serait refusé.
+    path: 'messages/nouveau',
+    canActivate: [authGuard, permissionGuard('messages:write')],
+    loadComponent: () =>
+      import('./features/messages/message-compose.component').then(m => m.MessageComposeComponent),
+  },
+  {
     // Les comptes : lecture gardée par `users:read`, en miroir du décorateur
     // posé sur la route de l'API. La garde sert l'EXPÉRIENCE — elle évite
     // d'afficher un écran que l'API refuserait de nourrir — pas la sécurité.

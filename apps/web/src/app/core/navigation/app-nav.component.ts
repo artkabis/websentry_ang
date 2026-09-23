@@ -1,12 +1,15 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../auth/auth.service';
+import { MessageNotificationsService } from '../messages/message-notifications.service';
 
 /** Une entrée de navigation, et la condition qui la rend visible. */
 interface Entree {
   chemin: string;
   libelle: string;
   visible: () => boolean;
+  /** Nombre à mettre en avant sur l'entrée, quand il y a lieu. */
+  pastille?: () => number;
 }
 
 /**
@@ -56,6 +59,16 @@ interface Entree {
               class="block rounded-lg px-3 py-2 text-sm text-content-muted hover:bg-sunken hover:text-content"
             >
               {{ entree.libelle }}
+              @if (entree.pastille?.(); as nombre) {
+                <!-- Le nombre seul serait muet au lecteur d'écran : « 3 »
+                     accolé à « Messages » ne dit pas trois quoi. -->
+                <span
+                  class="ml-1 inline-block rounded-full bg-brand px-1.5 text-xs text-on-accent"
+                  [attr.aria-label]="nombre + ' message(s) non lu(s)'"
+                >
+                  {{ nombre }}
+                </span>
+              }
             </a>
           </li>
         }
@@ -65,6 +78,7 @@ interface Entree {
 })
 export class AppNavComponent {
   private readonly auth = inject(AuthService);
+  private readonly notifications = inject(MessageNotificationsService);
 
   /** Replié par défaut : sur mobile, la barre ne doit pas manger l'écran. */
   readonly deplie = signal(false);
@@ -76,6 +90,14 @@ export class AppNavComponent {
     { chemin: '/profils', libelle: 'Profils', visible: () => true },
     // Ouvert à tous : signaler ne doit demander aucune permission.
     { chemin: '/retours', libelle: 'Retours', visible: () => true },
+    // Ouvert à tous aussi : on écrit AUX comptes, pas seulement aux
+    // administrateurs. Composer, lui, demande `messages:write`.
+    {
+      chemin: '/messages',
+      libelle: 'Messages',
+      visible: () => true,
+      pastille: () => this.notifications.compteurs().nonLus,
+    },
     {
       chemin: '/administration/comptes',
       libelle: 'Comptes',

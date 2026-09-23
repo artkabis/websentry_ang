@@ -1552,3 +1552,99 @@ verte sur une application que personne ne déploie.
 **Coût assumé** — La fabrique de tests dépend maintenant d'un module de
 production. C'est assumé : c'est ce qui rend l'affirmation vérifiable au lieu
 d'être un commentaire.
+
+---
+
+## 54. Une irruption se referme d'un geste, et ce geste VAUT lecture
+
+**Décision** — Un message `critique` non lu ouvre une fenêtre par-dessus
+l'écran courant. Elle prend le focus, se referme au bouton ou par Échap, et
+cette fermeture marque le message comme lu.
+
+**Raison** — L'irruption est le SEUL comportement qui distingue `critique` de
+`haute` : sans elle, le niveau ne serait qu'une couleur de plus. Encore
+faut-il qu'elle serve à quelque chose, donc qu'elle soit lue.
+
+Elle reste néanmoins refermable sans condition. Une fenêtre dont on ne peut pas
+sortir pousse à recharger la page — ce qui ne marque rien, et la fait revenir.
+L'utilisateur se retrouverait enfermé dans une boucle, et le message qu'on
+voulait lui faire lire deviendrait l'obstacle qu'il contourne.
+
+Un échec du marquage ne rouvre pas la fenêtre : le message reste non lu et
+reviendra au rafraîchissement suivant, plus tard. Rouvrir sur-le-champ
+recréerait exactement la boucle qu'on vient d'écarter.
+
+**Coût assumé** — Un utilisateur pressé referme sans lire, et le message est
+compté comme lu. C'est accepté : la seule parade serait un temps d'attente
+imposé ou un accusé à cocher, et les deux transforment une information en
+péage. La trace de l'envoi reste au journal d'audit ; la preuve de lecture,
+elle, n'a jamais été promise.
+
+---
+
+## 55. Les compteurs se relisent à la NAVIGATION, jamais en boucle
+
+**Décision** — La pastille de non-lus et la fenêtre d'irruption s'alimentent à
+un service unique, rafraîchi à chaque navigation, avec un plancher de quinze
+secondes entre deux lectures et une requête partagée entre appels concurrents.
+
+**Raison** — Trois options se présentaient. Un sondage périodique fait tourner
+une requête sur un écran que plus personne ne regarde. Une lecture unique au
+démarrage laisse la pastille figée toute la session, ce qui en fait un
+mensonge. La navigation, elle, est un moment où l'utilisateur attend déjà
+quelque chose : la lecture s'y glisse sans se voir.
+
+La pastille et la fenêtre lisent la MÊME source : deux lectures indépendantes
+se contrediraient dès qu'un message serait lu dans l'une sans que l'autre le
+sache.
+
+**Coût assumé** — Un message critique envoyé pendant qu'un utilisateur reste
+immobile sur un écran ne s'impose pas tout de suite : il attend sa prochaine
+navigation. Pour un canal de consignes, ce délai est acceptable ; pour une
+alerte d'exploitation, il ne le serait pas — et c'est la supervision, pas la
+messagerie, qui porte ce besoin-là.
+
+---
+
+## 56. L'envoi ciblé exige `users:read`, sinon l'option est RETIRÉE
+
+**Décision** — L'audience « des comptes nommés » n'apparaît dans le formulaire
+de composition que pour qui détient `users:read`. Les deux autres audiences —
+tous, par rang — restent offertes à tout détenteur de `messages:write`.
+
+**Raison** — Choisir des destinataires nommés suppose de les voir. Sans
+`users:read`, l'auteur choisirait une audience qu'aucune liste ne vient
+remplir : un choix qu'on ne peut pas honorer est pire que pas de choix du tout,
+parce qu'il fait perdre du temps avant de se révéler impraticable.
+
+Les deux permissions vont ensemble par défaut dans le catalogue de la v1 ; le
+cas où elles divergent est donc rare, mais il est possible, et c'est
+précisément le genre de combinaison qu'on découvre en production.
+
+**Coût assumé** — Un compte porteur de `messages:write` seul ne peut écrire
+qu'à des populations, jamais à une personne. Lui ouvrir l'envoi ciblé
+demanderait une route qui rende les comptes sans exiger `users:read` — c'est
+une surface de plus, pour un besoin que rien n'exprime aujourd'hui.
+
+---
+
+## 57. Le contrôle des pièces jointes côté client est DÉLIBÉRÉMENT plus faible
+
+**Décision** — L'interface vérifie le nombre, la taille, et le type ANNONCÉ
+d'une pièce jointe (en-tête du navigateur ou extension). Elle ne lit pas les
+octets. Le serveur, lui, reconnaît le type à l'empreinte, et c'est lui qui
+tranche.
+
+**Raison** — Un fichier accepté à l'écran peut donc être refusé à l'envoi. Ce
+n'est pas un défaut : c'est l'ordre normal des choses quand la validation
+cliente sert à avertir tôt, et non à décider. Faire lire les premiers octets
+par le navigateur rapprocherait les deux contrôles, mais donnerait surtout
+l'illusion que le client décide — alors qu'un appel direct à l'API contourne
+tout ce qu'il pourrait vérifier.
+
+L'écran le DIT, plutôt que de le taire : « le serveur vérifie le contenu réel,
+pas l'extension ». Laisser croire au contraire serait tromper sur ce qui
+passera.
+
+**Coût assumé** — Un aller-retour perdu quand le fichier ment sur son type.
+C'est rare, et le message du serveur est repris tel quel à l'écran.

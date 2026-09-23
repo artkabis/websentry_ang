@@ -378,6 +378,34 @@ même affiché.
 
 La décision 51 détaille le raisonnement et son coût.
 
+### Les écrans
+
+| Écran               | Route                | Garde                          |
+| ------------------- | -------------------- | ------------------------------ |
+| Boîte de réception  | `/messages`          | authentification seule         |
+| Composition         | `/messages/nouveau`  | `messages:write`               |
+| Fenêtre d'irruption | aucune — la coquille | s'ouvre sur un critique non lu |
+
+La **boîte** porte les quatre états et reflète ses filtres dans l'URL, comme
+les autres écrans de liste. Ouvrir un message vaut lecture : le déplier appelle
+l'API, qui est idempotente. Archiver retire la ligne PAR ANTICIPATION et la
+remet si le serveur refuse — le geste est sûr et réversible, et attendre
+l'aller-retour ferait clignoter la liste à chaque rangement.
+
+La **composition** n'affiche que la cible de l'audience choisie, et oublie la
+précédente quand on en change : garder un rang derrière un envoi « à tous »
+produirait un refus que l'auteur ne pourrait pas relier à ce qu'il voit.
+L'envoi ciblé par compte n'apparaît que pour qui détient `users:read`
+(décision 56).
+
+La **fenêtre d'irruption** vit dans la coquille, hors du contenu : elle
+s'impose par-dessus l'écran courant, quel qu'il soit. Elle prend le focus, se
+referme au bouton ou par Échap, et cette fermeture marque le message comme lu
+(décision 54).
+
+La **pastille** de la barre et la fenêtre lisent le même service, rafraîchi à
+chaque navigation avec un plancher de fréquence (décision 55).
+
 ### Ce que la messagerie n'offre pas
 
 Ni suppression, ni réécriture : le corps appartient à son auteur, et sa copie à
@@ -971,8 +999,8 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2091   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 214    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 362    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 811    | 80 %                            |
-| E2E navigateur     | `apps/web/e2e/`                    | 92     | —                               |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 938    | 80 %                            |
+| E2E navigateur     | `apps/web/e2e/`                    | 108    | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié
@@ -990,7 +1018,6 @@ faire_).
 ## Reste à faire
 
 Modules non encore migrés : analytics d'usage / RGPD et portail documentaire.
-La messagerie a son backend ; ses écrans restent à faire.
 
 Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
 sitemap, sécurité) avec les 29 analyseurs de la v1. Ce qui reste y tient à

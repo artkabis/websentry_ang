@@ -1,15 +1,33 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { render, screen, within } from '@testing-library/angular';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AppComponent } from './app.component';
 import { AuthService } from './core/auth/auth.service';
+import { MessageNotificationsService } from './core/messages/message-notifications.service';
+
+/**
+ * Double des notifications.
+ *
+ * Il est EXPLICITE plutôt que laissé au service réel : la coquille relit les
+ * compteurs à chaque navigation, et un double muet dit ce que le test attend
+ * — aucune requête, aucune fenêtre — au lieu de compter sur un échec silencieux.
+ */
+function doubleNotifications(opts: { nonLus?: number; irruption?: unknown } = {}) {
+  return {
+    compteurs: signal({ total: opts.nonLus ?? 0, nonLus: opts.nonLus ?? 0, interrompt: 0 }),
+    irruption: signal(opts.irruption ?? null),
+    rafraichir: () => Promise.resolve(),
+    accuserReception: () => Promise.resolve(),
+    oublier: () => undefined,
+  };
+}
 
 function providers(
   loading: boolean,
   user: unknown = null,
-  opts: { permissions?: string[]; superAdmin?: boolean } = {},
+  opts: { permissions?: string[]; superAdmin?: boolean; nonLus?: number; irruption?: unknown } = {},
 ) {
   return [
     provideZonelessChangeDetection(),
@@ -22,6 +40,10 @@ function providers(
         hasPermission: (code: string) => (opts.permissions ?? []).includes(code),
         isSuperAdmin: () => opts.superAdmin ?? false,
       },
+    },
+    {
+      provide: MessageNotificationsService,
+      useValue: doubleNotifications({ nonLus: opts.nonLus, irruption: opts.irruption }),
     },
   ];
 }
@@ -82,8 +104,10 @@ describe('AppComponent', () => {
         within(nav)
           .getAllByRole('link')
           .map(a => a.textContent?.trim()),
-        // « Retours » y figure : signaler ne demande aucune permission.
-      ).toEqual(['Tableau de bord', 'Analyse', 'Historique', 'Profils', 'Retours']);
+        // « Retours » et « Messages » y figurent : signaler ne demande aucune
+        // permission, et on écrit AUX comptes, pas seulement aux
+        // administrateurs.
+      ).toEqual(['Tableau de bord', 'Analyse', 'Historique', 'Profils', 'Retours', 'Messages']);
     });
 
     it('ajoute « Comptes » à qui détient users:read', async () => {
@@ -141,6 +165,53 @@ describe('AppComponent', () => {
 
       await userEvent.click(menu);
       expect(menu.getAttribute('aria-expanded')).toBe('true');
+    });
+  });
+
+  describe('pastille des messages', () => {
+    it('n’affiche AUCUN nombre quand tout est lu', async () => {
+      // Un « 0 » permanent est du bruit : la pastille doit se remarquer.
+      await render(AppComponent, { providers: providers(false, CONNECTE) });
+      const nav = screen.getByRole('navigation', { name: 'Navigation principale' });
+
+      expect(within(nav).getByRole('link', { name: 'Messages' }).textContent?.trim()).toBe(
+        'Messages',
+      );
+    });
+
+    it('ANNONCE ce que le nombre compte, pas seulement le nombre', async () => {
+      // « 3 » accolé à « Messages » ne dit pas trois quoi.
+      await render(AppComponent, { providers: providers(false, CONNECTE, { nonLus: 3 }) });
+
+      expect(screen.getByLabelText('3 message(s) non lu(s)').textContent?.trim()).toBe('3');
+    });
+  });
+
+  describe('irruption d’un message critique', () => {
+    it('ne s’impose PAS quand rien ne l’exige', async () => {
+      await render(AppComponent, { providers: providers(false, CONNECTE) });
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('s’impose PAR-DESSUS l’écran courant', async () => {
+      const critique = {
+        id: 'm-1',
+        subject: 'Coupure ce soir',
+        body: 'Maintenance à 20h.',
+        importance: 'critique',
+        authorId: 'u-1',
+        authorName: 'alice',
+        attachments: [],
+        sentAt: '2026-01-01T08:00:00.000Z',
+        readAt: null,
+        archivedAt: null,
+      };
+      await render(AppComponent, {
+        providers: providers(false, CONNECTE, { irruption: critique }),
+      });
+
+      expect(screen.getByRole('dialog').getAttribute('aria-label')).toContain('Coupure ce soir');
     });
   });
 

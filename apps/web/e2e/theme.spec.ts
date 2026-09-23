@@ -26,7 +26,50 @@ async function mockAuthenticated(page: Page): Promise<void> {
   await page.route('**/api/v1/auth/me', route =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ME) }),
   );
+
+  /*
+   * La messagerie est nourrie, et pas seulement atteinte.
+   *
+   * Sans données, la boîte tomberait sur son état d'erreur : le balayage
+   * vérifierait alors le contraste d'un bandeau rouge plutôt que celui des
+   * trois familles d'importance, de la pastille de non-lus et des cartes — qui
+   * sont précisément ce que cet écran apporte de neuf.
+   */
+  // `interrompt: 0` : une fenêtre d'irruption couvrirait CHAQUE écran du
+  // balayage, et masquerait les couleurs qu'il est censé mesurer. Elle a sa
+  // propre passe, à la fin.
+  await page.route('**/api/v1/messages/compteurs', route =>
+    route.fulfill(json({ total: 3, nonLus: 2, interrompt: 0 })),
+  );
+  await page.route(/\/api\/v1\/messages(\?.*)?$/, route =>
+    route.fulfill(
+      json({
+        items: ['normale', 'haute', 'critique'].map((importance, i) => ({
+          id: `1111111${i}-1111-4111-8111-11111111111${i}`,
+          subject: `Message ${importance}`,
+          body: 'Corps du message.',
+          importance,
+          authorId: 'u1',
+          authorName: 'alice',
+          attachments: [],
+          sentAt: '2026-01-01T08:00:00.000Z',
+          readAt: i === 0 ? '2026-01-02T00:00:00.000Z' : null,
+          archivedAt: null,
+        })),
+        total: 3,
+      }),
+    ),
+  );
+  await page.route(/\/api\/v1\/users(\?.*)?$/, route =>
+    route.fulfill(json({ users: [], total: 0 })),
+  );
 }
+
+const json = (body: unknown) => ({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify(body),
+});
 
 test.describe('Feuille de style', () => {
   test('les utilitaires Tailwind sont réellement COMPILÉS', async ({ page }) => {
@@ -219,6 +262,10 @@ test.describe('Thème sombre', () => {
     '/retours/nouveau',
     // La supervision porte les trois familles d'état sur un même écran.
     '/administration/supervision',
+    // La messagerie apporte trois familles d'importance, une pastille pleine
+    // dans la barre, et un formulaire à cases et boutons radio.
+    '/messages',
+    '/messages/nouveau',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {
@@ -242,6 +289,27 @@ test.describe('Thème sombre', () => {
             `${ecran} — « ${m.texte} » ${m.couleur} sur ${m.fond} = ${m.ratio.toFixed(2)}`,
           );
         }
+      }
+
+      /*
+       * La fenêtre d'irruption a sa propre passe.
+       *
+       * Elle ne s'ouvre que sur un message critique non lu, et elle couvrirait
+       * les écrans du balayage si elle restait ouverte pendant. Son voile pose
+       * pourtant un fond inhabituel sous un texte clair : c'est exactement le
+       * genre d'endroit où un jeton passe inaperçu.
+       */
+      await page.route('**/api/v1/messages/compteurs', route =>
+        route.fulfill(json({ total: 3, nonLus: 2, interrompt: 1 })),
+      );
+      await page.goto('/tableau-de-bord');
+      await expect(page.getByRole('dialog')).toBeVisible();
+      const fenetre = await page.evaluate(contrastesDeLaPage);
+      mesures += fenetre.length;
+      for (const m of fenetre.filter(x => x.ratio < x.minimum)) {
+        fautifs.push(
+          `irruption — « ${m.texte} » ${m.couleur} sur ${m.fond} = ${m.ratio.toFixed(2)}`,
+        );
       }
 
       // Un balayage qui ne trouve rien passerait sans rien prouver.

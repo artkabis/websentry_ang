@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  effect,
   inject,
   viewChild,
   type ElementRef,
@@ -9,6 +10,8 @@ import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
+import { MessageIrruptionComponent } from './core/messages/message-irruption.component';
+import { MessageNotificationsService } from './core/messages/message-notifications.service';
 import { AppNavComponent } from './core/navigation/app-nav.component';
 import { ThemeToggleComponent } from './core/theme/theme-toggle.component';
 
@@ -27,7 +30,13 @@ import { ThemeToggleComponent } from './core/theme/theme-toggle.component';
 @Component({
   selector: 'ws-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, ThemeToggleComponent, AppNavComponent],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    ThemeToggleComponent,
+    AppNavComponent,
+    MessageIrruptionComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (auth.loading()) {
@@ -81,12 +90,17 @@ import { ThemeToggleComponent } from './core/theme/theme-toggle.component';
       <div #contenu id="contenu" tabindex="-1" class="outline-none">
         <router-outlet />
       </div>
+
+      <!-- Hors du contenu : la fenêtre s'impose PAR-DESSUS l'écran courant,
+           quel qu'il soit, et survit à une navigation. -->
+      <ws-message-irruption />
     }
   `,
 })
 export class AppComponent {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly notifications = inject(MessageNotificationsService);
 
   /**
    * Route affichée, jointe au retour qu'on dépose.
@@ -106,6 +120,27 @@ export class AppComponent {
   );
 
   private readonly contenu = viewChild<ElementRef<HTMLElement>>('contenu');
+
+  constructor() {
+    /*
+     * Les compteurs se relisent à chaque navigation, jamais en boucle.
+     *
+     * Un sondage périodique ferait tourner une requête sur un écran qu'on ne
+     * regarde plus ; une lecture unique au démarrage laisserait la pastille
+     * figée toute la session. La navigation est le moment où l'utilisateur
+     * attend déjà quelque chose, et le service pose lui-même un plancher de
+     * fréquence.
+     */
+    effect(() => {
+      if (!this.auth.user()) {
+        this.notifications.oublier();
+        return;
+      }
+      // Lu pour créer la dépendance : chaque navigation relance l'effet.
+      this.routeCourante();
+      void this.notifications.rafraichir();
+    });
+  }
 
   /**
    * Le saut est traité EN CODE, pas laissé à l'ancre.
