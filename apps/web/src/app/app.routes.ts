@@ -121,6 +121,15 @@ export const routes: Routes = [
       import('./features/messages/message-compose.component').then(m => m.MessageComposeComponent),
   },
   {
+    // L'usage : gardé par `usage:read`, en miroir du décorateur posé sur la
+    // route de l'API. L'écran dit aussi ce que l'application conserve — une
+    // équipe qui regarde ses statistiques est celle qui doit le voir.
+    path: 'administration/usage',
+    canActivate: [authGuard, permissionGuard('usage:read')],
+    loadComponent: () =>
+      import('./features/usage/usage-dashboard.component').then(m => m.UsageDashboardComponent),
+  },
+  {
     // Les comptes : lecture gardée par `users:read`, en miroir du décorateur
     // posé sur la route de l'API. La garde sert l'EXPÉRIENCE — elle évite
     // d'afficher un écran que l'API refuserait de nourrir — pas la sécurité.

@@ -63,6 +63,61 @@ async function mockAuthenticated(page: Page): Promise<void> {
   await page.route(/\/api\/v1\/users(\?.*)?$/, route =>
     route.fulfill(json({ users: [], total: 0 })),
   );
+
+  // L'usage est nourri, comme la messagerie : sans données, l'écran tomberait
+  // sur son état d'erreur, et le balayage vérifierait un bandeau rouge plutôt
+  // que les tableaux et les barres qu'il apporte.
+  await page.route('**/api/v1/usage/gouvernance', route =>
+    route.fulfill(
+      json({
+        sources: [
+          {
+            table: 'audit_log',
+            finalite: 'Tracer les actions sensibles',
+            donnees: ['identifiant de compte', 'adresse IP'],
+            retentionJours: 180,
+          },
+          {
+            table: 'users',
+            finalite: 'Authentifier et autoriser',
+            donnees: ['identifiant'],
+            retentionJours: null,
+          },
+        ],
+        anonymisation: {
+          apresJours: 180,
+          anonymisees: 1200,
+          enAttente: 37,
+          dernierPassage: '2026-03-30T03:00:00.000Z',
+        },
+        collecteDediee: false,
+      }),
+    ),
+  );
+  await page.route(/\/api\/v1\/usage(\?.*)?$/, route =>
+    route.fulfill(
+      json({
+        periode: '30j',
+        depuis: '2026-03-01T12:00:00.000Z',
+        jusqua: '2026-03-31T12:00:00.000Z',
+        comptesActifs: 10,
+        tunnel: [
+          { cle: 'connexion', comptes: 10, actions: 50 },
+          { cle: 'analyse', comptes: 6, actions: 120 },
+          { cle: 'exploitation', comptes: 2, actions: 4 },
+        ],
+        parJour: [
+          { jour: '2026-03-29', connexions: 2, analyses: 5 },
+          { jour: '2026-03-30', connexions: 4, analyses: 30 },
+          { jour: '2026-03-31', connexions: 1, analyses: 0 },
+        ],
+        gammes: [
+          { gamme: 'premium', analyses: 80, scoreMoyen: 72.46 },
+          { gamme: 'standard', analyses: 3, scoreMoyen: null },
+        ],
+      }),
+    ),
+  );
 }
 
 const json = (body: unknown) => ({
@@ -266,6 +321,9 @@ test.describe('Thème sombre', () => {
     // dans la barre, et un formulaire à cases et boutons radio.
     '/messages',
     '/messages/nouveau',
+    // L'usage apporte deux tableaux denses, des barres de proportion et un
+    // graphe — des aplats de marque sur fond creusé, jamais vérifiés ailleurs.
+    '/administration/usage',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {

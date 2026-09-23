@@ -459,6 +459,26 @@ La fenêtre d'observation est **fermée** — 7, 30 ou 90 jours. Une plage libre
 laisserait isoler une heure, et un compteur sur une heure dans une équipe de
 dix désigne quelqu'un (décision 60).
 
+### L'écran
+
+`/administration/usage`, gardé par `usage:read`. Il répond à deux questions qui
+ne se ressemblent pas — « l'outil sert-il ? » et « que conservons-nous des gens
+qui s'en servent ? » — et les met côte à côte délibérément : une équipe qui
+regarde ses statistiques d'usage est exactement celle qui doit voir ce que
+l'application garde.
+
+Chaque étage du tunnel est rapporté à l'ENTRÉE, pas à l'étage précédent : une
+part relative dirait « 60 % » puis « 50 % » sur un tunnel qui perd les sept
+dixièmes de son monde. La barre double le chiffre plutôt que de le remplacer.
+
+Le **seuil d'anonymat** est appliqué à l'affichage : un compteur strictement
+inférieur à cinq devient « moins de 5 ». Masquer entièrement laisserait croire
+à une absence ; afficher « 1 » désignerait quelqu'un.
+
+La courbe est une image doublée par un tableau (décision 61), et le registre de
+traitement reste affiché même sur une période vide — ce que l'application
+conserve ne dépend pas de l'activité du mois.
+
 ### Anonymisation du journal
 
 ```text
@@ -1060,8 +1080,8 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2147   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 230    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 377    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 938    | 80 %                            |
-| E2E navigateur     | `apps/web/e2e/`                    | 108    | —                               |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 986    | 80 %                            |
+| E2E navigateur     | `apps/web/e2e/`                    | 121    | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié
@@ -1078,8 +1098,7 @@ faire_).
 
 ## Reste à faire
 
-Modules non encore migrés : portail documentaire. L'analytics d'usage a son
-backend ; son écran reste à faire.
+Module non encore migré : portail documentaire.
 
 Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
 sitemap, sécurité) avec les 29 analyseurs de la v1. Ce qui reste y tient à

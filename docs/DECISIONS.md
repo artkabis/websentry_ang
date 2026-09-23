@@ -1737,3 +1737,32 @@ le schéma pour que les deux côtés la partagent — recopiée, elle divergerai
 cet écran. C'est voulu : cette enquête-là se mène dans le journal d'audit, qui
 est nominatif, réservé au rang 100, et dont chaque consultation est elle-même
 traçable.
+
+---
+
+## 61. Un graphe est une IMAGE : il est doublé par un tableau
+
+**Décision** — La courbe d'activité quotidienne porte un `role="img"` et un
+libellé qui résume ce qu'elle montre — volumes, et jour de pointe. Les mêmes
+nombres sont disponibles juste en dessous, dans un tableau dépliable.
+
+**Raison** — Un graphe dessiné en barres ne dit rien à qui ne le voit pas, et
+un `aria-label` seul ne dit qu'un résumé : on y perd le détail. Les deux
+ensemble donnent le survol ET les chiffres, sans forcer personne à choisir.
+
+Le tableau est REPLIÉ par défaut, parce qu'il double une information déjà
+présente : le déplier d'office allongerait l'écran pour tout le monde afin de
+servir un besoin ponctuel. Le replier ne le retire pas de l'arbre accessible —
+`<details>` reste annoncé, et son contenu devient atteignable à l'ouverture.
+
+Les deux séries partagent une **échelle commune** : deux échelles
+indépendantes feraient paraître trois connexions aussi hautes que trois cents
+analyses, et le graphe mentirait sur le rapport entre les deux.
+
+**Coût assumé** — Les mêmes nombres sont rendus deux fois dans le DOM. C'est
+peu cher, et c'est le prix d'une information qui ne dépend pas de la vue.
+
+Autre point, trouvé en testant : les boutons de période sont des radios
+**visuellement masqués** derrière leur libellé. Le focus se dessinait donc sur
+un élément invisible. Le libellé porte maintenant l'anneau de focus — un
+contrôle qu'on ne peut pas suivre au clavier n'est pas un contrôle.
