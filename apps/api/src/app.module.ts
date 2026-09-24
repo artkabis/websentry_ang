@@ -16,6 +16,7 @@ import { UsersModule } from './users/users.module.js';
 import { FeedbackModule } from './feedback/feedback.module.js';
 import { MessagesModule } from './messages/messages.module.js';
 import { UsageModule } from './usage/usage.module.js';
+import { DocsModule } from './docs/docs.module.js';
 import { SupervisionModule } from './supervision/supervision.module.js';
 import { RbacModule } from './rbac/rbac.module.js';
 import { ScansModule } from './scans/scans.module.js';
@@ -50,6 +51,7 @@ import { SecurityModule } from './security/security.module.js';
     FeedbackModule,
     MessagesModule,
     UsageModule,
+    DocsModule,
     SupervisionModule,
     ScansModule,
     AnalysisModule,

@@ -499,6 +499,50 @@ présentes, durées de conservation — est **rendu par le code** à
 
 ---
 
+## Portail documentation
+
+Les pages sont des fichiers Markdown du dépôt (`apps/api/src/docs/contenu/`),
+lus UNE SEULE FOIS au démarrage.
+
+```text
+  démarrage                          requête
+  ─────────                          ───────
+  contenu/*.md                       GET /docs/:slug
+     │                                  │
+     ├─ analyserPage() ── blocs typés   ├─▶ table en mémoire ─▶ 404 ou page
+     ├─ DocPageSchema.parse()           │
+     └─ index de recherche              └─ le disque n'est JAMAIS touché
+```
+
+Une requête n'atteint jamais le système de fichiers : elle interroge une table
+indexée par identifiant. Il n'y a donc aucun chemin à assembler, et la
+traversée de chemin ne se pose pas (décision 62).
+
+### Aucun HTML, à aucun moment
+
+L'API rend des **blocs typés** — titre, paragraphe, liste, code, encadré — et
+des **fragments en ligne** — texte, fort, code, lien. L'interface les dessine
+avec ses gabarits ; il n'y a pas un seul `innerHTML` dans le rendu.
+
+Une adresse de lien n'a que deux formes possibles : `doc:slug` ou `https://`.
+Les autres sont refusées à l'analyse ET par le schéma — un `javascript:` n'a
+pas de représentation dans le type.
+
+### Recherche
+
+Plein texte en mémoire, accents et casse ignorés. Le titre vaut dix occurrences
+du corps : quelqu'un qui tape « profils » cherche la page qui s'appelle ainsi,
+pas les pages qui la mentionnent. L'extrait rendu est du **texte brut** —
+aucune balise de surbrillance, l'interface sachant déjà où est le terme.
+
+### Pas de base de données
+
+Le module n'injecte aucun dépôt : le portail tient sans MariaDB. Une
+documentation qui tomberait avec la base serait indisponible au moment précis
+où l'on cherche quoi faire.
+
+---
+
 ## Supervision
 
 Trois pannes se détectaient déjà et n'étaient qu'écrites dans les journaux :
@@ -1076,10 +1120,10 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
-| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 462    | 95 %                            |
-| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2147   | 85 % global, **100 %** sécurité |
-| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 230    | —                               |
-| Sécurité OWASP     | `apps/api/test/security/`          | 377    | —                               |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 509    | 95 %                            |
+| Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2186   | 85 % global, **100 %** sécurité |
+| E2E API            | `apps/api/test/*.e2e-spec.ts`      | 246    | —                               |
+| Sécurité OWASP     | `apps/api/test/security/`          | 405    | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 986    | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 121    | —                               |
 
@@ -1098,7 +1142,8 @@ faire_).
 
 ## Reste à faire
 
-Module non encore migré : portail documentaire.
+Tous les modules du périmètre sont migrés. Le portail documentaire a son
+backend ; son écran reste à faire.
 
 Le module 4 est livré dans son ARCHITECTURE (pipeline, isolation CPU, SSE,
 sitemap, sécurité) avec les 29 analyseurs de la v1. Ce qui reste y tient à

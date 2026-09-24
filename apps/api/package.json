@@ -4,7 +4,7 @@
   "private": true,
   "description": "WebSentry v2 — API Nest.js sur adapter Fastify",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-contenu.mjs",
     "dev": "node scripts/dev.mjs",
     "db:init": "node scripts/db.mjs init",
     "db:user": "node scripts/db.mjs user",

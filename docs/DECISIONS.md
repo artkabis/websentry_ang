@@ -1766,3 +1766,93 @@ Autre point, trouvé en testant : les boutons de période sont des radios
 **visuellement masqués** derrière leur libellé. Le focus se dessinait donc sur
 un élément invisible. Le libellé porte maintenant l'anneau de focus — un
 contrôle qu'on ne peut pas suivre au clavier n'est pas un contrôle.
+
+---
+
+## 62. La documentation est du CODE, et elle ne transporte jamais de HTML
+
+**Décision** — Les pages du portail sont des fichiers Markdown du dépôt, lus
+une seule fois au démarrage. L'API rend une STRUCTURE typée — des blocs, des
+fragments en ligne — que l'interface dessine avec ses propres gabarits. Aucune
+route d'écriture, aucun `innerHTML`.
+
+**Raison** — Trois problèmes tombent d'un coup.
+
+**La traversée de chemin ne se pose pas.** Un portail qui sert des fichiers
+finit toujours par se faire demander `../../etc/passwd`. Ici, une requête
+n'atteint jamais le disque : elle interroge une table en mémoire, indexée par
+identifiant. Il n'y a aucun chemin à assembler, donc aucun à filtrer.
+
+**Le XSS stocké ne se pose pas non plus.** Rendre du HTML obligerait à le
+désinfecter, donc à tenir une liste de balises et d'attributs admis — et à la
+tenir JUSTE, indéfiniment. Une structure fermée n'a rien à désinfecter : ce qui
+n'est pas dans le type n'existe pas. Une adresse `javascript:` n'a même pas de
+représentation possible dans le schéma.
+
+**La documentation suit le code.** Elle se relit en revue, se versionne avec
+l'application qui la sert, et ne peut pas décrire une version qui n'existe
+plus.
+
+**Coût assumé** — Corriger une coquille demande un commit et un déploiement, là
+où un éditeur en ligne demanderait deux minutes. C'est le prix des trois
+propriétés ci-dessus, et il est accepté : une documentation d'outil interne
+change à la vitesse de l'outil, pas plus vite.
+
+Second coût : le sous-ensemble Markdown est petit — titres, paragraphes,
+listes, blocs de code, encadrés, quatre fragments en ligne. Chaque ajout est
+une forme de plus à dessiner dans deux thèmes et à rendre accessible. Pas de
+tableau, pas d'image ; le jour où il en faudra, ce sera une décision, pas un
+effet de bord d'une bibliothèque.
+
+Troisième coût, purement opérationnel : `tsc` ne copie pas les fichiers
+Markdown. Un script de build les copie dans la sortie et **échoue** si la
+source manque — sans lui, le portail servirait un sommaire vide en production
+sans que rien n'échoue, et le défaut ne se verrait qu'à l'écran.
+
+---
+
+## 63. `docs:read` reste tel que la v1 l'a défini
+
+**Décision** — Le portail est gardé par `docs:read`, accordé par défaut aux
+rangs 50 et 100. Un testeur n'y a donc pas accès sans permission explicite.
+
+**Raison** — C'est discutable, et c'est justement pourquoi cela ne se décide
+pas au détour d'une migration. Ouvrir la documentation à tous serait un
+**assouplissement d'un contrôle d'accès existant** ; le cap du projet dit que
+la sécurité se durcit, jamais ne s'assouplit par confort (`CLAUDE.md` §1.5).
+
+L'argument inverse s'entend : une documentation d'outil interne ne contient
+normalement rien de sensible, et la réserver aux administrateurs prive de repères
+ceux qui en ont le plus besoin — les nouveaux venus, qui sont testeurs.
+
+**Coût assumé** — En l'état, un testeur qui ne comprend pas un écran n'a pas de
+page à lire. Le contournement existe et il est explicite : accorder `docs:read`
+compte par compte depuis l'écran des permissions. Si l'ouverture à tous est
+souhaitée, elle se fait en une ligne — le retrait du décorateur — et elle
+appartient au propriétaire du produit, pas à la migration.
+
+---
+
+## 64. `pnpm test` SÉRIALISE les paquets, au prix du temps d'horloge
+
+`pnpm -r test` lance par défaut les trois paquets en parallèle. Chaque `vitest`
+ouvre ensuite ses propres workers : sur une machine à quatre cœurs, les 2186
+tests backend et les 986 tests frontend se disputent les mêmes cœurs, et les
+tests de composants — qui pilotent un DOM via `userEvent` — dépassent leur
+délai de 5 s. Six tests de `profile-editor.component.spec.ts` ont échoué ainsi,
+alors que le même fichier passe en 32 s quand il tourne seul.
+
+Un test qui échoue selon la charge de la machine ne dit rien du code : il rend
+la porte non déterministe, et la règle absolue du build (`CLAUDE.md` §3) perd
+son sens si « rouge » peut vouloir dire « la machine était occupée ». Deux
+issues : relever le délai des tests frontend, ou empêcher la concurrence entre
+paquets. Relever le délai masque la cause et laisse passer une vraie lenteur ;
+`--workspace-concurrency=1` la supprime. C'est aussi ce que fait déjà la CI,
+qui exécute les trois couvertures en étapes distinctes.
+
+**Coût assumé** — Le temps d'horloge de `pnpm test` et `pnpm test:coverage`
+augmente : les paquets s'additionnent au lieu de se recouvrir. Sur cette
+machine, la sérialisation coûte une trentaine de secondes, à comparer aux
+168 s que la contention faisait payer au seul paquet frontend. Le parallélisme
+interne à chaque `vitest` reste entier ; seule la concurrence **entre** paquets
+disparaît.

@@ -131,6 +131,10 @@ export default defineConfig({
         // une identité. Une branche non couverte ici, c'est soit une
         // réidentification, soit une anonymisation qui ne se fait pas.
         'src/usage/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
+        // Documentation : le seul module qui lise des FICHIERS. La garantie
+        // tient à ce qu'aucune requête n'atteigne le disque — une branche non
+        // couverte ici, c'est un chemin qu'on croit fermé.
+        'src/docs/*.ts': { lines: 100, branches: 100, functions: 100, statements: 100 },
         'src/database/repositories/usage.repository.ts': {
           lines: 100,
           branches: 100,
