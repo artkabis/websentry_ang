@@ -541,6 +541,45 @@ Le module n'injecte aucun dépôt : le portail tient sans MariaDB. Une
 documentation qui tomberait avec la base serait indisponible au moment précis
 où l'on cherche quoi faire.
 
+### L'écran : un composant, deux routes
+
+`/aide` et `/aide/:slug` sont servis par le **même** composant. Le sommaire
+reste donc affiché en permanence, et ouvrir une page ne recharge que la colonne
+de droite — c'est ce qui distingue un portail consultable d'une suite d'écrans
+sans retour.
+
+```text
+  /aide                    /aide/:slug              /aide?q=terme
+  ─────                    ───────────              ─────────────
+  sommaire + cartes        sommaire + page          sommaire + résultats
+        │                        │                        │
+        └────────── DocsPortalComponent ──────────────────┘
+                            │
+             GET /docs   GET /docs/:slug   GET /docs/recherche
+```
+
+Le terme cherché vit dans l'URL (`?q=`) : un résultat se partage, se met en
+favori et survit à un rechargement. La frappe attend 250 ms avant d'écrire
+dans l'historique — une écriture par caractère rendrait le bouton « précédent »
+inutilisable. Sous deux caractères, l'écran n'appelle pas l'API : il rejoue la
+contrainte du schéma partagé sans jamais s'y substituer.
+
+Le rendu n'a qu'un gabarit par type de bloc, et **aucun `innerHTML`** : le
+texte passe par l'interpolation d'Angular, qui l'échappe. Un scénario
+navigateur sert un paragraphe contenant `<img src=x onerror=…>` et vérifie
+qu'aucune image n'est créée et qu'aucun gestionnaire ne s'exécute — un jsdom
+peut mentir là-dessus, Chromium non.
+
+Trois détails d'accessibilité valent d'être notés : le titre de la page reçoit
+le focus à chaque navigation **dans** le portail (jamais au premier rendu, où
+le focus appartient à qui vient d'arriver) ; le ton d'un encadré est écrit
+— « Note », « Attention » — et non confié à la seule couleur ; un bloc de code
+est focusable, parce qu'il peut déborder horizontalement (WCAG 2.1.1).
+
+Le raccourci `/` met le curseur dans la recherche, sauf quand la frappe
+appartient déjà à un champ — sans cette réserve, saisir une URL deviendrait
+impossible.
+
 ---
 
 ## Supervision
@@ -1036,9 +1075,11 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
      obtenu par la première.
 - **Résolution de session au démarrage** : les cookies étant httpOnly, `/auth/me`
   est le seul moyen de savoir si une session existe.
-- **Chargement différé par route** : seul le noyau part d'emblée (427 kio bruts,
-  113 kio transférés). Le budget de bundle est calé juste au-dessus, avec une
-  marge d'erreur de 53 kio : il **échoue le build**, il n'avertit pas.
+- **Chargement différé par route** : seul le noyau part d'emblée — **475,69 kio
+  bruts, 127,01 kio transférés** au terme du module 10, contre 427 / 113 au
+  moment où le budget a été posé (décision 32). Le seuil d'avertissement
+  (440 kio) est franchi ; le seuil d'erreur (480 kio), qui **échoue le build**,
+  ne l'est plus qu'à 4,31 kio près. C'est une dette ouverte, consignée plus bas.
 - **La configuration PostCSS s'appelle `.postcssrc.json`** — le constructeur
   Angular ne lit que ce nom ou `postcss.config.json`. Sous tout autre nom, elle
   est ignorée EN SILENCE : Tailwind ne tourne pas, la feuille part avec sa
@@ -1124,8 +1165,8 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2186   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 246    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 405    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 986    | 80 %                            |
-| E2E navigateur     | `apps/web/e2e/`                    | 121    | —                               |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 1033   | 80 %                            |
+| E2E navigateur     | `apps/web/e2e/`                    | 131    | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié
@@ -1168,6 +1209,16 @@ Dettes identifiées sur le périmètre déjà livré :
   reproduit fidèlement par des doubles, mais rien n'est exercé contre MariaDB —
   or c'est précisément le genre de SQL dont le comportement varie d'un moteur et
   d'une version à l'autre.
+- **Marge de budget du bundle initial épuisée** — le noyau pèse 475,69 kio
+  bruts pour un seuil d'erreur à 480. Les écrans sont pourtant tous différés :
+  ce qui a grossi, c'est le noyau lui-même — routeur, intercepteurs, client de
+  requêtes, service d'authentification, coquille et navigation. Le prochain
+  ajout au chemin initial fera **échouer** le build, ce qui est exactement
+  l'effet recherché par la décision 32, mais ne laisse plus de place. Deux
+  pistes, à instruire avant d'y toucher : différer le client TanStack Query,
+  qu'aucun écran n'utilise avant la première navigation, et vérifier ce que la
+  coquille embarque réellement. Relever le seuil serait renoncer à la mesure.
+
 - **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
   et les charger en base au moment de la bascule.
 - **Polarité des sous-critères** — l'éditeur de profil couvre les seuils, les

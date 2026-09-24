@@ -6,7 +6,7 @@ import {
   inject,
   provideAppInitializer,
 } from '@angular/core';
-import { provideRouter, withComponentInputBinding } from '@angular/router';
+import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
 import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth/auth.interceptor';
@@ -36,7 +36,14 @@ function provideSessionBootstrap(): EnvironmentProviders {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZonelessChangeDetection(),
-    provideRouter(routes, withComponentInputBinding()),
+    // `anchorScrolling` fait atteindre un titre par son ancre : sans lui, un
+    // lien profond change l'URL sans bouger la page, et le sommaire interne du
+    // portail d'aide ne mènerait nulle part.
+    provideRouter(
+      routes,
+      withComponentInputBinding(),
+      withInMemoryScrolling({ anchorScrolling: 'enabled' }),
+    ),
     provideHttpClient(withInterceptors([credentialsInterceptor, csrfInterceptor, authInterceptor])),
     provideTanStackQuery(
       new QueryClient({

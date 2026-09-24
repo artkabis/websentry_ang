@@ -98,6 +98,13 @@ export class AppNavComponent {
       visible: () => true,
       pastille: () => this.notifications.compteurs().nonLus,
     },
+    // L'aide demande `docs:read` : afficher le lien à qui recevrait un
+    // « accès refusé » serait pire que de ne rien afficher.
+    {
+      chemin: '/aide',
+      libelle: 'Aide',
+      visible: () => this.auth.hasPermission('docs:read'),
+    },
     {
       chemin: '/administration/comptes',
       libelle: 'Comptes',

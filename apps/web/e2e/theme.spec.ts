@@ -64,6 +64,69 @@ async function mockAuthenticated(page: Page): Promise<void> {
     route.fulfill(json({ users: [], total: 0 })),
   );
 
+  /*
+   * L'aide est nourrie, elle aussi.
+   *
+   * Le portail apporte des familles qu'aucun autre écran ne pose : encadrés
+   * « note » et « avertissement », bloc de code sur fond creusé, liens de
+   * contenu au fil du texte. Sans données, le balayage mesurerait un bandeau
+   * d'erreur à leur place.
+   */
+  await page.route(/\/api\/v1\/docs$/, route =>
+    route.fulfill(
+      json({
+        sections: [
+          {
+            section: 'Démarrer',
+            pages: [
+              {
+                slug: 'premiers-pas',
+                titre: 'Premiers pas',
+                section: 'Démarrer',
+                ordre: 0,
+                resume: 'Lancer une première analyse en trois gestes.',
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+  );
+  await page.route(/\/api\/v1\/docs\/[a-z0-9-]+$/, route =>
+    route.fulfill(
+      json({
+        slug: 'premiers-pas',
+        titre: 'Premiers pas',
+        section: 'Démarrer',
+        ordre: 0,
+        resume: 'Lancer une première analyse en trois gestes.',
+        blocs: [
+          { type: 'titre', niveau: 2, texte: 'Avant de commencer', ancre: 'avant-de-commencer' },
+          {
+            type: 'paragraphe',
+            contenu: [
+              { type: 'texte', texte: 'Choisissez ' },
+              { type: 'lien', texte: 'un profil', href: 'doc:premiers-pas' },
+              { type: 'texte', texte: ', puis lancez ' },
+              { type: 'code', texte: 'pnpm dev:web' },
+              { type: 'fort', texte: ' en local' },
+              { type: 'texte', texte: '.' },
+            ],
+          },
+          { type: 'titre', niveau: 3, texte: 'Détail', ancre: 'detail' },
+          { type: 'liste', ordonnee: true, elements: [[{ type: 'texte', texte: 'Un.' }]] },
+          { type: 'code', langage: 'bash', texte: 'pnpm dev:api' },
+          { type: 'note', ton: 'info', contenu: [{ type: 'texte', texte: 'Bon à savoir.' }] },
+          {
+            type: 'note',
+            ton: 'avertissement',
+            contenu: [{ type: 'texte', texte: 'Une analyse consomme du quota.' }],
+          },
+        ],
+      }),
+    ),
+  );
+
   // L'usage est nourri, comme la messagerie : sans données, l'écran tomberait
   // sur son état d'erreur, et le balayage vérifierait un bandeau rouge plutôt
   // que les tableaux et les barres qu'il apporte.
@@ -324,6 +387,10 @@ test.describe('Thème sombre', () => {
     // L'usage apporte deux tableaux denses, des barres de proportion et un
     // graphe — des aplats de marque sur fond creusé, jamais vérifiés ailleurs.
     '/administration/usage',
+    // L'aide apporte deux tons d'encadré, un bloc de code et des liens au fil
+    // du texte — des couleurs qu'aucun autre écran ne pose.
+    '/aide',
+    '/aide/premiers-pas',
   ];
 
   for (const theme of ['clair', 'sombre'] as const) {

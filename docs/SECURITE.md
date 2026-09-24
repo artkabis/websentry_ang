@@ -219,6 +219,22 @@ désormais le message d'avertissement, et la mutation tombe. C'est le seul cas
 de cette suite où la réponse à un mutant équivalent n'a pas été de supprimer du
 code, mais de **tester ce à quoi il sert vraiment**.
 
+#### Côté écran
+
+Le portail rend des blocs typés, sans `innerHTML` : il n'y a pas d'assainisseur
+à éprouver, seulement l'absence d'interprétation. Trois mutations le vérifient.
+
+| Mutation appliquée                                    | Résultat attendu                          | Observé    |
+| ----------------------------------------------------- | ----------------------------------------- | ---------- |
+| `rel="noopener noreferrer"` perd son `noopener`       | La page ouverte accède à `window.opener`  | ✅ 1 échec |
+| Le garde de fraîcheur d'une réponse de page disparaît | Une réponse lente écrase la page affichée | ✅ 1 échec |
+| Le focus se déplace même au premier rendu             | Le focus est volé à qui vient d'arriver   | ✅ 1 échec |
+
+Un scénario navigateur complète ces mutations là où un jsdom ne prouve rien :
+l'API sert un paragraphe dont le texte est `<img src=x onerror="…">`, et le
+test vérifie dans Chromium qu'aucune image n'est créée et qu'aucun gestionnaire
+ne s'exécute. Le texte s'affiche tel quel, chevrons compris.
+
 **Réserve assumée** — `owasp-admin.e2e-spec.ts` et `owasp-feedback.e2e-spec.ts`
 n'ont pas encore subi de contrôle par mutation. Les garde-fous qu'elles
 attaquent l'ont été au niveau du service, mais rien ne prouve encore qu'une

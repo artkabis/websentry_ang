@@ -121,6 +121,23 @@ export const routes: Routes = [
       import('./features/messages/message-compose.component').then(m => m.MessageComposeComponent),
   },
   {
+    // L'aide : gardée par `docs:read`, en miroir du décorateur posé sur la
+    // route de l'API. Le portail et une page donnée partagent le MÊME
+    // composant — ouvrir une page ne doit pas faire disparaître le sommaire.
+    path: 'aide',
+    canActivate: [authGuard, permissionGuard('docs:read')],
+    loadComponent: () =>
+      import('./features/docs/docs-portal.component').then(m => m.DocsPortalComponent),
+  },
+  {
+    // `:slug` est lié à l'entrée `slug` du composant par
+    // `withComponentInputBinding()` ; `?q=` l'est à l'entrée `q`.
+    path: 'aide/:slug',
+    canActivate: [authGuard, permissionGuard('docs:read')],
+    loadComponent: () =>
+      import('./features/docs/docs-portal.component').then(m => m.DocsPortalComponent),
+  },
+  {
     // L'usage : gardé par `usage:read`, en miroir du décorateur posé sur la
     // route de l'API. L'écran dit aussi ce que l'application conserve — une
     // équipe qui regarde ses statistiques est celle qui doit le voir.

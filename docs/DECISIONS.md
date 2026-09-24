@@ -1856,3 +1856,54 @@ machine, la sérialisation coûte une trentaine de secondes, à comparer aux
 168 s que la contention faisait payer au seul paquet frontend. Le parallélisme
 interne à chaque `vitest` reste entier ; seule la concurrence **entre** paquets
 disparaît.
+
+---
+
+## 65. Les ancres internes passent par le ROUTEUR, et le défilement s'active
+
+Le sommaire interne d'une page d'aide pointait ses titres par un `href="#ancre"`
+nu. En test unitaire, l'attribut était juste. Dans un vrai navigateur, le lien
+ramenait au tableau de bord.
+
+La cause est la balise `<base href="/">` que l'application pose : un fragment
+nu se résout contre l'URI de base du document, pas contre l'URL courante.
+`#lancer-une-analyse` devenait donc `/#lancer-une-analyse`, que le routeur
+traite comme la racine, redirigée vers le tableau de bord. Le lien fonctionnait
+en apparence — l'URL changeait, le fragment y était — et menait ailleurs.
+
+Deux corrections, indissociables :
+
+1. Les ancres passent par `routerLink` avec `[fragment]`, qui construit l'URL
+   à partir de la route courante.
+2. `withInMemoryScrolling({ anchorScrolling: 'enabled' })` est activé sur le
+   routeur : sans lui, l'URL porterait le fragment sans que la page bouge.
+
+**Coût assumé** — Le second point est un réglage **global** du routeur, pris
+pour un besoin d'un seul module. Il ne change rien là où aucun fragment
+n'existe, mais il vaut désormais partout : tout lien de fragment déclenchera un
+défilement. C'est le comportement attendu du Web, et l'alternative — calculer
+le chemin courant à la main dans le portail — aurait fabriqué une exception
+locale à maintenir.
+
+Ce défaut n'a été trouvé ni par le typecheck, ni par les tests de composants,
+ni par la couverture : seul le scénario navigateur l'a vu. Il est resté au
+tableau des preuves pour cette raison.
+
+---
+
+## 66. Le portail d'aide tient dans UN composant pour trois vues
+
+`/aide`, `/aide/:slug` et `/aide?q=` sont servis par le même composant. Trois
+composants auraient été plus faciles à lire isolément ; ils auraient surtout
+démonté le sommaire à chaque navigation, et transformé un portail en suite
+d'écrans.
+
+Le terme cherché vit dans l'URL plutôt que dans un état local. Une recherche
+d'aide se partage — « regarde, c'est écrit là » — et c'est précisément ce qu'une
+équipe qualité fait d'un portail de documentation.
+
+**Coût assumé** — Le composant porte trois états de chargement et trois états
+d'erreur au lieu d'un, et sa logique de course (une réponse lente ne doit pas
+écraser un affichage plus récent) existe en double, pour la page et pour la
+recherche. Quatre tests couvrent ces deux courses ; sans eux, le doublon serait
+une dette silencieuse. Si une quatrième vue apparaissait, il faudrait scinder.
