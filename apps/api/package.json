@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:security": "vitest run --config vitest.e2e.config.ts test/security"
+    "test:security": "vitest run --config vitest.e2e.config.ts test/security",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

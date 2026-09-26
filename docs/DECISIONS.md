@@ -1998,3 +1998,50 @@ rendu quand le cache est froid : sur une liaison lente les 27,75 kio économisé
 le compensent largement, sur un réseau local c'est neutre. Le contrôle, lui,
 dépend de `statsJson` : si l'option disparaît de la configuration, il échoue
 plutôt que de se taire — un contrôle qui n'a rien lu n'a rien vérifié.
+
+---
+
+## 69. Le SQL est exercé contre un vrai moteur, dans une suite qui ne peut pas s'ignorer
+
+Jusqu'ici, **tout** le SQL du projet n'était exercé que contre des doubles. Un
+double reproduit ce qu'on a compris de MariaDB — il ne dira jamais que
+`ROW_NUMBER()` a partitionné autrement qu'on l'imaginait, qu'un mot de deux
+lettres n'est pas indexé, ou qu'un `UPDATE … ORDER BY … LIMIT` a choisi d'autres
+lignes que les plus anciennes. Or c'est exactement le SQL du projet.
+
+Une suite d'intégration interroge donc une vraie MariaDB. Trois décisions la
+structurent.
+
+**Elle applique le schéma du dépôt, avec le découpeur du dépôt.** Les fichiers
+`src/database/sql/*.sql` sont découpés par `decouperSql`, celui-là même que le
+script de mise en route utilise. Si le schéma ne s'appliquait que parce que le
+test le découpait autrement, le test ne prouverait rien du script que
+l'exploitant lancera.
+
+**Elle échoue quand la base manque.** Aucun `skip` conditionnel : sans
+`INTEGRATION_DB_NAME`, la suite lève. Se déclarer « ignorée » ferait passer une
+CI sans base pour une CI verte, et la dette resterait ouverte en paraissant
+fermée. Le harnais refuse par ailleurs toute base dont le nom ne contient pas
+`test`, parce qu'il vide les tables entre les fichiers.
+
+**Elle a sa propre commande et son propre job.** `pnpm test` ne la lance pas :
+elle a un prérequis que les autres suites n'ont pas. Les mêler rendrait la suite
+unitaire dépendante d'un service, et la première machine sans base
+transformerait un échec d'environnement en échec de code.
+
+Ce que les mutations ont confirmé : retirer `AND version = ?` fait tomber deux
+tests, dont celui de la concurrence réelle ; inverser `ORDER BY created_at ASC`
+en fait tomber deux autres ; retirer le filtre `actor_id IS NOT NULL OR …` fait
+tomber la convergence du traitement par lots. Trois garanties qu'aucun double
+n'établissait.
+
+**Coût assumé** — Trois coûts. La CI porte désormais un **service** : un job de
+plus, une image à télécharger, et une classe d'échec nouvelle (base lente à
+démarrer) qui ne dit rien du code. La version est **épinglée à 10.11**, la seule
+interrogée : ces suites ne prouvent rien pour une 11.x, et aucun fichier du
+dépôt ne dit encore sur quelle version tourne la production — la dette est
+consignée dans `ARCHITECTURE.md`. Enfin, le périmètre est **partiel** : quatre
+fichiers couvrent le schéma, l'historique, le verrou optimiste et
+l'anonymisation. Les dépôts de messagerie, de retours et de supervision restent
+sur doubles seuls ; le harnais est en place pour les reprendre, ce qui n'est pas
+la même chose que de l'avoir fait.

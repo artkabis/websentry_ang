@@ -1185,6 +1185,7 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2186   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 246    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 405    | —                               |
+| Intégration SQL    | `apps/api/test/integration/`       | 28     | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 1040   | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 131    | —                               |
 
@@ -1192,6 +1193,29 @@ Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
 cookies, gardes globales) et la sollicitent par HTTP réel : ce qui est vérifié
 est ce qu'un attaquant obtiendrait en parlant à l'API, et non le comportement de
 services isolés.
+
+### La suite d'intégration — le seul endroit où le SQL rencontre un moteur
+
+Partout ailleurs, la base est un double. Un double reproduit ce qu'on a
+**compris** de MariaDB ; il ne dira jamais que `ROW_NUMBER()` a partitionné
+autrement qu'on l'imaginait. Cette suite interroge donc une vraie MariaDB
+(10.11, épinglée dans la CI) et couvre ce que seul le moteur peut établir :
+
+| Construction                          | Ce qui est établi                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| `identity_key … STORED`               | Le site « sans gamme » ne peut pas être dupliqué (deux `NULL` diffèrent)  |
+| `chk_rank`                            | Un rang hors catalogue est refusé par la base, pas seulement par Zod      |
+| Cascades `ON DELETE`                  | Un compte supprimé emporte sa boîte, mais pas les messages qu'il a écrits |
+| `ROW_NUMBER() OVER (PARTITION BY …)`  | Une ligne par site, sa dernière session, départage stable des ex æquo     |
+| `MATCH … AGAINST (… IN BOOLEAN MODE)` | Troncature à droite, opérateurs neutralisés, repli `LIKE` sous 3 lettres  |
+| `UPDATE … WHERE version = ?`          | Deux écritures concurrentes : **une seule** passe                         |
+| `UPDATE … ORDER BY … LIMIT`           | Les lignes **les plus anciennes** d'abord, et le lot converge             |
+
+Elle a sa propre commande et son propre job de CI, parce qu'elle a un prérequis
+que les autres n'ont pas : une base. Elle **échoue** quand cette base manque, au
+lieu de se déclarer ignorée — une suite qui s'auto-dispense de tourner ferait
+passer une CI sans base pour une CI verte. Le harnais refuse par ailleurs toute
+base dont le nom ne contient pas `test` : il vide les tables entre les fichiers.
 
 La base est simulée en mémoire dans ces suites — le sujet y est la décision de
 sécurité, pas le dialecte SQL. La correction des requêtes est couverte par les
@@ -1220,15 +1244,10 @@ Dettes identifiées sur le périmètre déjà livré :
   demanderait de donner un libellé à chaque segment, y compris aux identifiants
   — ce qui suppose de charger la donnée avant de pouvoir nommer le niveau.
 
-- **Tests d'intégration MariaDB** — conteneur éphémère en CI, pour valider le SQL
-  réel des repositories. La dette s'alourdit à chaque module : le verrouillage
-  optimiste du module 2 repose sur `UPDATE ... WHERE version`, et le module 3
-  ajoute une fonction fenêtre (`ROW_NUMBER() OVER (PARTITION BY …)`), une
-  recherche `MATCH … AGAINST` en mode booléen, une colonne générée `STORED`, des
-  cascades de clés étrangères et un `UPDATE … ORDER BY … LIMIT`. Tout cela est
-  reproduit fidèlement par des doubles, mais rien n'est exercé contre MariaDB —
-  or c'est précisément le genre de SQL dont le comportement varie d'un moteur et
-  d'une version à l'autre.
+- **Version de MariaDB en production non déclarée** — les suites d'intégration
+  interrogent MariaDB **10.11**, épinglée dans la CI, et ne prouvent rien
+  au-delà. Aucun fichier du dépôt ne dit sur quelle version tourne la v1 : si
+  c'est une 11.x, la garantie porte à côté. À confirmer, puis à aligner.
 - **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
   et les charger en base au moment de la bascule.
 - **Polarité des sous-critères** — l'éditeur de profil couvre les seuils, les

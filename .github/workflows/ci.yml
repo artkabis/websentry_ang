@@ -128,6 +128,69 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  integration:
+    name: Intégration MariaDB (SQL réel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Après la barrière qualité : inutile de démarrer une base si le lint échoue.
+    needs: quality
+
+    # ── Pourquoi un service et non un double ───────────────────────────────────
+    # Tout le SQL du projet n'était exercé que contre des doubles, qui
+    # reproduisent ce qu'on a COMPRIS du moteur. Or le SQL en jeu — fonction
+    # fenêtre, plein texte booléen, colonne générée, `UPDATE … ORDER BY … LIMIT`,
+    # verrouillage optimiste — est précisément celui dont le comportement varie
+    # d'un moteur et d'une version à l'autre.
+    #
+    # La version est ÉPINGLÉE : ces suites ne prouvent quelque chose que pour la
+    # version qu'elles ont interrogée. Monter de version est un changement à
+    # instruire, pas un effet de bord d'un « latest ».
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: racine-ci
+          MARIADB_DATABASE: websentry_test
+          MARIADB_USER: websentry
+          MARIADB_PASSWORD: integration-ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Installation des dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Build du package partagé
+        run: pnpm --filter @websentry/shared build
+
+      # Les suites appliquent le schéma du dépôt elles-mêmes, avec le MÊME
+      # découpeur que le script de mise en route : ce découpage est donc couvert
+      # par la même occasion.
+      - name: Tests d'intégration
+        run: pnpm --filter @websentry/api test:integration
+        env:
+          INTEGRATION_DB_HOST: 127.0.0.1
+          INTEGRATION_DB_PORT: '3306'
+          INTEGRATION_DB_NAME: websentry_test
+          INTEGRATION_DB_USER: websentry
+          INTEGRATION_DB_PASSWORD: integration-ci
+
   e2e:
     name: E2E navigateur (Playwright)
     runs-on: ubuntu-latest
