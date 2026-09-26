@@ -1907,3 +1907,94 @@ d'erreur au lieu d'un, et sa logique de course (une réponse lente ne doit pas
 écraser un affichage plus récent) existe en double, pour la page et pour la
 recherche. Quatre tests couvrent ces deux courses ; sans eux, le doublon serait
 une dette silencieuse. Si une quatrième vue apparaissait, il faudrait scinder.
+
+---
+
+## 67. TanStack Query sort de la stack, faute d'usage
+
+`@tanstack/angular-query-experimental` figurait dans la stack imposée et était
+provisionné dans `app.config.ts`. Onze modules plus tard, `injectQuery`,
+`injectMutation` et `QueryClient` n'apparaissaient **dans aucun écran** : chaque
+composant charge ses données à la main, en signals, avec son garde de fraîcheur
+et ses quatre états. Le client était provisionné et jamais interrogé.
+
+Coût constaté : **25,47 kio bruts et 6,42 kio transférés** dans le chargement
+initial, pour une capacité que personne n'appelait. Une dépendance non utilisée
+n'est pas neutre — elle est payée par chaque visiteur, à chaque visite.
+
+Deux issues se présentaient : l'adopter réellement, ou la retirer. L'adopter
+supposait de réécrire les onze écrans autour d'un cache dont aucun n'a montré le
+besoin : les données de WebSentry sont soit ponctuelles (un rapport d'analyse),
+soit volontairement rafraîchies (les compteurs, la supervision), et le garde de
+fréquence maison tient en dix lignes. Elle est donc retirée, de la stack comme
+du bundle.
+
+**Coût assumé** — Ce qu'un client de requêtes apporte gratuitement est désormais
+à écrire : déduplication des appels concurrents, invalidation croisée entre
+écrans, rechargement en arrière-plan. Trois écrans le font déjà à la main
+(`MessageNotificationsService` déduplique, la supervision et l'usage
+re-demandent sur action) et rien ne les factorise. Si ce besoin se généralise —
+plusieurs écrans devant partager un même cache invalidable —, la réintroduction
+se décidera alors, avec un usage réel à montrer, et non par avance.
+
+---
+
+## 68. Le chargement initial est gardé par sa CAUSE, pas par sa taille
+
+Le budget de bundle avertissait depuis des mois sans que personne ne sache de
+quoi. Diagnostic, mesuré sur le rapport de build : **124,9 kio de Zod** dans le
+noyau, traînés par cette chaîne —
+
+```text
+app.component  →  MessageNotificationsService   (pastille de non-lus)
+                     └─ premiereIrruption()  importé de message-format.ts
+                          └─ CreateMessageSchema   (une VALEUR)
+                               └─ message.schema.js  →  zod
+```
+
+Une fonction de trois lignes, prise dans un module qui contenait aussi la
+validation du formulaire de composition. `auth.service.ts` faisait de même pour
+valider `/auth/me`. Rien dans l'outillage ne pouvait le dire : un seuil en kio
+annonce qu'on a grossi, jamais par quelle faute.
+
+Quatre corrections, qui tiennent ensemble :
+
+1. **Les règles métier quittent les schémas.** `sInterrompt` et le vocabulaire
+   des importances vivent dans `rules/message.ts`, sans Zod. C'est la règle qui
+   porte les niveaux, et le schéma qui s'aligne dessus — l'inverse faisait
+   dépendre la règle du validateur.
+2. **Le paquet partagé expose des sous-chemins** (`./rules/*`, `./schemas/*`).
+   Sans eux, aucun report n'est possible : un `await import('@websentry/shared')`
+   sur le baril **fait grossir** le noyau de 63 kio, mesuré, parce que le
+   bundler doit alors conserver tout le paquet.
+3. **Les deux clients atteints depuis la coquille chargent leurs schémas à la
+   demande**, par sous-chemin. La validation n'est pas allégée d'un iota : le
+   morceau se télécharge en parallèle de la requête, puis reste en cache.
+4. **Un contrôle bloquant nomme la cause.** `scripts/verifier-noyau.mjs` lit le
+   rapport de build, attribue les octets par paquet, et échoue si un paquet
+   interdit apparaît dans le noyau — en affichant la chaîne d'import jusqu'à la
+   ligne de `src/` à retirer.
+
+Résultat : **475,69 → 342,43 kio bruts** et **127,01 → 93,46 kio transférés**,
+soit −28 % et −26 %.
+
+### Pourquoi le plafond a changé de main
+
+Le plafond de taille est passé du budget d'Angular au contrôle. La raison est
+mécanique : quand son budget échoue, le constructeur **n'écrit pas** de rapport
+de build. Le contrôle capable de nommer la cause ne tournait donc jamais, et le
+développeur repartait chercher à la main ce que l'outil pouvait lui dire. Le
+budget d'Angular garde son `maximumWarning` (370 kB) comme signal précoce et un
+`maximumError` haut (480 kB) comme dernier filet ; la porte bloquante est le
+contrôle, qui affiche le chiffre ET la cause.
+
+**Coût assumé** — Trois coûts. D'abord, deux seuils à tenir cohérents au lieu
+d'un : un plafond dans le script, un budget dans `angular.json`, et rien ne
+vérifie mécaniquement que le second reste au-dessus du premier. Ensuite, le
+plafond du contrôle ne porte que sur le **JavaScript** : une feuille de style qui
+doublerait ne le déclencherait pas, seul le budget d'Angular l'attraperait.
+Enfin, le report du validateur ajoute un aller-retour réseau avant le premier
+rendu quand le cache est froid : sur une liaison lente les 27,75 kio économisés
+le compensent largement, sur un réseau local c'est neutre. Le contrôle, lui,
+dépend de `statsJson` : si l'option disparaît de la configuration, il échoue
+plutôt que de se taire — un contrôle qui n'a rien lu n'a rien vérifié.

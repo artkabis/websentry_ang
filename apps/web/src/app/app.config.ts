@@ -7,7 +7,6 @@ import {
   provideAppInitializer,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
-import { provideTanStackQuery, QueryClient } from '@tanstack/angular-query-experimental';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth/auth.interceptor';
 import { credentialsInterceptor } from './core/auth/credentials.interceptor';
@@ -45,22 +44,6 @@ export const appConfig: ApplicationConfig = {
       withInMemoryScrolling({ anchorScrolling: 'enabled' }),
     ),
     provideHttpClient(withInterceptors([credentialsInterceptor, csrfInterceptor, authInterceptor])),
-    provideTanStackQuery(
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 30_000,
-            // Une erreur 401/403 ne se résout pas en réessayant : seules les
-            // pannes transitoires méritent une nouvelle tentative.
-            retry: (failureCount, error) => {
-              const status = (error as { status?: number })?.status;
-              if (status === 401 || status === 403 || status === 404) return false;
-              return failureCount < 2;
-            },
-          },
-        },
-      }),
-    ),
     provideSessionBootstrap(),
   ],
 };

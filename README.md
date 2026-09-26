@@ -25,8 +25,8 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Supervision & santé                          | ✅      | ✅       | **Livré** |
 | Portail documentation                        | ✅      | ✅       | **Livré** |
 
-**Tests** : 4510 au total — 509 paquet partagé, 2186 unitaires backend,
-651 E2E + sécurité API, 1033 unitaires frontend, 131 E2E navigateur.
+**Tests** : 4519 au total — 511 paquet partagé, 2186 unitaires backend,
+651 E2E + sécurité API, 1040 unitaires frontend, 131 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 96 % lignes backend
 (100 % sur chaque module de sécurité, sur la gestion des comptes, sur le
 journal d'audit, sur les retours **et sur la supervision**), 98 % lignes
@@ -136,17 +136,18 @@ ouvertes : c'est le geste prévu quand on l'a oublié.
 
 ## Commandes
 
-| Commande                            | Effet                                          |
-| ----------------------------------- | ---------------------------------------------- |
-| `pnpm build`                        | Construit les trois paquets                    |
-| `pnpm lint` / `pnpm lint:fix`       | ESLint (règles typées)                         |
-| `pnpm format` / `pnpm format:check` | Prettier                                       |
-| `pnpm type-check`                   | Typecheck des trois paquets, **tests compris** |
-| `pnpm test`                         | Tests unitaires                                |
-| `pnpm test:coverage`                | Tests + seuils **bloquants**                   |
-| `pnpm test:e2e`                     | E2E API (Supertest)                            |
-| `pnpm test:security`                | Suite des 15 failles OWASP                     |
-| `pnpm audit:ci`                     | Audit CVE (seuil `high`)                       |
+| Commande                                      | Effet                                          |
+| --------------------------------------------- | ---------------------------------------------- |
+| `pnpm build`                                  | Construit les trois paquets                    |
+| `pnpm --filter @websentry/web verifier:noyau` | Ce que pèse le chargement initial, par paquet  |
+| `pnpm lint` / `pnpm lint:fix`                 | ESLint (règles typées)                         |
+| `pnpm format` / `pnpm format:check`           | Prettier                                       |
+| `pnpm type-check`                             | Typecheck des trois paquets, **tests compris** |
+| `pnpm test`                                   | Tests unitaires                                |
+| `pnpm test:coverage`                          | Tests + seuils **bloquants**                   |
+| `pnpm test:e2e`                               | E2E API (Supertest)                            |
+| `pnpm test:security`                          | Suite des 15 failles OWASP                     |
+| `pnpm audit:ci`                               | Audit CVE (seuil `high`)                       |
 
 ---
 

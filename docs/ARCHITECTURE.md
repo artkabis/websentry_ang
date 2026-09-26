@@ -1075,11 +1075,31 @@ CGNAT, TEST-NET, multicast et réservées, en IPv4, IPv6, IPv4-mappé-IPv6 et NA
      obtenu par la première.
 - **Résolution de session au démarrage** : les cookies étant httpOnly, `/auth/me`
   est le seul moyen de savoir si une session existe.
-- **Chargement différé par route** : seul le noyau part d'emblée — **475,69 kio
-  bruts, 127,01 kio transférés** au terme du module 10, contre 427 / 113 au
-  moment où le budget a été posé (décision 32). Le seuil d'avertissement
-  (440 kio) est franchi ; le seuil d'erreur (480 kio), qui **échoue le build**,
-  ne l'est plus qu'à 4,31 kio près. C'est une dette ouverte, consignée plus bas.
+- **Chargement différé par route** : seul le noyau part d'emblée — **342,43 kio
+  bruts, 93,46 kio transférés**, dont 304,96 kio de JavaScript. Le validateur
+  n'y est plus : les schémas se chargent par sous-chemin, depuis le code qui
+  valide (décision 68). Ce qui reste est le plancher du framework — Angular
+  pèse 321,5 des 384,1 kio de sources attribuées.
+- **Le chargement initial est gardé par sa CAUSE.**
+  `apps/web/scripts/verifier-noyau.mjs` lit le rapport de build, reconstitue les
+  morceaux téléchargés avant toute navigation (les entrées, plus la fermeture de
+  leurs imports **statiques** — un `import()` dynamique ouvre au contraire un
+  morceau différé), attribue les octets par paquet, et **échoue** si un paquet
+  interdit y figure ou si le JavaScript initial dépasse 330 kio. Le message
+  affiche la chaîne d'import jusqu'à la ligne de `src/` à retirer :
+
+  ```text
+  ✘ « zod » est dans le chargement initial (123.9 kio).
+    Chaîne d’import :
+      src/app/core/auth/auth.service.ts
+        └─ packages/shared/dist/esm/schemas/auth.schema.js
+          └─ zod/index.js
+  ```
+
+  Il tourne dans `pnpm --filter @websentry/web build`, via `scripts/build.mjs`
+  qui l'exécute **même si `ng build` a échoué** dès lors qu'un rapport existe —
+  sans quoi un budget dépassé masquerait la cause (décision 68).
+
 - **La configuration PostCSS s'appelle `.postcssrc.json`** — le constructeur
   Angular ne lit que ce nom ou `postcss.config.json`. Sous tout autre nom, elle
   est ignorée EN SILENCE : Tailwind ne tourne pas, la feuille part avec sa
@@ -1161,11 +1181,11 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 
 | Suite              | Emplacement                        | Volume | Seuil                           |
 | ------------------ | ---------------------------------- | ------ | ------------------------------- |
-| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 509    | 95 %                            |
+| Paquet partagé     | `packages/shared/src/**/*.spec.ts` | 511    | 95 %                            |
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2186   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 246    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 405    | —                               |
-| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 1033   | 80 %                            |
+| Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 1040   | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 131    | —                               |
 
 Les suites E2E montent l'application **assemblée** (adapter Fastify, helmet,
@@ -1209,16 +1229,6 @@ Dettes identifiées sur le périmètre déjà livré :
   reproduit fidèlement par des doubles, mais rien n'est exercé contre MariaDB —
   or c'est précisément le genre de SQL dont le comportement varie d'un moteur et
   d'une version à l'autre.
-- **Marge de budget du bundle initial épuisée** — le noyau pèse 475,69 kio
-  bruts pour un seuil d'erreur à 480. Les écrans sont pourtant tous différés :
-  ce qui a grossi, c'est le noyau lui-même — routeur, intercepteurs, client de
-  requêtes, service d'authentification, coquille et navigation. Le prochain
-  ajout au chemin initial fera **échouer** le build, ce qui est exactement
-  l'effet recherché par la décision 32, mais ne laisse plus de place. Deux
-  pistes, à instruire avant d'y toucher : différer le client TanStack Query,
-  qu'aucun écran n'utilise avant la première navigation, et vérifier ce que la
-  coquille embarque réellement. Relever le seuil serait renoncer à la mesure.
-
 - **Script d'import des profils v1** — lire les `settings-{gamme}.json` existants
   et les charger en base au moment de la bascule.
 - **Polarité des sous-critères** — l'éditeur de profil couvre les seuils, les

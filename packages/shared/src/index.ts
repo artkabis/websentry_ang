@@ -1,4 +1,5 @@
 export * from './types/rbac.js';
+export * from './rules/message.js';
 export * from './analyzers-registry.js';
 export * from './check-weights.js';
 export * from './schemas/auth.schema.js';

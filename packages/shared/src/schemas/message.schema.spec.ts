@@ -9,7 +9,6 @@ import {
   NOMBRE_MAX_PIECES_JOINTES,
   nomAffichable,
   PieceJointeSchema,
-  sInterrompt,
   TAILLE_MAX_PIECE_JOINTE,
   typeReconnu,
   TYPES_PIECE_JOINTE,
@@ -32,14 +31,6 @@ const ENVOI = {
   body: 'La bascule est programmée jeudi 14h. Aucun audit ne sera perdu.',
   audience: 'tous' as const,
 };
-
-describe('sInterrompt', () => {
-  it('ne laisse QUE « critique » s’imposer à l’écran', () => {
-    expect(sInterrompt('critique')).toBe(true);
-    expect(sInterrompt('haute')).toBe(false);
-    expect(sInterrompt('normale')).toBe(false);
-  });
-});
 
 describe('typeReconnu', () => {
   it.each([

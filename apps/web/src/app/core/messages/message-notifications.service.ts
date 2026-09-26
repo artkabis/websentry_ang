@@ -1,6 +1,6 @@
 import { inject, Injectable, signal } from '@angular/core';
 import type { Message, MessageCounts } from '@websentry/shared';
-import { premiereIrruption } from '../../features/messages/message-format';
+import { premiereIrruption } from './irruption';
 import { MessagesApi } from './messages.api';
 
 /** Compteurs vides — l'état d'un compte qui n'a encore rien reçu. */

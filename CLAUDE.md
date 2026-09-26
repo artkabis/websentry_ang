@@ -136,8 +136,9 @@ creux pour flatter la couverture.
   chaque refresh), cookies `httpOnly` + `Secure` + `SameSite=Strict`, CSRF
   double-submit, throttler, `@fastify/helmet`, garde SSRF (DNS multi-adresses,
   épinglage d'IP, plages privées bloquées).
-- **Frontend** — Angular standalone, signals, zoneless, Tailwind CSS 4,
-  `@tanstack/angular-query-experimental`.
+- **Frontend** — Angular standalone, signals, zoneless, Tailwind CSS 4. Le
+  chargement des données se fait en signals, sans client de requêtes tiers
+  (arbitrage 67).
 - **Outillage** — monorepo pnpm, Vitest, Playwright, ESLint + Prettier, Husky +
   lint-staged bloquants.
 

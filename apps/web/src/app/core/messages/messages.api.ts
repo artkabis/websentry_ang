@@ -2,15 +2,26 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
-  MessageCountsSchema,
-  MessageListResponseSchema,
-  MessageSchema,
   type CreateMessageInput,
   type Message,
   type MessageCounts,
   type MessageListResponse,
 } from '@websentry/shared';
 import { API_BASE_URL } from '../api/api.config';
+
+/**
+ * Les schémas sont chargés À LA DEMANDE, par sous-chemin.
+ *
+ * Ce client est atteint depuis la coquille — la pastille de non-lus lit les
+ * compteurs au démarrage. Un import statique mettrait donc les 125 kio de Zod
+ * dans le morceau initial, pour une validation qui n'arrive qu'après la
+ * réponse du serveur. Le morceau différé se télécharge EN PARALLÈLE de la
+ * requête, et le module reste ensuite en cache.
+ *
+ * La validation n'est pas allégée d'un iota : chaque réponse passe par le même
+ * schéma partagé qu'avant.
+ */
+const schemas = () => import('@websentry/shared/schemas/message');
 
 /** Filtres de lecture, tels que l'interface les manipule — tout est facultatif. */
 export interface MessageFilters {
@@ -54,17 +65,17 @@ export class MessagesApi {
     const brut = await firstValueFrom(
       this.http.get<unknown>(`${this.baseUrl}/messages`, { params: this.toParams(filtres) }),
     );
-    return MessageListResponseSchema.parse(brut);
+    return (await schemas()).MessageListResponseSchema.parse(brut);
   }
 
   async counts(): Promise<MessageCounts> {
     const brut = await firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/messages/compteurs`));
-    return MessageCountsSchema.parse(brut);
+    return (await schemas()).MessageCountsSchema.parse(brut);
   }
 
   async get(id: string): Promise<Message> {
     const brut = await firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/messages/${id}`));
-    return MessageSchema.parse(brut);
+    return (await schemas()).MessageSchema.parse(brut);
   }
 
   /** Ouvrir vaut lecture : l'API marque, et rend le message à jour. */
@@ -72,21 +83,21 @@ export class MessagesApi {
     const brut = await firstValueFrom(
       this.http.post<unknown>(`${this.baseUrl}/messages/${id}/lu`, {}),
     );
-    return MessageSchema.parse(brut);
+    return (await schemas()).MessageSchema.parse(brut);
   }
 
   async setArchived(id: string, archived: boolean): Promise<Message> {
     const brut = await firstValueFrom(
       this.http.patch<unknown>(`${this.baseUrl}/messages/${id}`, { archived }),
     );
-    return MessageSchema.parse(brut);
+    return (await schemas()).MessageSchema.parse(brut);
   }
 
   async markAllRead(): Promise<MessageCounts> {
     const brut = await firstValueFrom(
       this.http.post<unknown>(`${this.baseUrl}/messages/tout-lu`, {}),
     );
-    return MessageCountsSchema.parse(brut);
+    return (await schemas()).MessageCountsSchema.parse(brut);
   }
 
   /**
@@ -108,7 +119,7 @@ export class MessagesApi {
     for (const fichier of fichiers) corps.append('fichiers', fichier, fichier.name);
 
     const brut = await firstValueFrom(this.http.post<unknown>(`${this.baseUrl}/messages`, corps));
-    return MessageSchema.parse(brut);
+    return (await schemas()).MessageSchema.parse(brut);
   }
 
   /**

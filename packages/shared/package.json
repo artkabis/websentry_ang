@@ -8,6 +8,7 @@
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/cjs/index.d.ts",
+  "//exports": "Le baril ('.') reste l'entrée normale. Les sous-chemins existent pour une raison précise : un import DYNAMIQUE du baril ne sert à rien — le bundler doit alors garder tout le paquet, et le chargement initial grossit au lieu de maigrir (mesuré : +63 kio). Seul un sous-chemin permet de différer un schéma sans embarquer les autres. 'rules/*' ne contient AUCUN validateur : c'est ce qui rend une règle métier importable depuis le chemin de démarrage.",
   "exports": {
     ".": {
       "import": {
@@ -17,6 +18,26 @@
       "require": {
         "types": "./dist/cjs/index.d.ts",
         "default": "./dist/cjs/index.js"
+      }
+    },
+    "./schemas/*": {
+      "import": {
+        "types": "./dist/esm/schemas/*.schema.d.ts",
+        "default": "./dist/esm/schemas/*.schema.js"
+      },
+      "require": {
+        "types": "./dist/cjs/schemas/*.schema.d.ts",
+        "default": "./dist/cjs/schemas/*.schema.js"
+      }
+    },
+    "./rules/*": {
+      "import": {
+        "types": "./dist/esm/rules/*.d.ts",
+        "default": "./dist/esm/rules/*.js"
+      },
+      "require": {
+        "types": "./dist/cjs/rules/*.d.ts",
+        "default": "./dist/cjs/rules/*.js"
       }
     }
   },

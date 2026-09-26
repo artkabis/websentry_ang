@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { IMPORTANCES_MESSAGE } from '../rules/message.js';
 import { VALID_RANKS } from '../types/rbac.js';
 
 /**
@@ -15,26 +16,13 @@ import { VALID_RANKS } from '../types/rbac.js';
  */
 
 /**
- * Importance — elle pilote l'IRRUPTION, pas seulement la couleur.
+ * Le schéma S'ALIGNE sur le vocabulaire de la règle, et non l'inverse.
  *
- * Trois niveaux, parce qu'ils se distinguent par un comportement observable et
- * non par une nuance : `normale` attend dans la boîte, `haute` se signale en
- * tête de liste, `critique` s'impose à l'écran jusqu'à ce qu'on l'ait lue.
- * Un quatrième niveau n'aurait aucun comportement propre à décrire.
+ * `IMPORTANCES_MESSAGE` vit dans `rules/message.ts`, sans Zod : c'est ce qui
+ * permet à l'interface d'importer la règle d'irruption sans embarquer le
+ * validateur (cf. `DECISIONS.md` 68).
  */
-export const MessageImportanceSchema = z.enum(['normale', 'haute', 'critique']);
-export type MessageImportance = z.infer<typeof MessageImportanceSchema>;
-
-/**
- * Un message s'impose-t-il à l'écran ?
- *
- * La règle vit ICI et non dans le composant : le serveur s'en sert pour
- * décider ce qu'il remonte en priorité, l'interface pour décider ce qu'elle
- * affiche. Deux copies de la même règle divergeraient.
- */
-export function sInterrompt(importance: MessageImportance): boolean {
-  return importance === 'critique';
-}
+export const MessageImportanceSchema = z.enum(IMPORTANCES_MESSAGE);
 
 /**
  * À qui s'adresse un message.

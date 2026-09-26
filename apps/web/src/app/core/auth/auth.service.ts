@@ -2,8 +2,6 @@ import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
-  AuthSessionSchema,
-  CurrentUserSchema,
   rankHasPermission,
   rankToRole,
   RANKS,
@@ -13,6 +11,16 @@ import {
   type Role,
 } from '@websentry/shared';
 import { API_BASE_URL } from '../api/api.config';
+
+/**
+ * Les schémas d'authentification sont chargés À LA DEMANDE, par sous-chemin.
+ *
+ * `refreshProfile()` est appelée par l'initialiseur d'application : elle est
+ * donc, littéralement, la première ligne de code métier exécutée. Un import
+ * statique y placerait Zod avant le premier pixel. Ici, le morceau se
+ * télécharge pendant que `/auth/me` voyage, et la validation reste entière.
+ */
+const schemas = () => import('@websentry/shared/schemas/auth');
 
 /**
  * État d'authentification de l'application.
@@ -95,7 +103,7 @@ export class AuthService {
       );
       // La réponse est validée contre le schéma PARTAGÉ : une API qui dérive est
       // détectée ici, pas trois écrans plus loin.
-      const session = AuthSessionSchema.parse(raw);
+      const session = (await schemas()).AuthSessionSchema.parse(raw);
       await this.refreshProfile();
       return session;
     } catch (err) {
@@ -127,7 +135,7 @@ export class AuthService {
     this._loading.set(true);
     try {
       const raw = await firstValueFrom(this.http.get<unknown>(`${this.baseUrl}/auth/me`));
-      const user = CurrentUserSchema.parse(raw);
+      const user = (await schemas()).CurrentUserSchema.parse(raw);
       this._user.set(user);
       return user;
     } catch {

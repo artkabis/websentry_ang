@@ -3,14 +3,17 @@ import {
   MessageImportanceSchema,
   MIMES_PIECE_JOINTE,
   NOMBRE_MAX_PIECES_JOINTES,
-  sInterrompt,
   TAILLE_MAX_PIECE_JOINTE,
   TYPES_PIECE_JOINTE,
   type CreateMessageInput,
-  type Message,
   type MessageImportance,
 } from '@websentry/shared';
 import type { MessageFilters } from '../../core/messages/messages.api';
+// Les deux règles d'irruption vivent dans `core/` : la coquille en a besoin au
+// DÉMARRAGE, et elle ne peut pas dépendre d'un module qui, comme celui-ci,
+// importe des schémas — donc Zod. Elles sont ré-exportées ici pour que les
+// écrans gardent un point d'entrée unique.
+export { doitInterrompre, premiereIrruption } from '../../core/messages/irruption';
 
 /**
  * Messagerie — fonctions PURES : filtres d'URL, libellés, validation.
@@ -281,19 +284,4 @@ export function libelleAudience(audience: string): string {
     default:
       return audience;
   }
-}
-
-/**
- * Le message doit-il s'imposer à l'écran ?
- *
- * La règle vient du paquet partagé : la recopier ici la ferait diverger de
- * celle que le serveur applique pour remonter ses compteurs.
- */
-export function doitInterrompre(message: Message): boolean {
-  return message.readAt === null && sInterrompt(message.importance);
-}
-
-/** Le premier message qui doit s'imposer, ou `null`. */
-export function premiereIrruption(messages: readonly Message[]): Message | null {
-  return messages.find(doitInterrompre) ?? null;
 }
