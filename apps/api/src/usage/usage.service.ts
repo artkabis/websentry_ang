@@ -129,7 +129,11 @@ export class UsageService {
     ]);
 
     return {
-      sources: SOURCES(politique.afterDays, this.config.retention.purgeAfterDays),
+      sources: SOURCES(
+        politique.afterDays,
+        this.config.retention.purgeAfterDays,
+        this.config.retention.trashRetentionDays,
+      ),
       anonymisation: {
         apresJours: politique.afterDays,
         anonymisees,
@@ -144,7 +148,11 @@ export class UsageService {
 }
 
 /** Les tables qui portent de la donnée personnelle, et pourquoi. */
-function SOURCES(anonymiseApres: number, purgeApres: number): UsageSource[] {
+function SOURCES(
+  anonymiseApres: number,
+  purgeApres: number,
+  corbeilleApres: number,
+): UsageSource[] {
   return [
     {
       table: 'audit_log',
@@ -159,6 +167,14 @@ function SOURCES(anonymiseApres: number, purgeApres: number): UsageSource[] {
       // Les sessions sont purgées par la rétention des rapports ; leur
       // conservation suit donc cette politique-là, et non la nôtre.
       retentionJours: purgeApres,
+    },
+    {
+      table: 'scan_trash',
+      finalite: 'Permettre de revenir sur une suppression, et dire qui l’a faite',
+      donnees: ['identifiant de compte', 'nom au moment de la suppression'],
+      // La corbeille se vide d'elle-même : l'entrée part entière, nom compris,
+      // à l'échéance inscrite lors de la suppression.
+      retentionJours: corbeilleApres,
     },
     {
       table: 'users',

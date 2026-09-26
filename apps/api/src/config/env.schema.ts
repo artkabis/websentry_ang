@@ -78,6 +78,16 @@ export const EnvSchema = z
      * scans anciens longtemps après que leurs rapports ont disparu.
      */
     SCAN_PURGE_AFTER_DAYS: intFromEnv(180, 1),
+    /**
+     * Jours pendant lesquels une suppression reste RÉCUPÉRABLE depuis la
+     * corbeille. Au-delà, la rétention efface l'entrée définitivement.
+     *
+     * Trente jours par défaut : c'est le délai au bout duquel une suppression
+     * faite par erreur a été constatée, ou ne le sera plus. La date d'échéance
+     * est figée à l'écriture, donc allonger ce réglage ne ressuscite pas une
+     * entrée que l'équipe croyait déjà partie.
+     */
+    SCAN_TRASH_RETENTION_DAYS: intFromEnv(30, 1),
     /** Lignes traitées par passage du travail de fond — borne les verrous pris. */
     SCAN_RETENTION_BATCH: intFromEnv(500, 1),
     /** `false` désactive entièrement le travail de fond de rétention. */

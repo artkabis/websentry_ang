@@ -17,4 +17,5 @@ export * from './schemas/supervision.schema.js';
 export * from './schemas/message.schema.js';
 export * from './schemas/usage.schema.js';
 export * from './schemas/docs.schema.js';
+export * from './schemas/trash.schema.js';
 export * from './docs/markdown.js';

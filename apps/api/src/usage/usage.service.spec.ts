@@ -209,7 +209,12 @@ describe('UsageService', () => {
       const t = build();
       const registre = await t.service.governance(MAINTENANT);
 
-      expect(registre.sources.map(s => s.table)).toEqual(['audit_log', 'scan_sessions', 'users']);
+      expect(registre.sources.map(s => s.table)).toEqual([
+        'audit_log',
+        'scan_sessions',
+        'scan_trash',
+        'users',
+      ]);
       expect(registre.sources.every(s => s.finalite.length > 0)).toBe(true);
       expect(registre.sources[0]?.donnees).toContain('adresse IP');
     });

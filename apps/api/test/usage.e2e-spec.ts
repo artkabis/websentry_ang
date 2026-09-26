@@ -175,7 +175,7 @@ describe('Analytics d’usage (E2E)', () => {
       const res = await lire('/usage/gouvernance', admin).expect(200);
 
       const tables = (res.body.sources as { table: string }[]).map(s => s.table);
-      expect(tables).toEqual(['audit_log', 'scan_sessions', 'users']);
+      expect(tables).toEqual(['audit_log', 'scan_sessions', 'scan_trash', 'users']);
       expect(res.body.anonymisation.apresJours).toBeGreaterThan(0);
     });
 

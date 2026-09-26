@@ -441,6 +441,8 @@ export const RetentionResultSchema = z
   .object({
     compressed: z.number().int().min(0),
     purged: z.number().int().min(0),
+    /** Entrées de corbeille échues, effacées définitivement par ce passage. */
+    trashPurged: z.number().int().min(0),
     /** Lignes restant à traiter — non nul quand le passage a atteint sa borne. */
     remaining: z.number().int().min(0),
     durationMs: z.number().int().min(0),

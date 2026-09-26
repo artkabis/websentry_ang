@@ -3,6 +3,7 @@ import { gzipSync } from 'node:zlib';
 import { ScanSearchQuerySchema, type ScanIngest } from '@websentry/shared';
 import type { AuditService } from '../audit/audit.service.js';
 import type { ScanRepository } from '../database/repositories/scan.repository.js';
+import type { ScanTrashService } from './scan-trash.service.js';
 import { ScansService } from './scans.service.js';
 import {
   ScanPageNotFoundError,
@@ -93,11 +94,18 @@ function build(available = true) {
     ingestSession: vi.fn().mockResolvedValue(undefined),
   };
   const audit = { record: vi.fn().mockResolvedValue(undefined) };
+  // La corbeille rend l'identifiant de l'entrée créée, ou `null` quand il n'y
+  // avait rien à archiver.
+  const corbeille = {
+    archiver: vi.fn().mockResolvedValue('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+    archiverSite: vi.fn().mockResolvedValue('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+  };
   const service = new ScansService(
     repo as unknown as ScanRepository,
     audit as unknown as AuditService,
+    corbeille as unknown as ScanTrashService,
   );
-  return { service, repo, audit };
+  return { service, repo, audit, corbeille };
 }
 
 const actor = { actorId: 'u1', actorName: 'alice', ipAddress: '10.0.0.1' };
@@ -700,7 +708,14 @@ describe('ScansService', () => {
       t.repo.deleteDomain.mockResolvedValue(3);
       await expect(t.service.deleteDomain('exemple.fr', actor)).resolves.toBe(40);
       expect(t.audit.record).toHaveBeenCalledWith(
-        expect.objectContaining({ details: { domain: 'exemple.fr', pages: 40, sites: 3 } }),
+        expect.objectContaining({
+          details: {
+            domain: 'exemple.fr',
+            pages: 40,
+            sites: 3,
+            trashId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          },
+        }),
       );
     });
   });

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { RetentionResult } from '@websentry/shared';
 import { AppConfigService } from '../config/app-config.service.js';
 import { ScanRetentionRepository } from '../database/repositories/scan-retention.repository.js';
+import { ScanTrashService } from './scan-trash.service.js';
 import { compressReport } from './scans.service.js';
 
 /**
@@ -47,6 +48,7 @@ export class ScanRetentionService {
   constructor(
     private readonly repo: ScanRetentionRepository,
     private readonly config: AppConfigService,
+    private readonly corbeille: ScanTrashService,
   ) {}
 
   /**
@@ -64,7 +66,13 @@ export class ScanRetentionService {
 
   async run(): Promise<RetentionResult> {
     const started = Date.now();
-    const empty: RetentionResult = { compressed: 0, purged: 0, remaining: 0, durationMs: 0 };
+    const empty: RetentionResult = {
+      compressed: 0,
+      purged: 0,
+      trashPurged: 0,
+      remaining: 0,
+      durationMs: 0,
+    };
 
     if (!this.repo.available || this.running) return empty;
     const policy = this.config.retention;
@@ -74,6 +82,10 @@ export class ScanRetentionService {
     try {
       const compressed = await this.compressBatch(policy.compressAfterDays, policy.batchSize);
       const purged = await this.repo.purge(policy.purgeAfterDays, policy.batchSize);
+      // La corbeille est vidée par le MÊME passage : un second travail de fond
+      // pour une seule requête ajouterait un minuteur à surveiller et une
+      // occasion de plus qu'il ne tourne pas.
+      const trashPurged = await this.corbeille.purgerEchues();
 
       const pending = await this.repo.countPending(policy.compressAfterDays, policy.purgeAfterDays);
       const remaining = pending.compressible + pending.purgeable;
@@ -81,14 +93,15 @@ export class ScanRetentionService {
       const result: RetentionResult = {
         compressed,
         purged,
+        trashPurged,
         remaining,
         durationMs: Date.now() - started,
       };
 
-      if (compressed > 0 || purged > 0) {
+      if (compressed > 0 || purged > 0 || trashPurged > 0) {
         this.logger.log(
-          `Rétention : ${compressed} rapport(s) compressé(s), ${purged} purgé(s) ` +
-            `en ${result.durationMs} ms`,
+          `Rétention : ${compressed} rapport(s) compressé(s), ${purged} purgé(s), ` +
+            `${trashPurged} entrée(s) de corbeille effacée(s) en ${result.durationMs} ms`,
         );
       }
 

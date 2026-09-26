@@ -19,6 +19,7 @@ import { UsageRepository } from './repositories/usage.repository.js';
 import { ProfileRepository } from './repositories/profile.repository.js';
 import { ScanRepository } from './repositories/scan.repository.js';
 import { ScanRetentionRepository } from './repositories/scan-retention.repository.js';
+import { ScanTrashRepository } from './repositories/scan-trash.repository.js';
 
 /**
  * Dépôts d'authentification, selon qu'il y ait une base ou non.
@@ -68,6 +69,7 @@ const DEPOTS_AUTH = [
     ProfileRepository,
     ScanRepository,
     ScanRetentionRepository,
+    ScanTrashRepository,
   ],
   exports: [
     DatabaseService,
@@ -83,6 +85,7 @@ const DEPOTS_AUTH = [
     ProfileRepository,
     ScanRepository,
     ScanRetentionRepository,
+    ScanTrashRepository,
   ],
 })
 export class DatabaseModule {}

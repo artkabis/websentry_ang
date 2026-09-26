@@ -102,6 +102,7 @@ export class AppConfigService {
     enabled: boolean;
     compressAfterDays: number;
     purgeAfterDays: number;
+    trashRetentionDays: number;
     batchSize: number;
   } {
     const compressAfterDays = this.get('SCAN_COMPRESS_AFTER_DAYS');
@@ -110,6 +111,7 @@ export class AppConfigService {
       enabled: this.get('SCAN_RETENTION_ENABLED'),
       compressAfterDays,
       purgeAfterDays,
+      trashRetentionDays: this.get('SCAN_TRASH_RETENTION_DAYS'),
       batchSize: this.get('SCAN_RETENTION_BATCH'),
     };
   }

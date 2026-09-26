@@ -1,6 +1,8 @@
 import { Logger, Module, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import { AppConfigService } from '../config/app-config.service.js';
 import { ScanRetentionService } from './scan-retention.service.js';
+import { ScanTrashController } from './scan-trash.controller.js';
+import { ScanTrashService } from './scan-trash.service.js';
 import { ScansController } from './scans.controller.js';
 import { ScansService } from './scans.service.js';
 
@@ -18,9 +20,12 @@ const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
  * dont l'objet même est de faire foi.
  */
 @Module({
-  controllers: [ScansController],
-  providers: [ScansService, ScanRetentionService],
-  exports: [ScansService, ScanRetentionService],
+  // ORDRE SIGNIFICATIF : la corbeille avant l'historique. Nest résout les routes
+  // dans l'ordre de déclaration, et `GET /scans/:pageId` accepterait
+  // « corbeille » comme identifiant de page. Un test E2E fixe ce point.
+  controllers: [ScanTrashController, ScansController],
+  providers: [ScansService, ScanRetentionService, ScanTrashService],
+  exports: [ScansService, ScanRetentionService, ScanTrashService],
 })
 export class ScansModule implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(ScansModule.name);

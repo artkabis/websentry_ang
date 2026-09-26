@@ -28,7 +28,7 @@ describe('schéma MariaDB', () => {
     await viderTables(db);
   });
 
-  it('s’applique en entier, avec les tables des cinq modules', async () => {
+  it('s’applique en entier, avec les tables des six schémas', async () => {
     // Le schéma est découpé par le MÊME utilitaire que le script de mise en
     // route : ce test couvre donc aussi ce découpage.
     const tables = await db.query<RowDataPacket & { nom: string }>(
@@ -48,6 +48,7 @@ describe('schéma MariaDB', () => {
       'messages',
       'scan_pages',
       'scan_sessions',
+      'scan_trash',
       'settings_profiles',
       'sites',
       'user_permissions',

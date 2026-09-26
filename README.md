@@ -24,9 +24,10 @@ Cette v2 reprend le périmètre de la v1 (Fastify + React) sur une stack
 | Analytics d'usage / RGPD                     | ✅      | ✅       | **Livré** |
 | Supervision & santé                          | ✅      | ✅       | **Livré** |
 | Portail documentation                        | ✅      | ✅       | **Livré** |
+| Corbeille des scans (restauration, export)   | ✅      | ⬜       | En cours  |
 
-**Tests** : 4547 au total — 511 paquet partagé, 2186 unitaires backend,
-651 E2E + sécurité API, **28 intégration MariaDB**, 1040 unitaires frontend,
+**Tests** : 4620 au total — 511 paquet partagé, 2251 unitaires backend,
+658 E2E + sécurité API, 37 intégration MariaDB, 1040 unitaires frontend,
 131 E2E navigateur.
 **Couverture** : 100 % lignes paquet partagé, 96 % lignes backend
 (100 % sur chaque module de sécurité, sur la gestion des comptes, sur le

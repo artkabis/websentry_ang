@@ -582,6 +582,67 @@ impossible.
 
 ---
 
+## Corbeille des scans
+
+La v1 conserve les suppressions en masse dans une table d'archive avant purge,
+avec restauration et export. Le module 3 de la v2 avait livré les quatre portées
+de suppression **sans** ce filet, ce qui a eu une conséquence visible :
+l'interface ne les proposait pas, parce qu'offrir l'effacement définitif d'un
+domaine entier en un clic aurait été imprudent.
+
+```text
+  DELETE /scans/sites            GET  /scans/corbeille
+  DELETE /scans/domains/:domain  GET  /scans/corbeille/:id/export
+  DELETE /scans/sessions/:id     POST /scans/corbeille/:id/restauration
+        │                        DELETE /scans/corbeille/:id
+        ▼
+  archiver()  ─── instantané gzippé ──▶  scan_trash
+        │                                    │
+        ▼                                    ├─ restauration : sites, sessions, pages
+  DELETE réel (cascades)                     └─ purge à l'échéance (rétention)
+```
+
+L'archivage a lieu **avant** le `DELETE`, et c'est la seule ordonnance
+possible : après la cascade, les lignes n'existent plus. Son échec empêche donc
+la suppression — mieux vaut un geste refusé qu'un effacement sans filet.
+
+### Une archive, et non un `deleted_at`
+
+Un marqueur de suppression logique obligerait **chaque** lecture de l'historique
+à le filtrer, et un filtre oublié ne casse rien de visible : il laisse remonter
+des lignes supprimées. L'archive ne touche à aucun chemin de lecture — le SQL de
+l'historique reste exactement celui qui est testé (décision 70).
+
+L'instantané est capturé par `SELECT *`, jamais par une liste de colonnes écrite
+à la main : une colonne ajoutée plus tard à `scan_pages` serait sinon perdue à la
+restauration sans que rien ne le signale. Un test d'intégration compare les clés
+de l'instantané au schéma réel. La restauration, elle, filtre les colonnes
+**générées** — MariaDB refuse qu'on leur affecte une valeur.
+
+### Ce que la restauration sait gérer
+
+| Situation                     | Réponse                                                          |
+| ----------------------------- | ---------------------------------------------------------------- |
+| Le site a été rescanné depuis | Le site existant est réutilisé, les sessions redirigées vers lui |
+| La session est déjà revenue   | Elle est **ignorée**, jamais écrasée : le rescan est plus récent |
+| Une page sans sa session      | Ignorée — la rattacher mélangerait deux audits distincts         |
+
+Le bilan rendu distingue `sessions` de `skippedSessions` : annoncer
+« restauré » sans cette distinction laisserait croire à une reprise complète.
+
+### Portée, et ce qu'elle exclut
+
+La corbeille couvre les portées **session**, **site** et **domaine**. La
+suppression page par page reste définitive, comme en v1 : archiver un ménage de
+routine doublerait le stockage pour un geste qu'on ne regrette pas.
+
+L'entrée disparaît de la corbeille à la restauration : ce qui y reste est, par
+définition, ce qui peut encore être restauré. Un état « restaurée » obligerait
+chaque lecture à le filtrer pour une information que le journal d'audit porte
+déjà.
+
+---
+
 ## Supervision
 
 Trois pannes se détectaient déjà et n'étaient qu'écrites dans les journaux :
@@ -1185,7 +1246,7 @@ Deux réglages non évidents, que leur discrétion expose à être défaits :
 | Unitaires backend  | `apps/api/src/**/*.spec.ts`        | 2186   | 85 % global, **100 %** sécurité |
 | E2E API            | `apps/api/test/*.e2e-spec.ts`      | 246    | —                               |
 | Sécurité OWASP     | `apps/api/test/security/`          | 405    | —                               |
-| Intégration SQL    | `apps/api/test/integration/`       | 28     | —                               |
+| Intégration SQL    | `apps/api/test/integration/`       | 37     | —                               |
 | Unitaires frontend | `apps/web/src/**/*.spec.ts`        | 1040   | 80 %                            |
 | E2E navigateur     | `apps/web/e2e/`                    | 131    | —                               |
 
@@ -1258,12 +1319,12 @@ Dettes identifiées sur le périmètre déjà livré :
 - **Journal d'audit append-only en base** — l'absence de méthode `UPDATE`/`DELETE`
   est garantie côté applicatif et testée ; la verrouiller aussi par des droits
   MariaDB (`GRANT INSERT, SELECT` uniquement) serait plus robuste.
-- **Corbeille des scans supprimés** — la v1 dispose d'une table `scan_archive`
-  qui conserve les sessions supprimées en masse avant purge, avec restauration
-  et export. Le module 3 livre les suppressions **sans** ce filet. La table
-  existe et n'est pas touchée ; le module qui la réexpose reste à faire, et
-  d'ici là une suppression est définitive — ce que l'interface annonce.
 - **Suppressions depuis l'interface** — l'API expose les quatre portées (pages,
-  session, site, domaine) et la suite sécurité les couvre ; l'interface ne les
-  propose pas encore. Elles attendent la corbeille : offrir une suppression
-  définitive d'un domaine entier en un clic, sans filet, serait imprudent.
+  session, site, domaine) et la corbeille couvre désormais les trois portées de
+  session ; l'interface ne les propose toujours pas. Le filet existe, l'écran
+  reste à faire.
+
+- **Suppression page par page définitive** — la corbeille couvre les portées
+  session, site et domaine, comme l'archive de la v1. Effacer des pages une à
+  une reste sans reprise, et peut faire disparaître une session devenue vide par
+  la réconciliation. C'est le comportement v1 ; l'écran devra le dire.

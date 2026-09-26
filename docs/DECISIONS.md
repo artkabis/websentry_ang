@@ -2045,3 +2045,79 @@ fichiers couvrent le schéma, l'historique, le verrou optimiste et
 l'anonymisation. Les dépôts de messagerie, de retours et de supervision restent
 sur doubles seuls ; le harnais est en place pour les reprendre, ce qui n'est pas
 la même chose que de l'avoir fait.
+
+---
+
+## 70. La corbeille est une ARCHIVE, pas un marqueur de suppression
+
+La v1 conserve les suppressions en masse dans une table d'archive avant purge.
+La v2 avait livré les quatre portées de suppression sans ce filet — et
+l'interface ne les proposait donc pas : offrir l'effacement définitif d'un
+domaine entier en un clic, sans reprise possible, aurait été imprudent. C'était
+le dernier écart fonctionnel face à la v1 sur le périmètre livré.
+
+Deux implémentations se présentaient.
+
+Un **`deleted_at`** sur les sessions aurait évité tout doublon de stockage. Il
+obligeait en revanche chaque lecture de l'historique à le filtrer — et un filtre
+oublié ne casse rien de visible : il laisse remonter des lignes supprimées, sans
+erreur, sans test rouge. Il posait aussi un problème sans réponse propre : la
+suppression d'un site doit faire disparaître le site de la liste, or la jointure
+garde délibérément visibles les sites sans session.
+
+Une **archive** ne touche à aucun chemin de lecture. Le SQL de l'historique reste
+exactement celui qui est testé aujourd'hui, et la restauration est une écriture
+de plus, pas une condition de plus partout.
+
+L'instantané est capturé par `SELECT *`. Une liste de colonnes écrite à la main
+perdrait silencieusement la prochaine colonne ajoutée à `scan_pages` ; un test
+d'intégration compare les clés de l'instantané au schéma réel, et la
+restauration filtre les colonnes générées, que MariaDB refuse qu'on affecte.
+
+### Deux pièges que seule une vraie base a révélés
+
+Le premier : `information_schema.generation_expression` vaut `NULL` sous MariaDB
+pour une colonne ordinaire, et chaîne vide sous MySQL. Ne tester qu'une forme
+vidait la liste des colonnes insérables, et un `INSERT` sans colonnes échoue sur
+« Field 'id' doesn't have a default value ».
+
+Le second : `mysql2` **désérialise** les colonnes JSON. `metadata` revient en
+objet JavaScript, et un objet passé en paramètre est échappé par le pilote en
+paires « clé = valeur » — pas en JSON. La contrainte `json_valid` de MariaDB
+refuse alors l'insertion. La restauration rend donc les objets à leur forme
+textuelle.
+
+Aucun des deux n'était visible en test unitaire : les doubles reproduisent ce
+qu'on a compris du pilote et du moteur. C'est la suite d'intégration de
+l'arbitrage 69 qui les a dits, une semaine après avoir été écrite pour cela.
+
+**Coût assumé** — Quatre coûts. D'abord un **doublon de stockage**, borné par
+l'échéance de purge et réduit par la compression : un instantané gzippé pèse
+environ un dixième des lignes qu'il remplace, les rapports se comprimant 7 à
+10 fois. Ensuite, la corbeille porte de la **donnée personnelle** — qui a
+supprimé quoi — et entre à ce titre au registre de traitement, avec sa propre
+durée de conservation. Ensuite, la suppression **page par page** reste sans
+reprise, comme en v1, et peut faire disparaître une session devenue vide par la
+réconciliation : archiver un ménage de routine doublerait le stockage pour un
+geste qu'on ne regrette pas. Enfin, la restauration ne sait pas **fusionner** :
+une session déjà revenue est ignorée, et ses pages archivées avec elle ne sont
+pas rattachées. Rattacher des pages anciennes à un audit récent mélangerait deux
+mesures distinctes, ce qui serait pire qu'une reprise partielle annoncée.
+
+---
+
+## 71. La corbeille se garde par `history:delete`, sans nouveau code
+
+Les quatre routes de la corbeille — lire, exporter, restaurer, purger — exigent
+`history:delete`, le code du catalogue v1. Qui peut supprimer peut restaurer ce
+qu'il a supprimé, et la purge définitive est exactement la même puissance
+destructrice que la suppression elle-même.
+
+Inventer un `history:restore` aurait ajouté une entrée à un catalogue qui se veut
+en parité avec la v1, sans rien durcir : la permission de supprimer suffit déjà à
+tout faire, et la découper après coup n'aurait protégé de personne.
+
+**Coût assumé** — La granularité est plus grossière qu'elle pourrait l'être : on
+ne peut pas confier la restauration à quelqu'un sans lui confier aussi la
+suppression et la purge. Si ce besoin apparaît, le code se découpera — avec un
+usage réel à montrer, et non par avance.

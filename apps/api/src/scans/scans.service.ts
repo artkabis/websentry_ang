@@ -30,6 +30,7 @@ import {
   type SiteSummaryRow,
 } from '../database/repositories/scan.repository.js';
 import { AuditService } from '../audit/audit.service.js';
+import { ScanTrashService } from './scan-trash.service.js';
 import {
   ScanPageNotFoundError,
   ScanReportPurgedError,
@@ -92,6 +93,7 @@ export class ScansService {
   constructor(
     private readonly repo: ScanRepository,
     private readonly audit: AuditService,
+    private readonly corbeille: ScanTrashService,
   ) {}
 
   private assertAvailable(): void {
@@ -360,6 +362,10 @@ export class ScansService {
     // Le décompte se fait AVANT : après la cascade, les pages n'existent plus et
     // le nombre rendu à l'utilisateur serait nécessairement zéro.
     const pageCount = await this.repo.countPagesForSite(domain, gamme);
+    // L'archivage AUSSI : après la cascade il n'y a plus rien à capturer. Son
+    // échec interrompt la suppression — mieux vaut un geste refusé qu'un
+    // effacement sans filet.
+    const trashId = await this.corbeille.archiverSite(domain, gamme, actor);
     const removed = await this.repo.deleteSite(domain, gamme);
     if (removed > 0) this.invalidateStats();
 
@@ -368,7 +374,12 @@ export class ScansService {
       actorId: actor.actorId,
       actorName: actor.actorName,
       ipAddress: actor.ipAddress,
-      details: { identity: siteIdentityKey(domain, gamme), pages: pageCount, sites: removed },
+      details: {
+        identity: siteIdentityKey(domain, gamme),
+        pages: pageCount,
+        sites: removed,
+        trashId,
+      },
     });
     return pageCount;
   }
@@ -378,6 +389,7 @@ export class ScansService {
     this.assertAvailable();
 
     const pageCount = await this.repo.countPagesForDomain(domain);
+    const trashId = await this.corbeille.archiver({ scope: 'domain', domain }, actor);
     const removed = await this.repo.deleteDomain(domain);
     if (removed > 0) this.invalidateStats();
 
@@ -386,7 +398,7 @@ export class ScansService {
       actorId: actor.actorId,
       actorName: actor.actorName,
       ipAddress: actor.ipAddress,
-      details: { domain, pages: pageCount, sites: removed },
+      details: { domain, pages: pageCount, sites: removed, trashId },
     });
     return pageCount;
   }
@@ -399,6 +411,16 @@ export class ScansService {
     if (!session) throw new ScanSessionNotFoundError();
 
     const pageCount = await this.repo.countPagesForSession(sessionId);
+    const trashId = await this.corbeille.archiver(
+      {
+        scope: 'session',
+        sessionId,
+        siteId: session.site_id,
+        domain: session.domain,
+        gamme: session.gamme,
+      },
+      actor,
+    );
     await this.repo.deleteSession(sessionId);
     // La cascade a effacé les pages ; le site peut n'avoir plus aucune session.
     await this.repo.deleteOrphanSites();
@@ -409,7 +431,7 @@ export class ScansService {
       actorId: actor.actorId,
       actorName: actor.actorName,
       ipAddress: actor.ipAddress,
-      details: { sessionId, domain: session.domain, pages: pageCount },
+      details: { sessionId, domain: session.domain, pages: pageCount, trashId },
     });
     return pageCount;
   }

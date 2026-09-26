@@ -29,6 +29,7 @@ import {
 } from '../../src/database/repositories/message.repository.js';
 import { ProfileRepository } from '../../src/database/repositories/profile.repository.js';
 import { ScanRepository } from '../../src/database/repositories/scan.repository.js';
+import { ScanTrashRepository } from '../../src/database/repositories/scan-trash.repository.js';
 import { ScanRetentionRepository } from '../../src/database/repositories/scan-retention.repository.js';
 import { PageFetcherService } from '../../src/analysis/page-fetcher.service.js';
 
@@ -65,6 +66,9 @@ export class FakeDb {
 
   /** Retours des bêta-testeurs — reproduit la table `feedback`. */
   readonly feedback = new Map<string, Record<string, unknown>>();
+
+  /** Corbeille des scans — reproduit `scan_trash`, instantané compris. */
+  readonly scanTrash = new Map<string, Record<string, unknown>>();
 
   /** Messagerie — reproduit `messages`, `message_recipients`, `message_attachments`. */
   readonly messages = new Map<string, Record<string, unknown>>();
@@ -645,6 +649,126 @@ export async function createTestApp(
       db.scanSessions.delete(session.id);
     }
     db.scanSites.delete(siteId);
+  }
+
+  // ── Corbeille des scans ─────────────────────────────────────────────────────
+  // Le double reproduit les SÉMANTIQUES qui portent une décision — filtres de
+  // liste, pagination, échéance de purge, disparition de l'entrée après
+  // restauration — et non le dialecte SQL, couvert par les tests d'intégration
+  // contre une vraie MariaDB.
+  const scanTrashRepo = {
+    get available() {
+      return true;
+    },
+    capturer: (siteIds: readonly string[], sessionIds: readonly string[]) =>
+      Promise.resolve({
+        sites: siteIds.map(id => ({ ...db.scanSites.get(id) })),
+        sessions: sessionIds.map(id => ({ ...db.scanSessions.get(id) })),
+        pages: [...db.scanPages.values()]
+          .filter(p => sessionIds.includes(p.session_id))
+          .map(p => ({ ...p })),
+      }),
+    siteParIdentite: (domain: string, gamme: string | null) =>
+      Promise.resolve(
+        [...db.scanSites.values()].find(s => s.domain === domain && (s.gamme ?? null) === gamme)
+          ?.id ?? null,
+      ),
+    sitesDuDomaine: (domain: string) =>
+      Promise.resolve([...db.scanSites.values()].filter(s => s.domain === domain).map(s => s.id)),
+    sessionsDesSites: (siteIds: readonly string[]) =>
+      Promise.resolve(
+        [...db.scanSessions.values()].filter(s => siteIds.includes(s.site_id)).map(s => s.id),
+      ),
+    ajouter: (entree: Record<string, unknown>) => {
+      const jours = Number(entree.purgeAfterDays);
+      db.scanTrash.set(String(entree.id), {
+        id: entree.id,
+        scope: entree.scope,
+        domain: entree.domain,
+        gamme: entree.gamme,
+        label: entree.label,
+        session_count: entree.sessionCount,
+        page_count: entree.pageCount,
+        payload_gz: entree.payloadGz,
+        payload_bytes: entree.payloadBytes,
+        deleted_at: '2026-06-10 10:00:00',
+        deleted_by: entree.deletedBy,
+        deleted_by_name: entree.deletedByName,
+        purge_after: new Date(Date.now() + jours * 86_400_000)
+          .toISOString()
+          .slice(0, 19)
+          .replace('T', ' '),
+      });
+      return Promise.resolve();
+    },
+    lister: (q: Record<string, unknown>, limit: number, offset: number) =>
+      Promise.resolve(filtrerCorbeille(q).slice(offset, offset + limit)),
+    compter: (q: Record<string, unknown>) => Promise.resolve(filtrerCorbeille(q).length),
+    trouver: (id: string) => Promise.resolve(db.scanTrash.get(id) ?? null),
+    instantaneCompresse: (id: string) =>
+      Promise.resolve((db.scanTrash.get(id)?.payload_gz as Buffer | undefined) ?? null),
+    supprimer: (id: string) => Promise.resolve(db.scanTrash.delete(id)),
+    purger: (lot: number) => {
+      const echues = [...db.scanTrash.values()]
+        .filter(
+          e => String(e.purge_after) < new Date().toISOString().slice(0, 19).replace('T', ' '),
+        )
+        .slice(0, lot);
+      for (const e of echues) db.scanTrash.delete(String(e.id));
+      return Promise.resolve(echues.length);
+    },
+    volumetrie: () =>
+      Promise.resolve({
+        entrees: db.scanTrash.size,
+        octets: [...db.scanTrash.values()].reduce((s, e) => s + Number(e.payload_bytes), 0),
+        echues: 0,
+      }),
+    restaurer: (instantane: {
+      sites: Array<Record<string, unknown>>;
+      sessions: Array<Record<string, unknown>>;
+      pages: Array<Record<string, unknown>>;
+    }) => {
+      let sites = 0;
+      let sessions = 0;
+      let pages = 0;
+      let skippedSessions = 0;
+      for (const site of instantane.sites) {
+        if (db.scanSites.has(String(site.id))) continue;
+        db.scanSites.set(String(site.id), site as unknown as FakeSite);
+        sites += 1;
+      }
+      const revenues = new Set<string>();
+      for (const session of instantane.sessions) {
+        const id = String(session.id);
+        if (db.scanSessions.has(id)) {
+          skippedSessions += 1;
+          continue;
+        }
+        db.scanSessions.set(id, session as unknown as FakeSession);
+        revenues.add(id);
+        sessions += 1;
+      }
+      for (const page of instantane.pages) {
+        if (!revenues.has(String(page.session_id))) continue;
+        db.scanPages.set(String(page.id), page as unknown as FakePage);
+        pages += 1;
+      }
+      return Promise.resolve({ sites, sessions, pages, skippedSessions });
+    },
+  };
+
+  /** Filtres de la liste de corbeille — les mêmes que ceux du SQL. */
+  function filtrerCorbeille(q: Record<string, unknown>): Array<Record<string, unknown>> {
+    return [...db.scanTrash.values()]
+      .filter(e => {
+        if (typeof q.domain === 'string' && q.domain.trim()) {
+          if (!String(e.domain).includes(q.domain.trim())) return false;
+        }
+        if (typeof q.gamme === 'string' && e.gamme !== q.gamme) return false;
+        if (typeof q.scope === 'string' && e.scope !== q.scope) return false;
+        return true;
+      })
+      .sort((a, b) => String(b.deleted_at).localeCompare(String(a.deleted_at)));
   }
 
   const scanRetentionRepo = {
@@ -1329,7 +1453,9 @@ export async function createTestApp(
     .overrideProvider(ScanRepository)
     .useValue(scanRepo)
     .overrideProvider(ScanRetentionRepository)
-    .useValue(scanRetentionRepo);
+    .useValue(scanRetentionRepo)
+    .overrideProvider(ScanTrashRepository)
+    .useValue(scanTrashRepo);
 
   if (!options.realPageFetcher) {
     builder.overrideProvider(PageFetcherService).useValue(pageFetcher);

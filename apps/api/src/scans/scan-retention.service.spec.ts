@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gunzipSync } from 'node:zlib';
 import type { AppConfigService } from '../config/app-config.service.js';
 import type { ScanRetentionRepository } from '../database/repositories/scan-retention.repository.js';
+import type { ScanTrashService } from './scan-trash.service.js';
 import { ScanRetentionService } from './scan-retention.service.js';
 
 function build(options: { available?: boolean; enabled?: boolean; batchSize?: number } = {}) {
@@ -16,14 +17,23 @@ function build(options: { available?: boolean; enabled?: boolean; batchSize?: nu
   };
 
   const config = {
-    retention: { enabled, compressAfterDays: 7, purgeAfterDays: 180, batchSize },
+    retention: {
+      enabled,
+      compressAfterDays: 7,
+      purgeAfterDays: 180,
+      trashRetentionDays: 30,
+      batchSize,
+    },
   };
+
+  const corbeille = { purgerEchues: vi.fn().mockResolvedValue(0) };
 
   const service = new ScanRetentionService(
     repo as unknown as ScanRetentionRepository,
     config as unknown as AppConfigService,
+    corbeille as unknown as ScanTrashService,
   );
-  return { service, repo, config };
+  return { service, repo, config, corbeille };
 }
 
 describe('ScanRetentionService', () => {
@@ -38,6 +48,7 @@ describe('ScanRetentionService', () => {
     await expect(off.service.run()).resolves.toEqual({
       compressed: 0,
       purged: 0,
+      trashPurged: 0,
       remaining: 0,
       durationMs: 0,
     });
@@ -117,7 +128,7 @@ describe('ScanRetentionService', () => {
 
     const first = t.service.run();
     const second = await t.service.run();
-    expect(second).toMatchObject({ compressed: 0, purged: 0, durationMs: 0 });
+    expect(second).toMatchObject({ compressed: 0, purged: 0, trashPurged: 0, durationMs: 0 });
 
     release?.();
     await first;
